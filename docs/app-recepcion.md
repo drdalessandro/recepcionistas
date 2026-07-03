@@ -25,7 +25,9 @@ estáticos con nginx. Así desaparecen el chequeo de `allowedHosts` y el websock
 de HMR, y el front queda cacheado y comprimido.
 
 Config lista para copiar: [`deploy/nginx-recepcion.conf`](../deploy/nginx-recepcion.conf)
-(instrucciones de instalación en el encabezado del archivo). Flujo de update:
+(instrucciones de instalación en el encabezado del archivo). Para la **API**
+(proceso Node con pm2, puerto 8103) el patrón es reverse proxy, no estáticos:
+ver [`deploy/nginx-api-proxy.conf`](../deploy/nginx-api-proxy.conf). Flujo de update:
 
 ```bash
 git pull && npm run build:app     # nginx no se toca: sirve el dist nuevo al instante
