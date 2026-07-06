@@ -132,7 +132,7 @@ export const POLICY_PACIENTE_PORTAL: AccessPolicy = {
     { resourceType: 'Coverage', readonly: true, criteria: 'Coverage?beneficiary=%patient' },
     { resourceType: 'Invoice', readonly: true, criteria: 'Invoice?subject=%patient' },
     { resourceType: 'DiagnosticReport', readonly: true, criteria: 'DiagnosticReport?subject=%patient' },
-    { resourceType: 'CarePlan', readonly: true, criteria: 'CarePlan?subject=%patient' },
+    { resourceType: 'CarePlan', criteria: 'CarePlan?subject=%patient' },
     { resourceType: 'MedicationRequest', readonly: true, criteria: 'MedicationRequest?patient=%patient' },
     { resourceType: 'Immunization', readonly: true, criteria: 'Immunization?patient=%patient' },
     // Solicitudes de turno propias (las crea el bot; el paciente solo las lee).
@@ -146,7 +146,7 @@ export const POLICY_PACIENTE_PORTAL: AccessPolicy = {
     { resourceType: 'HealthcareService', readonly: true },
     { resourceType: 'Practitioner', readonly: true },
     { resourceType: 'Organization', readonly: true },
-    { resourceType: 'Binary', readonly: true },
+    { resourceType: 'Binary',
     // Reserva por solicitud: el paciente solo puede ejecutar ESTE bot (crea el Task
     // de solicitud y avisa a Recepción). No puede ejecutar ningún otro bot.
     { resourceType: 'Bot', readonly: true, criteria: 'Bot?name=bw-solicitar-turno' },
