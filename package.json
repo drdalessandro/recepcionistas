@@ -29,11 +29,11 @@
     "app:typecheck": "npm run typecheck --workspace @biowellness/recepcion-app"
   },
   "dependencies": {
-    "@medplum/core": "5.1.18",
-    "@medplum/fhirtypes": "5.1.18"
+    "@medplum/core": "5.1.24",
+    "@medplum/fhirtypes": "5.1.24"
   },
   "devDependencies": {
-    "@medplum/cli": "5.1.18",
+    "@medplum/cli": "5.1.24",
     "@types/node": "^20.14.0",
     "dotenv": "^16.4.5",
     "esbuild": "^0.28.1",
