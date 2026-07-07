@@ -105,7 +105,17 @@ export function Mensajes(): JSX.Element {
     (id: string): void => {
       medplum
         .searchResources('Communication', `part-of=Communication/${id}&_sort=sent&_count=200`, { cache: 'no-cache' })
-        .then(setMensajes)
+        .then((ms) => {
+          setMensajes(ms);
+          // Marcar leídos (received) los mensajes del paciente: apaga la campanita
+          // de Recepción. Best-effort en segundo plano; no bloquea la lectura.
+          const ahora = new Date().toISOString();
+          for (const m of ms) {
+            if (m.sender?.reference?.startsWith('Patient/') && !m.received) {
+              medplum.updateResource<Communication>({ ...m, received: ahora }).catch(() => undefined);
+            }
+          }
+        })
         .catch((err) => notifications.show({ color: 'red', title: 'Error', message: String(err?.message ?? err) }));
     },
     [medplum],

@@ -13,6 +13,7 @@ import {
 import { IconCalendarEvent, IconUserHeart, IconChartBar, IconLicense, IconLogout, IconSun, IconMoon, IconInbox, IconMessages } from '@tabler/icons-react';
 import { useMedplum, useMedplumProfile } from '@medplum/react';
 import { getDisplayString } from '@medplum/core';
+import { CampanitaNovedades } from './CampanitaNovedades';
 
 export type Vista = 'agenda' | 'solicitudes' | 'mensajes' | 'planes' | 'atender' | 'reportes';
 
@@ -59,6 +60,7 @@ export function Shell({ vista, onVista, children }: ShellProps): JSX.Element {
             <Text size="sm" visibleFrom="sm">
               {profile ? getDisplayString(profile) : ''}
             </Text>
+            <CampanitaNovedades onVista={onVista} />
             <ActionIcon
               variant="default"
               size="lg"

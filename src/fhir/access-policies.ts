@@ -48,6 +48,9 @@ export const POLICY_RECEPCIONISTA: AccessPolicy = {
     { resourceType: 'HealthcareService', readonly: true },
     // Bots: lectura para poder invocarlos (cobro, validación, WhatsApp).
     { resourceType: 'Bot', readonly: true },
+    // Campanita de la app (novedades en tiempo real): solo Subscriptions WebSocket
+    // (sin el criteria se podrían crear rest-hooks hacia URLs externas).
+    { resourceType: 'Subscription', criteria: 'Subscription?type=websocket' },
   ],
 };
 
