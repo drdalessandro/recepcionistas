@@ -17,8 +17,8 @@ import { getMembresia } from '../config/membresias.js';
 import { calcularCobro } from '../lib/pricing.js';
 import { cicloMes, debeRenovarMembresia } from '../lib/planes.js';
 import { estadoDeCoverage, planCodigoDeCoverage } from '../fhir/coverage.js';
-import { EXT } from '../fhir/identifiers.js';
-import { emitirInvoicePlan, enviarWhatsApp, leerTcVigente } from './_shared.js';
+import { EXT, SYSTEM } from '../fhir/identifiers.js';
+import { emitirInvoicePlan, enviarWhatsApp, leerTcVigente, notificarPortal } from './_shared.js';
 
 export interface EntradaCobroMembresias {
   /** Fecha de referencia ISO (default: ahora). Útil para pruebas/reprocesos. */
@@ -79,7 +79,7 @@ export async function handler(
     if (planCodigo) {
       const m = getMembresia(planCodigo);
       const { totalARS } = calcularCobro([{ tipo: 'membresia', codigo: planCodigo }], { tc });
-      await emitirInvoicePlan(medplum, {
+      const cobro = await emitirInvoicePlan(medplum, {
         coverageId: c.id,
         pacienteRef,
         descripcion: `Membresía ${m.tier} ${m.intensidad} ${m.variante} · ${ciclo}`,
@@ -91,6 +91,14 @@ export async function handler(
         template: 'membresia-renovada',
         pacienteRef,
         body: `BioWellness: renovamos tu Membresía ${m.tier} para ${ciclo}. Tenés ${m.sesionesMes} sesiones disponibles este mes. 💚`,
+      });
+      // Campanita del portal: constancia de la renovación (misma clave que el Invoice).
+      await notificarPortal(medplum, {
+        tipo: 'pago-recibido',
+        pacienteRef,
+        ...(cobro.invoiceId ? { about: `Invoice/${cobro.invoiceId}` } : {}),
+        identifier: { system: SYSTEM.communication, value: `portal-pago-plan-${c.id}-${ciclo}` },
+        texto: `Renovamos tu Membresía ${m.tier} para ${ciclo}: $${totalARS.toLocaleString('es-AR')}. Tenés ${m.sesionesMes} sesiones este mes. 💚`,
       });
     }
     renovadas++;

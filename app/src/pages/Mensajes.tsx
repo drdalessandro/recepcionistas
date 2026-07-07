@@ -44,7 +44,8 @@ const fmtHora = new Intl.DateTimeFormat('es-AR', {
 });
 
 function asunto(c: Communication): string {
-  return c.payload?.find((p) => p.contentString)?.contentString ?? '(sin asunto)';
+  // El ThreadInbox del portal guarda el asunto en topic.text; payload es el fallback.
+  return c.topic?.text ?? c.payload?.find((p) => p.contentString)?.contentString ?? '(sin asunto)';
 }
 
 function texto(c: Communication): string {
@@ -380,6 +381,8 @@ function NuevaConversacion({
         subject: createReference(paciente),
         sender: createReference(profile) as Communication['sender'],
         recipient: [createReference(paciente)],
+        // topic.text = asunto (es lo que muestra el ThreadInbox del portal); payload de fallback.
+        topic: { text: tema.trim() || mensaje.trim().slice(0, 60) },
         payload: [{ contentString: tema.trim() || mensaje.trim().slice(0, 60) }],
       });
       await medplum.createResource<Communication>({
