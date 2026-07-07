@@ -132,7 +132,9 @@ export const POLICY_PACIENTE_PORTAL: AccessPolicy = {
     { resourceType: 'Coverage', readonly: true, criteria: 'Coverage?beneficiary=%patient' },
     { resourceType: 'Invoice', readonly: true, criteria: 'Invoice?subject=%patient' },
     { resourceType: 'DiagnosticReport', readonly: true, criteria: 'DiagnosticReport?subject=%patient' },
-    { resourceType: 'CarePlan', readonly: true, criteria: 'CarePlan?subject=%patient' },
+    // CarePlan escribible: "Mi plan" del portal marca acciones (Empezar/Lograda)
+    // con updateResource (portal/src/pages/care-plan/ActionItems.tsx).
+    { resourceType: 'CarePlan', criteria: 'CarePlan?subject=%patient' },
     { resourceType: 'MedicationRequest', readonly: true, criteria: 'MedicationRequest?patient=%patient' },
     { resourceType: 'Immunization', readonly: true, criteria: 'Immunization?patient=%patient' },
     // Solicitudes de turno propias (las crea el bot; el paciente solo las lee).
