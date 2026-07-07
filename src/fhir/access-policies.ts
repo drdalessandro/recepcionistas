@@ -146,6 +146,7 @@ export const POLICY_PACIENTE_PORTAL: AccessPolicy = {
     { resourceType: 'HealthcareService', readonly: true },
     { resourceType: 'Practitioner', readonly: true },
     { resourceType: 'Organization', readonly: true },
+    { "resourceType": "Subscription" },
     { resourceType: 'Binary' },
     // Reserva por solicitud: el paciente solo puede ejecutar ESTE bot (crea el Task
     // de solicitud y avisa a Recepción). No puede ejecutar ningún otro bot.
