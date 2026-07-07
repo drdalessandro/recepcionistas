@@ -53,6 +53,14 @@ En Medplum los bots leen secretos de `event.secrets`, **no** de `process.env`
 secretos se cargan como **Project Secrets** en el panel de Medplum
 (Project → Secrets).
 
+**Campanita del portal:** además del WhatsApp/email, los bots crean la
+`Communication`-notificación que enciende la campanita del paciente en el portal
+(`notificarPortal` en `src/bots/_shared.ts`; contrato en
+`portal/docs/mensajeria-y-notificaciones.md`). Hoy la disparan: la confirmación
+de reserva (`confirmarReserva`: seña manual y webhook de MP → `reserva-confirmada`
++ `pago-recibido`) y los recordatorios (`bw-recordatorios` → `recordatorio`).
+Es best-effort e idempotente: nunca interrumpe el flujo que la dispara.
+
 **Regla de oro:** los helpers (`enviarWhatsApp` / `enviarEmail` en
 `src/bots/_shared.ts`) **siempre** registran la `Communication`, pero **solo
 envían** si está la configuración completa. Así se puede probar la lógica sin
