@@ -25,10 +25,11 @@ import {
   IconLicense,
   IconUserPlus,
 } from '@tabler/icons-react';
-import type { Patient } from '@medplum/fhirtypes';
+import type { Invoice, Patient } from '@medplum/fhirtypes';
 import { getDisplayString } from '@medplum/core';
 import { medplum } from '../medplum';
 import {
+  cobrarPendiente,
   registrarCobro,
   reservarTurno,
   reservarCombo,
@@ -162,6 +163,7 @@ export function Atender({
 
 function FichaPaciente({ paciente, onVolver }: { paciente: Patient; onVolver: () => void }): JSX.Element {
   const [planes, setPlanes] = useState<PlanPaciente[]>([]);
+  const [versionPagos, setVersionPagos] = useState(0);
 
   const recargarPlanes = useCallback(async (): Promise<void> => {
     try {
@@ -183,7 +185,8 @@ function FichaPaciente({ paciente, onVolver }: { paciente: Patient; onVolver: ()
           ← Volver a la búsqueda
         </Button>
       </Group>
-      <BannerSeguridad pacienteId={paciente.id!} />
+      <BannerSeguridad pacienteId={paciente.id!} version={versionPagos} />
+      <PagosPendientes paciente={paciente} version={versionPagos} onCobrado={() => setVersionPagos((v) => v + 1)} />
       <InvitarPortal paciente={paciente} />
       <PanelPlanes paciente={paciente} planes={planes} onCambio={recargarPlanes} />
       <PanelReserva paciente={paciente} planes={planes} onReservado={recargarPlanes} />
@@ -349,7 +352,7 @@ function PanelPlanes({
  * Banner de seguridad: señal binaria verde/rojo (clínico) + banner administrativo
  * aparte si hay bloqueo de pagos (R-11). La recepción NO ve el detalle clínico.
  */
-function BannerSeguridad({ pacienteId }: { pacienteId: string }): JSX.Element {
+function BannerSeguridad({ pacienteId, version = 0 }: { pacienteId: string; version?: number }): JSX.Element {
   const [estado, setEstado] = useState<'cargando' | 'verde' | 'rojo'>('cargando');
   const [bloqueoPago, setBloqueoPago] = useState(false);
 
@@ -370,7 +373,7 @@ function BannerSeguridad({ pacienteId }: { pacienteId: string }): JSX.Element {
     return () => {
       activo = false;
     };
-  }, [pacienteId]);
+  }, [pacienteId, version]);
 
   if (estado === 'cargando') {
     return <Loader size="sm" />;
@@ -392,6 +395,119 @@ function BannerSeguridad({ pacienteId }: { pacienteId: string }): JSX.Element {
         </Alert>
       )}
     </>
+  );
+}
+
+/**
+ * Cuotas de plan pendientes (`issued`) o rechazadas (`cancelled`, R-11): recepción
+ * las cobra acá eligiendo el medio; el bot las pasa a `balanced`, crea el
+ * ChargeItem y levanta el bloqueo de reservas.
+ */
+function PagosPendientes({
+  paciente,
+  version,
+  onCobrado,
+}: {
+  paciente: Patient;
+  version: number;
+  onCobrado: () => void;
+}): JSX.Element | null {
+  const [pendientes, setPendientes] = useState<Invoice[]>([]);
+  const [medios, setMedios] = useState<Record<string, string>>({});
+  const [cobrando, setCobrando] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let activo = true;
+    void (async () => {
+      try {
+        const [issued, cancelled] = await Promise.all([
+          medplum.searchResources('Invoice', { subject: `Patient/${paciente.id}`, status: 'issued', _count: 20 }),
+          medplum.searchResources('Invoice', { subject: `Patient/${paciente.id}`, status: 'cancelled', _count: 20 }),
+        ]);
+        if (activo) {
+          const esPlan = (i: Invoice): boolean =>
+            Boolean(i.identifier?.some((x) => x.value?.startsWith('plan-')));
+          setPendientes([...issued, ...cancelled].filter(esPlan));
+        }
+      } catch {
+        // sin permisos o sin datos: no mostrar el panel
+      }
+    })();
+    return () => {
+      activo = false;
+    };
+  }, [paciente.id, version]);
+
+  if (pendientes.length === 0) {
+    return null;
+  }
+
+  async function cobrar(inv: Invoice): Promise<void> {
+    if (!inv.id) {
+      return;
+    }
+    setCobrando(inv.id);
+    setError(null);
+    try {
+      const r = await cobrarPendiente(inv.id, medios[inv.id] ?? 'efectivo');
+      if (!r.ok) {
+        setError(r.mensaje ?? 'No se pudo cobrar.');
+        return;
+      }
+      onCobrado();
+    } catch (e) {
+      setError(mensajeError(e));
+    } finally {
+      setCobrando(null);
+    }
+  }
+
+  return (
+    <Card withBorder radius="md" padding="lg">
+      <Group gap="xs" mb="sm">
+        <IconCash size={18} />
+        <Text fw={600}>Pagos pendientes del plan</Text>
+      </Group>
+      <Stack gap="xs">
+        {pendientes.map((inv) => (
+          <Group key={inv.id} justify="space-between" wrap="wrap">
+            <div>
+              <Text size="sm" fw={500}>
+                {inv.lineItem?.[0]?.chargeItemCodeableConcept?.text ??
+                  inv.lineItem?.[0]?.chargeItemReference?.display ??
+                  'Cuota de plan'}
+              </Text>
+              <Group gap={6}>
+                <Badge color={inv.status === 'cancelled' ? 'red' : 'yellow'} variant="light">
+                  {inv.status === 'cancelled' ? 'Rechazado (R-11)' : 'Pendiente'}
+                </Badge>
+                <Text size="sm" c="dimmed">
+                  ${(inv.totalGross?.value ?? 0).toLocaleString('es-AR')}
+                </Text>
+              </Group>
+            </div>
+            <Group gap="xs">
+              <Select
+                data={MEDIOS_SELECT}
+                value={medios[inv.id!] ?? 'efectivo'}
+                onChange={(v) => setMedios((m) => ({ ...m, [inv.id!]: v ?? 'efectivo' }))}
+                w={170}
+                size="xs"
+              />
+              <Button size="xs" color="bio" loading={cobrando === inv.id} onClick={() => void cobrar(inv)}>
+                Cobrar
+              </Button>
+            </Group>
+          </Group>
+        ))}
+        {error && (
+          <Alert color="orange" icon={<IconInfoCircle size={16} />}>
+            {error}
+          </Alert>
+        )}
+      </Stack>
+    </Card>
   );
 }
 

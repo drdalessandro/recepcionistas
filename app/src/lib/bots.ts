@@ -249,6 +249,18 @@ export async function registrarCobro(input: RegistrarCobroInput): Promise<Result
   return (await medplum.executeBot(id, input)) as ResultadoRegistrarCobro;
 }
 
+export interface ResultadoCobrarPendiente {
+  ok: boolean;
+  mensaje?: string;
+  invoiceId?: string;
+}
+
+/** Cobra en recepción un Invoice pendiente de plan (balanced + ChargeItem + quita bloqueo R-11). */
+export async function cobrarPendiente(invoiceId: string, medio: string): Promise<ResultadoCobrarPendiente> {
+  const id = await botIdPorNombre('bw-cobrar-pendiente');
+  return (await medplum.executeBot(id, { invoiceId, medio })) as ResultadoCobrarPendiente;
+}
+
 /** Invita al paciente al portal por el canal elegido (WhatsApp / email / QR). */
 export async function invitarPaciente(
   pacienteRef: string,

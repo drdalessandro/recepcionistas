@@ -620,7 +620,7 @@ export async function emitirInvoicePlan(
  */
 export async function resolverInvoicePlan(
   medplum: MedplumClient,
-  opts: { clave: string; resultado: 'pagado' | 'rechazado'; detalle?: string },
+  opts: { clave: string; resultado: 'pagado' | 'rechazado'; detalle?: string; medio?: MedioPago },
 ): Promise<{ ok: boolean; invoiceId?: string; mensaje?: string }> {
   const invoice = await medplum.searchOne('Invoice', `identifier=${SYSTEM.invoice}|${opts.clave}`);
   if (!invoice?.id) {
@@ -662,7 +662,7 @@ export async function resolverInvoicePlan(
       date: fecha,
       lineItem,
       totalNet: { value: totalARS, currency: 'ARS' },
-      extension: [...(invoice.extension ?? []).filter((e) => e.url !== EXT.medioPago), extMedioPago('mercadopago')],
+      extension: [...(invoice.extension ?? []).filter((e) => e.url !== EXT.medioPago), extMedioPago(opts.medio ?? 'mercadopago')],
     });
     if (pacienteRef) {
       await quitarBloqueoPago(medplum, pacienteRef);

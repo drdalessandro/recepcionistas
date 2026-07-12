@@ -11,6 +11,7 @@ deployan al runtime **`awslambda`** de Medplum (configurable con la env
 |---|---|---|
 | `bw-calcular-cobro` | Calcula el cobro (USD→ARS al TC, splits) y emite `Invoice`. | `executeBot` desde el front (pantalla Atender). |
 | `bw-registrar-cobro` | **Registra** un cobro presencial: descuentos por tipo de cliente + ChargeItems + un Invoice `balanced` por medio (pago mixto = N Invoices). | `executeBot` (Atender → Cobro). |
+| `bw-cobrar-pendiente` | Cobra en recepción una cuota de plan `issued`/`cancelled`: `balanced` + ChargeItem + levanta el bloqueo R-11. | `executeBot` (Atender → Pagos pendientes). |
 | `bw-validar-turno` | Valida un turno (orden HBOT, contraindicaciones, prescripción, capacidad/desfasaje, ventana, saldo). | `executeBot` al reservar/confirmar. |
 | `bw-reservar-turno` | Valida y, si está OK, **crea** el turno (`Appointment` + `Slot` ocupado). | `executeBot` desde el front (Reservar turno). |
 | `bw-reservar-combo` | Agenda un **combo** en secuencia (HBOT primero), auto-asignando sala por componente. | `executeBot` desde el front (Reservar combo). |
