@@ -20,6 +20,7 @@
     "migrar:medios": "tsx src/seed/migrar-medio-pago.ts",
     "limpiar": "tsx src/seed/limpiar.ts",
     "bots:bundle": "tsx src/seed/deploy-bots.ts --dry-run",
+    "bots:check": "tsx src/seed/diagnostico-bots.ts",
     "deploy:bots": "tsx src/seed/deploy-bots.ts",
     "email:test": "tsx src/seed/diagnostico-email.ts",
     "whatsapp:test": "tsx src/seed/diagnostico-whatsapp.ts",
