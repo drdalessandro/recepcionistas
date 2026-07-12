@@ -5,7 +5,7 @@
   "description": "BioWellness San Isidro — Herramienta de Recepción · Bloque 0 (Cimientos). Backend Medplum (FHIR R4).",
   "type": "module",
   "engines": {
-    "node": ">=20"
+    "node": ">=22.18"
   },
   "workspaces": [
     "app"
@@ -22,17 +22,19 @@
     "bots:bundle": "tsx src/seed/deploy-bots.ts --dry-run",
     "deploy:bots": "tsx src/seed/deploy-bots.ts",
     "email:test": "tsx src/seed/diagnostico-email.ts",
+    "whatsapp:test": "tsx src/seed/diagnostico-whatsapp.ts",
+    "agenda:check": "tsx src/seed/diagnostico-agenda.ts",
     "verify": "npm run typecheck && npm run test",
     "dev": "npm run dev --workspace @biowellness/recepcion-app",
     "build:app": "npm run build --workspace @biowellness/recepcion-app",
     "app:typecheck": "npm run typecheck --workspace @biowellness/recepcion-app"
   },
   "dependencies": {
-    "@medplum/core": "^3.2.0",
-    "@medplum/fhirtypes": "^3.2.0"
+    "@medplum/core": "5.1.24",
+    "@medplum/fhirtypes": "5.1.24"
   },
   "devDependencies": {
-    "@medplum/cli": "^3.2.0",
+    "@medplum/cli": "5.1.24",
     "@types/node": "^20.14.0",
     "dotenv": "^16.4.5",
     "esbuild": "^0.28.1",

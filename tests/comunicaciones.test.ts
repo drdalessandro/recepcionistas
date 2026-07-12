@@ -1,11 +1,12 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import type { BotEvent, MedplumClient } from '@medplum/core';
-import { enviarWhatsApp, enviarEmail } from '../src/bots/_shared.js';
+import { enviarWhatsApp, enviarEmail, notificarPortal, NOTIFICACION_SYSTEM } from '../src/bots/_shared.js';
 
 /** MedplumClient falso: captura las Communication creadas y espía sendEmail. */
-function fakeMedplum(opts: { telefono?: string; email?: string } = {}) {
+function fakeMedplum(opts: { telefono?: string; email?: string; existente?: Record<string, unknown> } = {}) {
   const creadas: Record<string, unknown>[] = [];
   const sendEmail = vi.fn(async () => ({}) as unknown);
+  const searchOne = vi.fn(async () => opts.existente);
   const medplum = {
     readResource: async () => ({
       resourceType: 'Patient',
@@ -19,8 +20,9 @@ function fakeMedplum(opts: { telefono?: string; email?: string } = {}) {
       return { ...r, id: `c${creadas.length}` };
     },
     sendEmail,
+    searchOne,
   } as unknown as MedplumClient;
-  return { medplum, creadas, sendEmail };
+  return { medplum, creadas, sendEmail, searchOne };
 }
 
 const secretsTwilio = {
@@ -126,5 +128,73 @@ describe('enviarEmail · solo envía con email del paciente', () => {
     const comm = await enviarEmail(medplum, { template: 't', asunto: 'a', cuerpo: 'hola', pacienteRef: 'Patient/p1' });
 
     expect(comm.status).toBe('entered-in-error');
+  });
+});
+
+describe('notificarPortal · campanita del portal', () => {
+  it('Crea la Communication-notificación: in-progress, category propia, subject/recipient = paciente', async () => {
+    const { medplum, creadas } = fakeMedplum();
+
+    const comm = await notificarPortal(medplum, {
+      tipo: 'reserva-confirmada',
+      pacienteRef: 'Patient/p1',
+      about: 'Appointment/a1',
+      texto: '¡Tu turno quedó confirmado!',
+    });
+
+    expect(comm).toBeDefined();
+    const c = creadas[0] as {
+      status: string;
+      subject?: { reference: string };
+      recipient?: { reference: string }[];
+      category?: { coding?: { system?: string; code?: string }[] }[];
+      about?: { reference: string }[];
+      partOf?: unknown;
+      payload?: { contentString?: string }[];
+    };
+    expect(c.status).toBe('in-progress'); // no leída
+    expect(c.subject?.reference).toBe('Patient/p1');
+    expect(c.recipient?.[0]?.reference).toBe('Patient/p1');
+    expect(c.category?.[0]?.coding?.[0]?.system).toBe(NOTIFICACION_SYSTEM);
+    expect(c.category?.[0]?.coding?.[0]?.code).toBe('reserva-confirmada');
+    expect(c.about?.[0]?.reference).toBe('Appointment/a1');
+    expect(c.partOf).toBeUndefined(); // sin partOf: nunca aparece en el chat
+    expect(c.payload?.[0]?.contentString).toBe('¡Tu turno quedó confirmado!');
+  });
+
+  it('Sin pacienteRef: no crea nada y devuelve undefined', async () => {
+    const { medplum, creadas } = fakeMedplum();
+    const comm = await notificarPortal(medplum, { tipo: 'general', texto: 'hola' });
+    expect(comm).toBeUndefined();
+    expect(creadas).toHaveLength(0);
+  });
+
+  it('Idempotente por identifier: si ya existe, no duplica', async () => {
+    const existente = { resourceType: 'Communication', id: 'ya-estaba' };
+    const { medplum, creadas, searchOne } = fakeMedplum({ existente });
+
+    const comm = await notificarPortal(medplum, {
+      tipo: 'recordatorio',
+      pacienteRef: 'Patient/p1',
+      texto: 'recordatorio',
+      identifier: { system: 'sys', value: 'portal-recordatorio-48h-x' },
+    });
+
+    expect(searchOne).toHaveBeenCalledOnce();
+    expect((comm as { id?: string })?.id).toBe('ya-estaba');
+    expect(creadas).toHaveLength(0);
+  });
+
+  it('Si la creación falla: loguea y devuelve undefined (no interrumpe el flujo)', async () => {
+    const { medplum } = fakeMedplum();
+    (medplum.createResource as unknown as ReturnType<typeof vi.fn>) = vi
+      .fn()
+      .mockRejectedValueOnce(new Error('server down'));
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+
+    const comm = await notificarPortal(medplum, { tipo: 'general', pacienteRef: 'Patient/p1', texto: 'x' });
+
+    expect(comm).toBeUndefined();
+    expect(spy).toHaveBeenCalled();
   });
 });

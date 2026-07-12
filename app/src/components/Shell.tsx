@@ -10,11 +10,12 @@ import {
   useMantineColorScheme,
   useComputedColorScheme,
 } from '@mantine/core';
-import { IconCalendarEvent, IconUserHeart, IconChartBar, IconLicense, IconLogout, IconSun, IconMoon } from '@tabler/icons-react';
+import { IconCalendarEvent, IconUserHeart, IconChartBar, IconLicense, IconLogout, IconSun, IconMoon, IconInbox, IconMessages } from '@tabler/icons-react';
 import { useMedplum, useMedplumProfile } from '@medplum/react';
 import { getDisplayString } from '@medplum/core';
+import { CampanitaNovedades } from './CampanitaNovedades';
 
-export type Vista = 'agenda' | 'planes' | 'atender' | 'reportes';
+export type Vista = 'agenda' | 'solicitudes' | 'mensajes' | 'planes' | 'atender' | 'reportes';
 
 interface ShellProps {
   vista: Vista;
@@ -47,6 +48,8 @@ export function Shell({ vista, onVista, children }: ShellProps): JSX.Element {
             onChange={(v) => onVista(v as Vista)}
             data={[
               { value: 'agenda', label: segLabel(<IconCalendarEvent size={16} />, 'Agenda') },
+              { value: 'solicitudes', label: segLabel(<IconInbox size={16} />, 'Solicitudes') },
+              { value: 'mensajes', label: segLabel(<IconMessages size={16} />, 'Mensajes') },
               { value: 'planes', label: segLabel(<IconLicense size={16} />, 'Planes y sesiones') },
               { value: 'atender', label: segLabel(<IconUserHeart size={16} />, 'Atender paciente') },
               { value: 'reportes', label: segLabel(<IconChartBar size={16} />, 'Reportes') },
@@ -57,6 +60,7 @@ export function Shell({ vista, onVista, children }: ShellProps): JSX.Element {
             <Text size="sm" visibleFrom="sm">
               {profile ? getDisplayString(profile) : ''}
             </Text>
+            <CampanitaNovedades onVista={onVista} />
             <ActionIcon
               variant="default"
               size="lg"

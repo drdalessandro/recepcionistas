@@ -3,6 +3,8 @@ import { Center, Paper, Stack, Title, Text } from '@mantine/core';
 import { SignInForm, useMedplumProfile } from '@medplum/react';
 import { Shell, type Vista } from './components/Shell';
 import { AgendaDelDia } from './pages/AgendaDelDia';
+import { Solicitudes } from './pages/Solicitudes';
+import { Mensajes } from './pages/Mensajes';
 import { PlanesSesiones } from './pages/PlanesSesiones';
 import { Atender } from './pages/Atender';
 import { Reportes } from './pages/Reportes';
@@ -25,6 +27,8 @@ export function App(): JSX.Element {
   return (
     <Shell vista={vista} onVista={setVista}>
       {vista === 'agenda' && <AgendaDelDia />}
+      {vista === 'solicitudes' && <Solicitudes onAtender={irAtender} />}
+      {vista === 'mensajes' && <Mensajes />}
       {vista === 'planes' && <PlanesSesiones onAtender={irAtender} />}
       {vista === 'atender' && <Atender pacienteInicialId={atenderId} onPacienteInicialCargado={() => setAtenderId(null)} />}
       {vista === 'reportes' && <Reportes />}

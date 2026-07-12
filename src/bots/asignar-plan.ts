@@ -14,8 +14,8 @@ import { getMembresia } from '../config/membresias.js';
 import { getPaquete } from '../config/paquetes.js';
 import { calcularCobro } from '../lib/pricing.js';
 import { cicloMes } from '../lib/planes.js';
-import { EXT, esMedioPago } from '../fhir/identifiers.js';
-import { emitirInvoicePlan, enviarWhatsApp, leerTcVigente } from './_shared.js';
+import { EXT, SYSTEM, esMedioPago } from '../fhir/identifiers.js';
+import { emitirInvoicePlan, enviarWhatsApp, leerTcVigente, notificarPortal } from './_shared.js';
 
 export interface EntradaAsignarPlan {
   pacienteRef: string; // "Patient/123"
@@ -119,6 +119,18 @@ export async function handler(
         e.tipo === 'membresia' ? ' este mes' : ` (vencen el ${new Date(periodEnd!).toLocaleDateString('es-AR')})`
       }. ¡Te esperamos! 💚`,
     });
+
+    // 5) Campanita del portal: constancia del pago del plan (misma clave que el Invoice).
+    if (invoiceId) {
+      const invoiceKey = cicloExt ? `plan-${coverage.id}-${cicloExt}` : `plan-${coverage.id}`;
+      await notificarPortal(medplum, {
+        tipo: 'pago-recibido',
+        pacienteRef: e.pacienteRef,
+        about: `Invoice/${invoiceId}`,
+        identifier: { system: SYSTEM.communication, value: `portal-pago-${invoiceKey}` },
+        texto: `¡Activamos tu ${descripcion}! Recibimos el pago de $${totalARS.toLocaleString('es-AR')}. Tenés ${sesiones} sesiones disponibles. 💚`,
+      });
+    }
 
     return { ok: true, coverageId: coverage.id, invoiceId, totalARS, sesiones };
   } catch (err) {

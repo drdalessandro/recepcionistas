@@ -17,8 +17,8 @@ import { getMembresia } from '../config/membresias.js';
 import { calcularCobro } from '../lib/pricing.js';
 import { cicloMes, debeRenovarMembresia } from '../lib/planes.js';
 import { estadoDeCoverage, planCodigoDeCoverage } from '../fhir/coverage.js';
-import { EXT } from '../fhir/identifiers.js';
-import { emitirInvoicePlan, enviarWhatsApp, leerTcVigente, resolverInvoicePlan } from './_shared.js';
+import { EXT, SYSTEM } from '../fhir/identifiers.js';
+import { emitirInvoicePlan, enviarWhatsApp, leerTcVigente, notificarPortal, resolverInvoicePlan } from './_shared.js';
 
 export interface EntradaCobroMembresias {
   /** Fecha de referencia ISO (default: ahora). Útil para pruebas/reprocesos. */
@@ -118,6 +118,14 @@ export async function handler(
             template: 'membresia-renovada',
             pacienteRef,
             body: `BioWellness: renovamos tu Membresía ${m.tier} para ${ciclo} ($${totalARS.toLocaleString('es-AR')} con tu tarjeta guardada). Tenés ${m.sesionesMes} sesiones este mes. 💚`,
+          });
+          // Campanita del portal: constancia del pago acreditado (idempotente por clave).
+          await notificarPortal(medplum, {
+            tipo: 'pago-recibido',
+            pacienteRef,
+            ...(cobro.invoiceId ? { about: `Invoice/${cobro.invoiceId}` } : {}),
+            identifier: { system: SYSTEM.communication, value: `portal-pago-plan-${c.id}-${ciclo}` },
+            texto: `Renovamos tu Membresía ${m.tier} para ${ciclo}: $${totalARS.toLocaleString('es-AR')}. Tenés ${m.sesionesMes} sesiones este mes. 💚`,
           });
         } else if (resultado === 'rejected') {
           await resolverInvoicePlan(medplum, { clave: cobro.clave, resultado: 'rechazado', detalle: 'Cobro automático con tarjeta guardada.' });

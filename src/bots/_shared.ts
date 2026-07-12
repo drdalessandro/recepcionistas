@@ -150,10 +150,12 @@ export async function enviarWhatsApp(
     ...(params.pacienteRef
       ? { subject: { reference: params.pacienteRef }, recipient: [{ reference: params.pacienteRef }] }
       : {}),
-    payload: [{ contentString: params.body }],
+    // payload solo si hay cuerpo: un payload sin content[x] es FHIR inválido.
+    ...(params.body ? { payload: [{ contentString: params.body }] } : {}),
     extension: [
       { url: EXT.canal, valueCode: 'whatsapp' },
-      { url: EXT.templateUsado, valueString: params.template },
+      // templateUsado solo si hay template: una extensión sin valor viola ext-1.
+      ...(params.template ? [{ url: EXT.templateUsado, valueString: params.template }] : []),
     ],
   });
 }
@@ -213,10 +215,12 @@ export async function enviarEmail(
     ...(params.pacienteRef
       ? { subject: { reference: params.pacienteRef }, recipient: [{ reference: params.pacienteRef }] }
       : {}),
-    payload: [{ contentString: params.cuerpo }],
+    // payload solo si hay cuerpo: un payload sin content[x] es FHIR inválido.
+    ...(params.cuerpo ? { payload: [{ contentString: params.cuerpo }] } : {}),
     extension: [
       { url: EXT.canal, valueCode: 'email' },
-      { url: EXT.templateUsado, valueString: params.template },
+      // templateUsado solo si hay template: una extensión sin valor viola ext-1.
+      ...(params.template ? [{ url: EXT.templateUsado, valueString: params.template }] : []),
     ],
   });
 }
@@ -504,6 +508,27 @@ export async function confirmarReserva(
     body: `BioWellness: ¡tu turno quedó confirmado! ${appt.description ?? ''}. Recibimos la seña de $${senaARS.toLocaleString('es-AR')}. ¡Te esperamos! 💚`,
   });
 
+  // Campanita del portal: confirmación de la reserva + constancia del pago de la
+  // seña. Idempotentes por invoiceKey (la misma clave del Invoice).
+  await notificarPortal(medplum, {
+    tipo: 'reserva-confirmada',
+    pacienteRef,
+    about: `Appointment/${appt.id}`,
+    identifier: { system: SYSTEM.communication, value: `portal-reserva-${invoiceKey}` },
+    texto: `¡Tu turno quedó confirmado!${appt.description ? ` ${appt.description}.` : ''}${
+      appt.start ? ` ${fechaTurnoNotif(appt.start)}.` : ''
+    } Te esperamos en San Isidro. 💚`,
+  });
+  await notificarPortal(medplum, {
+    tipo: 'pago-recibido',
+    pacienteRef,
+    about: `Invoice/${invoice.id}`,
+    identifier: { system: SYSTEM.communication, value: `portal-pago-${invoiceKey}` },
+    texto: `Recibimos tu seña de $${senaARS.toLocaleString('es-AR')}${
+      opts.medioPago ? ` (${opts.medioPago})` : ''
+    }. ¡Gracias!`,
+  });
+
   return { totalARS, senaARS, invoiceId: invoice.id, confirmados, yaConfirmado: false };
 }
 
@@ -725,4 +750,80 @@ export async function consumirSesionDePlan(
     restantes: Math.max(estado.total - nuevasUsadas, 0),
     planCodigo,
   };
+}
+
+/* ------------------------------------------------------------------ */
+/* Notificaciones del portal (campanita de Novedades)                  */
+/* Contrato: docs/mensajeria-y-notificaciones.md del repo portal.      */
+/* ------------------------------------------------------------------ */
+
+/** CodeSystem compartido con el portal. NO cambiar sin tocar el portal. */
+export const NOTIFICACION_SYSTEM = 'https://biowellness.ar/fhir/CodeSystem/notificacion';
+
+export type TipoNotificacionPortal = 'reserva-confirmada' | 'pago-recibido' | 'recordatorio' | 'general';
+
+const fmtTurnoNotif = new Intl.DateTimeFormat('es-AR', {
+  weekday: 'long',
+  day: '2-digit',
+  month: '2-digit',
+  hour: '2-digit',
+  minute: '2-digit',
+  hour12: false,
+  timeZone: 'America/Argentina/Buenos_Aires',
+});
+
+/** Formatea el inicio de un turno para el texto de una notificación. */
+export function fechaTurnoNotif(iso: string | undefined): string {
+  return iso ? fmtTurnoNotif.format(new Date(iso)) : '';
+}
+
+/**
+ * Crea la notificación que enciende la campanita del portal del paciente.
+ * No envía nada por fuera (el WhatsApp/email van aparte): es una Communication
+ * con category del CodeSystem propio, `in-progress` = no leída (el portal la
+ * pasa a `completed` al abrirla). Sin `partOf` ni hijos, así NUNCA aparece en
+ * el chat. Idempotente por `identifier` (opcional) y NUNCA interrumpe el flujo
+ * que la dispara: ante cualquier error, loguea y devuelve undefined.
+ */
+export async function notificarPortal(
+  medplum: MedplumClient,
+  params: {
+    tipo: TipoNotificacionPortal;
+    /** Referencia FHIR del paciente, ej. "Patient/123". Sin paciente no se notifica. */
+    pacienteRef?: string;
+    texto: string;
+    /** El recurso real: "Appointment/…", "Invoice/…", "CarePlan/…". El tap navega ahí. */
+    about?: string;
+    /** Idempotencia opcional (mismo patrón que los recordatorios). */
+    identifier?: { system: string; value: string };
+  },
+): Promise<Communication | undefined> {
+  if (!params.pacienteRef) {
+    return undefined;
+  }
+  try {
+    if (params.identifier) {
+      const existente = await medplum.searchOne(
+        'Communication',
+        `identifier=${params.identifier.system}|${params.identifier.value}`,
+      );
+      if (existente) {
+        return existente;
+      }
+    }
+    return await medplum.createResource<Communication>({
+      resourceType: 'Communication',
+      status: 'in-progress',
+      sent: new Date().toISOString(),
+      subject: { reference: params.pacienteRef },
+      recipient: [{ reference: params.pacienteRef }],
+      category: [{ coding: [{ system: NOTIFICACION_SYSTEM, code: params.tipo }] }],
+      ...(params.about ? { about: [{ reference: params.about }] } : {}),
+      ...(params.identifier ? { identifier: [params.identifier] } : {}),
+      payload: [{ contentString: params.texto }],
+    });
+  } catch (err) {
+    console.error('notificarPortal falló (no interrumpe):', err instanceof Error ? err.message : err);
+    return undefined;
+  }
 }

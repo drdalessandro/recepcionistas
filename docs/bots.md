@@ -25,6 +25,7 @@ deployan al runtime **`awslambda`** de Medplum (configurable con la env
 | `bw-invitar-paciente` | Invita al paciente al **portal** (invite de Medplum) y entrega el link por WhatsApp/email/QR. **Requiere admin.** | `executeBot` (Atender → Invitar al portal). |
 | `bw-limpiar-demo` | **Cron:** borra los datos demo (tag `demo`) con más de 48 h. | `cronTimer` del Bot (cada ~1 h). |
 | `bw-enviar-whatsapp` | Envía WhatsApp (Twilio) y registra `Communication`. | `executeBot` por evento o manual. |
+| `bw-solicitar-turno` | **Portal:** crea una solicitud de turno (`Task` `code=solicitud-turno`) del paciente y avisa a Recepción por WhatsApp (`RECEPCION_WHATSAPP_TO`). No reserva: Recepción confirma. | `executeBot` desde el **portal** del paciente (único bot que puede ejecutar). |
 | `bw-recordatorios` | **Cron horario:** recordatorios de turno (24h/1h) y de saldo en riesgo, por WhatsApp **y** email. | `cronTimer` del Bot (cada hora). |
 
 ## Deploy
@@ -53,6 +54,14 @@ En Medplum los bots leen secretos de `event.secrets`, **no** de `process.env`
 secretos se cargan como **Project Secrets** en el panel de Medplum
 (Project → Secrets).
 
+**Campanita del portal:** además del WhatsApp/email, los bots crean la
+`Communication`-notificación que enciende la campanita del paciente en el portal
+(`notificarPortal` en `src/bots/_shared.ts`; contrato en
+`portal/docs/mensajeria-y-notificaciones.md`). Hoy la disparan: la confirmación
+de reserva (`confirmarReserva`: seña manual y webhook de MP → `reserva-confirmada`
++ `pago-recibido`) y los recordatorios (`bw-recordatorios` → `recordatorio`).
+Es best-effort e idempotente: nunca interrumpe el flujo que la dispara.
+
 **Regla de oro:** los helpers (`enviarWhatsApp` / `enviarEmail` en
 `src/bots/_shared.ts`) **siempre** registran la `Communication`, pero **solo
 envían** si está la configuración completa. Así se puede probar la lógica sin
@@ -69,10 +78,16 @@ spamear a nadie. Estados resultantes:
 - `TWILIO_ACCOUNT_SID`
 - `TWILIO_AUTH_TOKEN`
 - `TWILIO_WHATSAPP_FROM` (formato `whatsapp:+549...`)
+- `RECEPCION_WHATSAPP_TO` (número de Recepción, para el aviso de **solicitudes** del portal)
 
 El destinatario sale de `Patient.telecom` (teléfono/SMS). El WhatsApp se dispara
 automático **al reservar** (turno tentativo), **al pagar la seña** (confirmado),
 **al renovar la membresía** y en los **recordatorios** (ver abajo).
+
+> **Diagnóstico de WhatsApp:** `npm run whatsapp:test -- +5491122334455` ejecuta el
+> bot `bw-enviar-whatsapp` en el server (lee los Project Secrets reales) y reporta
+> el `status` de la `Communication`: `completed` (Twilio aceptó), `preparation`
+> (falta algún secret) o `entered-in-error` (Twilio rechazó: sandbox/FROM/número).
 
 ### Email (AWS SES)
 

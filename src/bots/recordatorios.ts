@@ -16,7 +16,7 @@ import type { BotEvent, MedplumClient } from '@medplum/core';
 import type { Appointment } from '@medplum/fhirtypes';
 import { SYSTEM } from '../fhir/identifiers.js';
 import { recordatorioDue, VENTANA_MAX_MS, type TipoRecordatorio } from '../lib/recordatorios.js';
-import { enviarWhatsApp } from './_shared.js';
+import { enviarWhatsApp, notificarPortal } from './_shared.js';
 
 export interface EntradaRecordatorios {
   /** Fecha de referencia ISO (default: ahora). Útil para pruebas/reprocesos. */
@@ -108,6 +108,15 @@ export async function handler(
       identifier: { system: SYSTEM.communication, value: key },
       pacienteRef,
       body: cuerpo(tipo, descripcion, inicio),
+    });
+
+    // Campanita del portal (misma idempotencia que el WhatsApp, con su propia clave).
+    await notificarPortal(medplum, {
+      tipo: 'recordatorio',
+      pacienteRef,
+      about: `Appointment/${appt.id}`,
+      identifier: { system: SYSTEM.communication, value: `portal-${key}` },
+      texto: cuerpo(tipo, descripcion, inicio),
     });
 
     if (tipo === '2h') {

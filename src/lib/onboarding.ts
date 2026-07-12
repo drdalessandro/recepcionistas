@@ -44,15 +44,26 @@ export interface MensajeInvitacion {
   texto: string;
 }
 
-/** Cuerpo de la invitación al portal según el canal (mismo link en todos). */
+/** URL del portal del paciente (se muestra para que lo guarde / lo agregue a inicio). */
+export const PORTAL_URL = 'https://bio.medplum.com.ar';
+
+/**
+ * Cuerpo de la invitación al portal (mismo link mágico en todos los canales).
+ * Personalizado para BioWellness San Isidro: asunto de bienvenida + sugerencia de
+ * añadir el portal a la pantalla de inicio (PWA).
+ */
 export function mensajeInvitacion(nombre: string, link: string): MensajeInvitacion {
   const saludo = nombre ? `¡Hola ${nombre}!` : '¡Hola!';
   return {
-    asunto: 'Tu acceso al portal de BioWellness',
+    asunto: 'Bienvenido a BioWellness | San Isidro',
     texto:
-      `${saludo} Te damos la bienvenida a BioWellness 💚\n\n` +
-      `Activá tu acceso al portal para ver tus turnos, tu plan y tus pagos. ` +
+      `${saludo} Te damos la bienvenida a BioWellness San Isidro 💚\n\n` +
+      `Activá tu acceso al portal para ver tus turnos, tu plan, tus pagos y tus estudios. ` +
       `Entrá a este link y elegí tu contraseña:\n\n${link}\n\n` +
+      `Después vas a poder ingresar siempre desde:\n${PORTAL_URL}\n\n` +
+      `📲 Te recomendamos "Añadir a pantalla de inicio" para abrirlo como una app:\n` +
+      `• iPhone (Safari): tocá Compartir → "Añadir a pantalla de inicio".\n` +
+      `• Android (Chrome): tocá el menú ⋮ → "Añadir a pantalla de inicio".\n\n` +
       `Si no solicitaste esto, podés ignorar este mensaje.`,
   };
 }

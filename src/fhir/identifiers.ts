@@ -99,6 +99,14 @@ export const SYSTEM = {
   /** Bloqueos administrativos (R-11: pago rechazado → no se reserva). */
   bloqueo: `${BASE}/CodeSystem/bloqueo`,
   config: `${BASE}/Identifier/config`,
+  /** Tipo de Task (p. ej. solicitud de turno desde el portal). */
+  taskTipo: `${BASE}/CodeSystem/task-tipo`,
+} as const;
+
+/** Códigos de negocio puntuales. */
+export const COD = {
+  /** Task.code de una solicitud de turno creada desde el portal del paciente. */
+  solicitudTurno: 'solicitud-turno',
 } as const;
 
 /** Clave del recurso de configuración de Tipo de Cambio (Basic). */
