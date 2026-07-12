@@ -11,7 +11,7 @@ import { getServicio } from '../config/catalogo.js';
 import { getCombo } from '../config/combos.js';
 import { getMembresia } from '../config/membresias.js';
 import { getPaquete } from '../config/paquetes.js';
-import { CASCADA_TB } from '../config/reglas.js';
+import { CASCADA_TB, FM, MEMBRESIA } from '../config/reglas.js';
 import { resolverTC } from '../config/tipo-cambio.js';
 import { redondearUSD, usdAArs } from './money.js';
 
@@ -130,6 +130,30 @@ export interface ItemCobro {
   cantidad?: number;
 }
 
+/**
+ * Descuentos por tipo de cliente (los resuelve el bot leyendo Patient/Coverage;
+ * la recepción nunca los elige a mano).
+ * - `fm`: Founding Member → 20% en sueltas (si el servicio lo permite) y paquetes.
+ * - `aLaCartePct`: miembro con membresía activa comprando sueltas a la carte →
+ *   Standard 10% / Intensivo 15% (Manual v9).
+ * ⚠️ PROVISORIO (pendiente Andrés): NO acumulan — se aplica EL MAYOR de los dos.
+ */
+export interface DescuentosCliente {
+  fm?: boolean;
+  aLaCartePct?: number;
+}
+
+/** % a la carte según la intensidad de la membresía activa (Manual v9). */
+export function descuentoALaCarteDe(intensidad: 'STANDARD' | 'INTENSIVO' | undefined): number {
+  if (intensidad === 'STANDARD') {
+    return MEMBRESIA.descuentoALaCarteStandard;
+  }
+  if (intensidad === 'INTENSIVO') {
+    return MEMBRESIA.descuentoALaCarteIntensivo;
+  }
+  return 0;
+}
+
 export interface LineaCobro {
   tipo: TipoItemCobro;
   codigo: string;
@@ -142,6 +166,9 @@ export interface LineaCobro {
   /** Subtotal de la línea en ARS (lo que efectivamente se cobra). */
   subtotalARS: number;
   split: DistribucionSplit;
+  /** Descuento aplicado a la línea (fracción) y su origen, si hubo. */
+  descuentoPct?: number;
+  descuentoOrigen?: 'fm' | 'a-la-carte';
 }
 
 export interface ResultadoCobro {
@@ -154,12 +181,13 @@ export interface ResultadoCobro {
 }
 
 /** Construye una línea de cobro, manejando moneda (USD se convierte; ARS es fijo). */
-function construirLinea(item: ItemCobro, tc?: number): LineaCobro {
+function construirLinea(item: ItemCobro, tc?: number, desc: DescuentosCliente = {}): LineaCobro {
   const cantidad = item.cantidad ?? 1;
+  const esFm = desc.fm || item.fm || false;
 
   if (item.tipo === 'servicio') {
     const s = getServicio(item.codigo);
-    // Consultas u otros servicios con precio fijo en ARS (no se convierte).
+    // Consultas u otros servicios con precio fijo en ARS (no se convierte ni descuenta).
     if (s.precioARS != null) {
       return {
         tipo: 'servicio',
@@ -173,7 +201,13 @@ function construirLinea(item: ItemCobro, tc?: number): LineaCobro {
         split: { bwUSD: 0 },
       };
     }
-    const precio = precioSueltoUSD(s, { ocupantes: item.ocupantes ?? 1, fm: item.fm ?? false });
+    // Descuentos de cliente sobre la suelta: FM 20% (si el servicio lo permite)
+    // vs a la carte de miembros 10/15%. PROVISORIO: el MAYOR, no acumulan.
+    const base = precioSueltoUSD(s, { ocupantes: item.ocupantes ?? 1, fm: false });
+    const fmPct = esFm && s.fmAplica ? FM.descuento : 0;
+    const alcPct = desc.aLaCartePct ?? 0;
+    const pct = Math.max(fmPct, alcPct);
+    const precio = redondearUSD(base * (1 - pct));
     const subtotalUSD = redondearUSD(precio * cantidad);
     return {
       tipo: 'servicio',
@@ -185,12 +219,15 @@ function construirLinea(item: ItemCobro, tc?: number): LineaCobro {
       subtotalUSD,
       subtotalARS: usdAArs(subtotalUSD, tc),
       split: calcularSplit(s, subtotalUSD, { insumoUSD: item.insumoUSD }),
+      ...(pct > 0 ? { descuentoPct: pct, descuentoOrigen: pct === fmPct && fmPct >= alcPct ? ('fm' as const) : ('a-la-carte' as const) } : {}),
     };
   }
 
   // Combos / membresías / paquetes: siempre en USD.
+  // Combos y membresías ya traen su descuento estructural (no aplica FM ni a la carte).
   let precio: number;
   let descripcion: string;
+  let descuento: Pick<LineaCobro, 'descuentoPct' | 'descuentoOrigen'> = {};
   if (item.tipo === 'combo') {
     const c = getCombo(item.codigo);
     precio = c.precioUSD;
@@ -201,8 +238,12 @@ function construirLinea(item: ItemCobro, tc?: number): LineaCobro {
     descripcion = `Membresía ${m.tier} ${m.intensidad} ${m.variante}`;
   } else {
     const p = getPaquete(item.codigo);
-    precio = item.fm ? p.totalFMUSD : p.totalUSD;
+    // Paquetes: FM 20% adicional (Manual). El a la carte NO aplica a paquetes.
+    precio = esFm ? p.totalFMUSD : p.totalUSD;
     descripcion = `Paquete ${p.codigo}`;
+    if (esFm) {
+      descuento = { descuentoPct: 0.2, descuentoOrigen: 'fm' };
+    }
   }
   const subtotalUSD = redondearUSD(precio * cantidad);
   return {
@@ -215,15 +256,16 @@ function construirLinea(item: ItemCobro, tc?: number): LineaCobro {
     subtotalUSD,
     subtotalARS: usdAArs(subtotalUSD, tc),
     split: { bwUSD: subtotalUSD },
+    ...descuento,
   };
 }
 
 /**
  * Calcula el cobro completo de una lista de ítems. La recepción solo elige el
- * medio de pago: el sistema calcula montos, splits y conversión a ARS.
+ * medio de pago: el sistema calcula montos, descuentos, splits y conversión a ARS.
  */
-export function calcularCobro(items: ItemCobro[], opts: { tc?: number } = {}): ResultadoCobro {
-  const lineas = items.map((item) => construirLinea(item, opts.tc));
+export function calcularCobro(items: ItemCobro[], opts: { tc?: number; descuentos?: DescuentosCliente } = {}): ResultadoCobro {
+  const lineas = items.map((item) => construirLinea(item, opts.tc, opts.descuentos));
   const totalUSD = redondearUSD(lineas.reduce((acc, l) => acc + l.subtotalUSD, 0));
   const totalARS = lineas.reduce((acc, l) => acc + l.subtotalARS, 0);
   return {

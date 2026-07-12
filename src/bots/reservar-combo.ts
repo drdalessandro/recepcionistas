@@ -20,13 +20,14 @@ import {
   DESFASAJE_RECOVERY_MIN,
   combinar,
   validarContraindicaciones,
+  validarBloqueoAdministrativo,
   validarOrdenHBOT,
   validarVentanaReserva,
   type Issue,
   type ReservaRecurso,
   type ResultadoValidacion,
 } from '../lib/reglas-turno.js';
-import { cargarReservasDelDia, consumirSesionDePlan, enviarWhatsApp, extraerCodigos, scheduleIdDeRecurso, type ConsumoPlan } from './_shared.js';
+import { cargarReservasDelDia, consumirSesionDePlan, enviarWhatsApp, extraerCodigos, scheduleIdDeRecurso, tieneBloqueoPago, type ConsumoPlan } from './_shared.js';
 
 export interface EntradaCombo {
   pacienteRef: string;
@@ -171,6 +172,7 @@ export async function handler(medplum: MedplumClient, event: BotEvent<EntradaCom
     partes.push({ ok: false, bloqueos: [{ regla: 'R-13', nivel: 'bloqueo', mensaje: 'El turno está en el pasado.' }], advertencias: [] });
   }
   partes.push(validarOrdenHBOT(categorias));
+  partes.push(validarBloqueoAdministrativo(tieneBloqueoPago(flags)));
   partes.push(validarContraindicaciones([...new Set(categorias)], contraindicaciones, { autorizacionMedica: e.autorizacionMedica ?? false }));
   if (e.perfil) {
     partes.push(validarVentanaReserva(e.perfil, ahora, inicio));

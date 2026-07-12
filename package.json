@@ -17,6 +17,7 @@
     "seed": "tsx src/seed/index.ts",
     "seed:prueba-recordatorios": "tsx src/seed/prueba-recordatorios.ts",
     "datos-demo": "tsx src/seed/datos-demo.ts",
+    "migrar:medios": "tsx src/seed/migrar-medio-pago.ts",
     "limpiar": "tsx src/seed/limpiar.ts",
     "bots:bundle": "tsx src/seed/deploy-bots.ts --dry-run",
     "deploy:bots": "tsx src/seed/deploy-bots.ts",

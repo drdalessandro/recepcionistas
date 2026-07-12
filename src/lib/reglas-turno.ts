@@ -313,6 +313,28 @@ export function validarSaldoMembresia(sesionesUsadas: number, sesionesMes: numbe
   return resultado([]);
 }
 
+// --------------------------------------------------------------------------
+// R-11 · Bloqueo administrativo por pago rechazado (membresía impaga)
+// --------------------------------------------------------------------------
+
+/**
+ * Si el paciente tiene un bloqueo administrativo activo (Flag del system
+ * `bloqueo`, p. ej. por rechazo del cobro de su membresía), NO puede hacer
+ * nuevas reservas hasta regularizar el pago (R-11).
+ */
+export function validarBloqueoAdministrativo(bloqueado: boolean): ResultadoValidacion {
+  if (bloqueado) {
+    return resultado([
+      {
+        regla: 'R-11',
+        nivel: 'bloqueo',
+        mensaje: 'Pagos pendientes de regularizar: el último cobro de la membresía fue rechazado. Regularizar antes de reservar.',
+      },
+    ]);
+  }
+  return resultado([]);
+}
+
 /** Combina varios resultados en uno solo. */
 export function combinar(...resultados: ResultadoValidacion[]): ResultadoValidacion {
   return resultado(resultados.flatMap((r) => [...r.bloqueos, ...r.advertencias]));

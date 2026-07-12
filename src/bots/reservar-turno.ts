@@ -15,7 +15,7 @@ import type { Servicio } from '../domain/types.js';
 import { getServicio } from '../config/catalogo.js';
 import type { PerfilReserva } from '../config/reglas.js';
 import { EXT, SYSTEM } from '../fhir/identifiers.js';
-import { cargarReservasDelDia, consumirSesionDePlan, enviarWhatsApp, extraerCodigos, scheduleIdDeRecurso, type ConsumoPlan } from './_shared.js';
+import { cargarReservasDelDia, consumirSesionDePlan, enviarWhatsApp, extraerCodigos, scheduleIdDeRecurso, tieneBloqueoPago, type ConsumoPlan } from './_shared.js';
 
 const fmtFechaHora = new Intl.DateTimeFormat('es-AR', {
   day: '2-digit',
@@ -28,6 +28,7 @@ const fmtFechaHora = new Intl.DateTimeFormat('es-AR', {
 import {
   combinar,
   recomendarHbotPrevio,
+  validarBloqueoAdministrativo,
   validarContraindicaciones,
   validarPrescripcion,
   validarRecursos,
@@ -74,6 +75,8 @@ export interface ContextoReserva {
   /** Turnos ya ocupados (de hoy), de todos los recursos, para capacidad/desfasaje. */
   reservasExistentes: ReservaRecurso[];
   perfil?: PerfilReserva;
+  /** R-11: el paciente tiene un bloqueo administrativo por pago rechazado. */
+  bloqueoAdministrativo?: boolean;
   ahora: Date;
 }
 
@@ -105,6 +108,8 @@ export function validarReserva(ctx: ContextoReserva): ResultadoValidacion {
     partes.push(validarVentanaReserva(ctx.perfil, ctx.ahora, ctx.inicio));
   }
 
+  partes.push(validarBloqueoAdministrativo(ctx.bloqueoAdministrativo ?? false));
+
   return combinar(...partes);
 }
 
@@ -135,6 +140,7 @@ export async function handler(
     autorizacionMedica: e.autorizacionMedica ?? false,
     reservasExistentes,
     perfil: e.perfil,
+    bloqueoAdministrativo: tieneBloqueoPago(flags),
     ahora,
   });
 

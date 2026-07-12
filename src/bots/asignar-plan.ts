@@ -14,7 +14,7 @@ import { getMembresia } from '../config/membresias.js';
 import { getPaquete } from '../config/paquetes.js';
 import { calcularCobro } from '../lib/pricing.js';
 import { cicloMes } from '../lib/planes.js';
-import { EXT, SYSTEM } from '../fhir/identifiers.js';
+import { EXT, SYSTEM, esMedioPago } from '../fhir/identifiers.js';
 import { emitirInvoicePlan, enviarWhatsApp, leerTcVigente, notificarPortal } from './_shared.js';
 
 export interface EntradaAsignarPlan {
@@ -94,14 +94,19 @@ export async function handler(
     const { totalARS } = calcularCobro([{ tipo: e.tipo, codigo: e.planCodigo, fm: e.fm }], { tc });
     let invoiceId: string | undefined;
     if (e.cobrar !== false && coverage.id) {
+      if (e.medioPago && !esMedioPago(e.medioPago)) {
+        return { ok: false, mensaje: `Medio de pago inválido: "${e.medioPago}".` };
+      }
       const cobro = await emitirInvoicePlan(medplum, {
         coverageId: coverage.id,
         pacienteRef: e.pacienteRef,
+        tipo: e.tipo,
+        planCodigo: e.planCodigo,
         descripcion,
         totalARS,
         tc,
         ciclo: cicloExt,
-        medioPago: e.medioPago,
+        medioPago: e.medioPago && esMedioPago(e.medioPago) ? e.medioPago : undefined,
       });
       invoiceId = cobro.invoiceId;
     }

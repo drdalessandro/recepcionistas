@@ -13,13 +13,13 @@ export default defineConfig(({ mode }) => {
   // Vite lee las variables de app/.env (este directorio), NO del .env de la raíz.
   // HMR_ se lee acá para la config del server; NO se expone al navegador (envPrefix).
   const env = {
-    ...loadEnv(mode, fileURLToPath(new URL('.', import.meta.url)), ['MEDPLUM_', 'GOOGLE_', 'RECAPTCHA_', 'HMR_']),
+    ...loadEnv(mode, fileURLToPath(new URL('.', import.meta.url)), ['MEDPLUM_', 'GOOGLE_', 'RECAPTCHA_', 'HMR_', 'VITE_']),
     ...process.env,
   };
 
   // Aviso visible en el build: sin GOOGLE_CLIENT_ID no aparece el botón de Google.
-  if (env.GOOGLE_CLIENT_ID) {
-    console.log(`  ✓ GOOGLE_CLIENT_ID detectado (login con Google habilitado): …${String(env.GOOGLE_CLIENT_ID).slice(-28)}`);
+  if (env.GOOGLE_CLIENT_ID || env.VITE_GOOGLE_CLIENT_ID) {
+    console.log(`  ✓ GOOGLE_CLIENT_ID detectado (login con Google habilitado): …${String(env.GOOGLE_CLIENT_ID || env.VITE_GOOGLE_CLIENT_ID).slice(-28)}`);
   } else {
     console.warn('  ⚠ GOOGLE_CLIENT_ID NO seteado: el botón "Acceder con Google" NO va a aparecer.');
     console.warn('    Definilo en app/.env (no en el .env de la raíz) y volvé a buildear.');
@@ -46,7 +46,7 @@ export default defineConfig(({ mode }) => {
     // ⚠️ SEGURIDAD: nunca pongas secretos en app/.env. Con el prefijo MEDPLUM_, una
     // variable como MEDPLUM_CLIENT_SECRET quedaría embebida en el bundle del cliente.
     // Los secretos van solo en el .env de la raíz (seed/bots), que NO se carga acá.
-    envPrefix: ['MEDPLUM_', 'GOOGLE_', 'RECAPTCHA_'],
+    envPrefix: ['MEDPLUM_', 'GOOGLE_', 'RECAPTCHA_', 'VITE_'],
 
     // Alias `@bw` -> ../src para reutilizar la lógica pura del backend (semáforo,
     // tipos, catálogo). `fs.allow: ['..']` permite importar desde la raíz del repo.

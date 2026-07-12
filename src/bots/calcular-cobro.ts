@@ -8,8 +8,8 @@
 import type { BotEvent, MedplumClient } from '@medplum/core';
 import type { Invoice, InvoiceLineItem } from '@medplum/fhirtypes';
 import { calcularCobro, type ItemCobro } from '../lib/pricing.js';
-import { EXT } from '../fhir/identifiers.js';
-import { leerTcVigente } from './_shared.js';
+import { EXT, esMedioPago } from '../fhir/identifiers.js';
+import { extMedioPago, leerTcVigente } from './_shared.js';
 
 export interface EntradaCobro {
   items: ItemCobro[];
@@ -53,13 +53,15 @@ export async function handler(medplum: MedplumClient, event: BotEvent<EntradaCob
     date: new Date().toISOString(),
     ...(entrada.pacienteRef ? { subject: { reference: entrada.pacienteRef } } : {}),
     lineItem,
+    totalNet: { value: cobro.totalARS, currency: 'ARS' },
     totalGross: { value: cobro.totalARS, currency: 'ARS' },
     extension: [
       { url: EXT.tcAplicado, valueDecimal: cobro.tcAplicado },
       { url: EXT.montoSplitBw, valueMoney: { value: round2(totalBwUSD), currency: 'USD' } },
       { url: EXT.montoSplitProfesional, valueMoney: { value: round2(totalProfUSD), currency: 'USD' } },
+      // Contrato Administración: medio de pago SOLO por extensión (valueString canónico).
+      ...(entrada.medioPago && esMedioPago(entrada.medioPago) ? [extMedioPago(entrada.medioPago)] : []),
     ],
-    ...(entrada.medioPago ? { paymentTerms: `Medio de pago: ${entrada.medioPago}` } : {}),
   };
 
   if (entrada.persistir === false) {

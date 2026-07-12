@@ -3,14 +3,18 @@
  *
  * URL pública que MercadoPago llama al cambiar un pago. NO confía en el payload:
  * toma el id del pago y lo VERIFICA contra la API de MP (con el access token).
- * Si el pago está `approved`, confirma el turno (external_reference = appointmentId)
- * reutilizando `confirmarReserva` (idempotente; los reintentos de MP no duplican).
+ *
+ * El destino depende del external_reference del pago:
+ *  - `plan-…`  → cuota de membresía/paquete: approved → Invoice `balanced` +
+ *    ChargeItem + levanta bloqueo; rejected → Invoice `cancelled` + bloqueo de
+ *    reservas (R-11) + alerta a recepción (Task).
+ *  - otro id   → seña de turno: approved → confirmarReserva (idempotente).
  *
  * Configurar en MercadoPago (Webhooks, evento "Pagos") la URL del $execute de este
  * bot. Requiere el secret MERCADOPAGO_ACCESS_TOKEN.
  */
 import type { BotEvent, MedplumClient } from '@medplum/core';
-import { confirmarReserva } from './_shared.js';
+import { confirmarReserva, resolverInvoicePlan } from './_shared.js';
 
 interface NotificacionMP {
   type?: string;
@@ -51,20 +55,37 @@ export async function handler(medplum: MedplumClient, event: BotEvent): Promise<
   if (!resp.ok) {
     return { ok: false, motivo: `MP payments respondió ${resp.status}` };
   }
-  const pago = (await resp.json()) as { status?: string; external_reference?: string };
+  const pago = (await resp.json()) as { status?: string; status_detail?: string; external_reference?: string };
+  const ref = pago.external_reference;
+  if (!ref) {
+    return { ok: false, motivo: 'el pago no tiene external_reference' };
+  }
 
+  // Cuotas de membresía / paquete (Invoice pendiente con clave `plan-…`).
+  if (ref.startsWith('plan-')) {
+    if (pago.status === 'approved') {
+      const r = await resolverInvoicePlan(medplum, { clave: ref, resultado: 'pagado' });
+      return { ok: r.ok, confirmado: true, status: 'approved', motivo: r.mensaje ?? 'cuota acreditada' };
+    }
+    if (pago.status === 'rejected' || pago.status === 'cancelled') {
+      const r = await resolverInvoicePlan(medplum, {
+        clave: ref,
+        resultado: 'rechazado',
+        detalle: `MP: ${pago.status}${pago.status_detail ? ` (${pago.status_detail})` : ''}.`,
+      });
+      return { ok: r.ok, confirmado: false, status: pago.status, motivo: r.mensaje ?? 'cuota rechazada: bloqueo R-11 aplicado' };
+    }
+    return { ok: true, confirmado: false, status: pago.status, motivo: 'estado no terminal' };
+  }
+
+  // Señas de turno (external_reference = appointmentId).
   if (pago.status !== 'approved') {
     return { ok: true, confirmado: false, status: pago.status };
   }
-  const appointmentId = pago.external_reference;
-  if (!appointmentId) {
-    return { ok: false, motivo: 'el pago no tiene external_reference (appointmentId)' };
-  }
-
   const r = await confirmarReserva(medplum, event.secrets, {
-    appointmentId,
+    appointmentId: ref,
     medioPago: 'mercadopago',
     mpPaymentId: String(paymentId),
   });
-  return { ok: true, confirmado: true, appointmentId, status: 'approved', motivo: r.yaConfirmado ? 'ya confirmado' : 'confirmado' };
+  return { ok: true, confirmado: true, appointmentId: ref, status: 'approved', motivo: r.yaConfirmado ? 'ya confirmado' : 'confirmado' };
 }
