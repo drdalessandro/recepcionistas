@@ -9,6 +9,7 @@ import {
   type ResultadoLinkMP,
 } from '../lib/bots';
 import { colorEstado, labelEstado } from '../lib/estados';
+import { MEDIOS_SELECT } from '../lib/medios';
 import type { TurnoTimeline } from '../lib/timeline';
 
 const ACCIONES: Array<{ estado: EstadoTurno; label: string; color: string }> = [
@@ -18,7 +19,7 @@ const ACCIONES: Array<{ estado: EstadoTurno; label: string; color: string }> = [
   { estado: 'cancelled', label: 'Cancelar', color: 'red' },
 ];
 
-const MEDIOS = ['efectivo', 'transferencia', 'tarjeta'];
+
 
 function fmt(min: number): string {
   return `${String(Math.floor(min / 60)).padStart(2, '0')}:${String(min % 60).padStart(2, '0')}`;
@@ -125,7 +126,7 @@ export function TurnoModal({
             <>
               <Divider label="Seña 50% para confirmar" labelPosition="center" />
               <Group align="flex-end">
-                <Select label="Medio de pago" data={MEDIOS} value={medioPago} onChange={setMedioPago} w={180} />
+                <Select label="Medio de pago" data={MEDIOS_SELECT} value={medioPago} onChange={setMedioPago} w={180} />
                 <Button color="bio" loading={cargando === 'sena'} onClick={() => void registrarSena()}>
                   Registrar seña
                 </Button>

@@ -219,6 +219,36 @@ export interface ResultadoInvitarPaciente {
   enviado?: boolean;
 }
 
+export interface RegistrarCobroInput {
+  pacienteRef: string;
+  items: ItemCobroInput[];
+  /** Pago simple: [{medio}] (monto = total). Mixto: N porciones con montoARS. */
+  medios: Array<{ medio: string; montoARS?: number }>;
+  clave?: string;
+  soloCalcular?: boolean;
+}
+
+export interface ResultadoRegistrarCobro {
+  ok: boolean;
+  mensaje?: string;
+  totalARS?: number;
+  tcAplicado?: number;
+  lineas?: Array<{ descripcion: string; montoARS: number; descuentoPct?: number; descuentoOrigen?: string }>;
+  invoices?: Array<{ id: string; medio: string; montoARS: number }>;
+  chargeItemIds?: string[];
+  yaRegistrado?: boolean;
+}
+
+/**
+ * Registra un cobro presencial (contrato Administración): ChargeItems + un
+ * Invoice `balanced` por medio. Con `soloCalcular` devuelve el monto con los
+ * descuentos del cliente (FM / a la carte) sin registrar nada.
+ */
+export async function registrarCobro(input: RegistrarCobroInput): Promise<ResultadoRegistrarCobro> {
+  const id = await botIdPorNombre('bw-registrar-cobro');
+  return (await medplum.executeBot(id, input)) as ResultadoRegistrarCobro;
+}
+
 /** Invita al paciente al portal por el canal elegido (WhatsApp / email / QR). */
 export async function invitarPaciente(
   pacienteRef: string,

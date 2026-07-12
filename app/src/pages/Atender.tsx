@@ -25,19 +25,22 @@ import {
   IconLicense,
   IconUserPlus,
 } from '@tabler/icons-react';
-import type { Patient, Invoice } from '@medplum/fhirtypes';
+import type { Patient } from '@medplum/fhirtypes';
 import { getDisplayString } from '@medplum/core';
 import { medplum } from '../medplum';
 import {
-  calcularCobro,
+  registrarCobro,
   reservarTurno,
   reservarCombo,
   asignarPlan,
   mensajeError,
   type ResultadoReserva,
   type ResultadoCombo,
+  type ResultadoRegistrarCobro,
 } from '../lib/bots';
 import { cargarPlanesActivos, planUsable, type PlanPaciente } from '../lib/planes';
+import { MEDIOS_SELECT } from '../lib/medios';
+import { SYSTEM } from '@bw/fhir/identifiers';
 import { PreAgendaModal } from '../components/PreAgendaModal';
 import { InvitarPortal } from '../components/InvitarPortal';
 import { NuevoPacienteModal } from '../components/NuevoPacienteModal';
@@ -305,12 +308,7 @@ function PanelPlanes({
         />
         <Select
           label="Medio de pago (cobro inicial)"
-          data={[
-            { value: 'efectivo', label: 'Efectivo' },
-            { value: 'transferencia', label: 'Transferencia' },
-            { value: 'tarjeta', label: 'Tarjeta' },
-            { value: 'mercadopago', label: 'MercadoPago' },
-          ]}
+          data={MEDIOS_SELECT}
           value={medioPago}
           onChange={(v) => setMedioPago(v ?? 'efectivo')}
         />
@@ -347,15 +345,27 @@ function PanelPlanes({
   );
 }
 
-/** Banner de seguridad: señal binaria verde/rojo. La recepción NO ve el detalle clínico. */
+/**
+ * Banner de seguridad: señal binaria verde/rojo (clínico) + banner administrativo
+ * aparte si hay bloqueo de pagos (R-11). La recepción NO ve el detalle clínico.
+ */
 function BannerSeguridad({ pacienteId }: { pacienteId: string }): JSX.Element {
   const [estado, setEstado] = useState<'cargando' | 'verde' | 'rojo'>('cargando');
+  const [bloqueoPago, setBloqueoPago] = useState(false);
 
   useEffect(() => {
     let activo = true;
     medplum
-      .searchResources('Flag', { subject: `Patient/${pacienteId}`, status: 'active', _count: 1 })
-      .then((flags) => activo && setEstado(flags.length > 0 ? 'rojo' : 'verde'))
+      .searchResources('Flag', { subject: `Patient/${pacienteId}`, status: 'active', _count: 20 })
+      .then((flags) => {
+        if (!activo) {
+          return;
+        }
+        const esBloqueo = (f: (typeof flags)[number]): boolean =>
+          Boolean(f.code?.coding?.some((c) => c.system === SYSTEM.bloqueo));
+        setBloqueoPago(flags.some(esBloqueo));
+        setEstado(flags.some((f) => !esBloqueo(f)) ? 'rojo' : 'verde');
+      })
       .catch(() => activo && setEstado('verde'));
     return () => {
       activo = false;
@@ -365,17 +375,23 @@ function BannerSeguridad({ pacienteId }: { pacienteId: string }): JSX.Element {
   if (estado === 'cargando') {
     return <Loader size="sm" />;
   }
-  if (estado === 'rojo') {
-    return (
-      <Alert color="red" icon={<IconShieldX size={20} />} title="Atención: contraindicación activa" variant="filled">
-        Consultar con el equipo médico antes de continuar.
-      </Alert>
-    );
-  }
   return (
-    <Alert color="bio" icon={<IconShieldCheck size={20} />} title="Sin contraindicaciones" variant="filled">
-      Paciente apto para atención.
-    </Alert>
+    <>
+      {estado === 'rojo' ? (
+        <Alert color="red" icon={<IconShieldX size={20} />} title="Atención: contraindicación activa" variant="filled">
+          Consultar con el equipo médico antes de continuar.
+        </Alert>
+      ) : (
+        <Alert color="bio" icon={<IconShieldCheck size={20} />} title="Sin contraindicaciones" variant="filled">
+          Paciente apto para atención.
+        </Alert>
+      )}
+      {bloqueoPago && (
+        <Alert color="orange" icon={<IconInfoCircle size={20} />} title="Pagos pendientes de regularizar (R-11)" variant="filled">
+          El último cobro de la membresía fue rechazado. No puede hacer nuevas reservas hasta regularizar el pago.
+        </Alert>
+      )}
+    </>
   );
 }
 
@@ -611,11 +627,20 @@ function PanelReserva({
   );
 }
 
-/** Cobro: el front no calcula nada; le pide el monto al bot calcular-cobro. */
+/**
+ * Cobro presencial: el sistema calcula el monto según el tipo de cliente
+ * (FM / miembro a la carte) y registra ChargeItems + un Invoice `balanced` por
+ * medio de pago (mixto = 2 Invoices). La recepción solo elige el medio.
+ */
 function PanelCobro({ paciente }: { paciente: Patient }): JSX.Element {
   const [seleccion, setSeleccion] = useState<string | null>(null);
-  const [invoice, setInvoice] = useState<Invoice | null>(null);
-  const [calculando, setCalculando] = useState(false);
+  const [cotizacion, setCotizacion] = useState<ResultadoRegistrarCobro | null>(null);
+  const [registro, setRegistro] = useState<ResultadoRegistrarCobro | null>(null);
+  const [medio, setMedio] = useState<string>('efectivo');
+  const [mixto, setMixto] = useState(false);
+  const [medio2, setMedio2] = useState<string>('tarjeta-debito');
+  const [monto1, setMonto1] = useState<number>(0);
+  const [trabajando, setTrabajando] = useState<'calcular' | 'cobrar' | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const opciones = [
@@ -623,25 +648,67 @@ function PanelCobro({ paciente }: { paciente: Patient }): JSX.Element {
     { group: 'Servicios', items: SERVICIOS.map((s) => ({ value: s.codigo, label: s.nombre })) },
   ];
 
+  const items = (): { tipo: 'combo' | 'servicio'; codigo: string }[] =>
+    seleccion ? [{ tipo: COMBOS.some((c) => c.codigo === seleccion) ? 'combo' : 'servicio', codigo: seleccion }] : [];
+
   async function calcular(): Promise<void> {
     if (!seleccion) {
       return;
     }
-    const tipo = COMBOS.some((c) => c.codigo === seleccion) ? 'combo' : 'servicio';
-    setCalculando(true);
+    setTrabajando('calcular');
     setError(null);
-    setInvoice(null);
+    setRegistro(null);
+    setCotizacion(null);
     try {
-      const inv = await calcularCobro([{ tipo, codigo: seleccion }], `Patient/${paciente.id}`);
-      setInvoice(inv);
+      const r = await registrarCobro({ pacienteRef: `Patient/${paciente.id}`, items: items(), medios: [], soloCalcular: true });
+      if (!r.ok) {
+        setError(r.mensaje ?? 'No se pudo calcular.');
+        return;
+      }
+      setCotizacion(r);
+      setMonto1(Math.floor((r.totalARS ?? 0) / 2)); // precarga 50/50 para el mixto
     } catch (e) {
       setError(mensajeError(e));
     } finally {
-      setCalculando(false);
+      setTrabajando(null);
     }
   }
 
-  const totalARS = invoice?.totalGross?.value;
+  async function cobrar(): Promise<void> {
+    if (!seleccion || !cotizacion?.totalARS) {
+      return;
+    }
+    const total = cotizacion.totalARS;
+    const medios = mixto
+      ? [
+          { medio, montoARS: monto1 },
+          { medio: medio2, montoARS: total - monto1 },
+        ]
+      : [{ medio }];
+    setTrabajando('cobrar');
+    setError(null);
+    try {
+      const r = await registrarCobro({
+        pacienteRef: `Patient/${paciente.id}`,
+        items: items(),
+        medios,
+        clave: `${paciente.id}-${seleccion}-${Date.now()}`,
+      });
+      if (!r.ok) {
+        setError(r.mensaje ?? 'No se pudo registrar el cobro.');
+        return;
+      }
+      setRegistro(r);
+      setCotizacion(null);
+      setSeleccion(null);
+    } catch (e) {
+      setError(mensajeError(e));
+    } finally {
+      setTrabajando(null);
+    }
+  }
+
+  const total = cotizacion?.totalARS ?? 0;
 
   return (
     <Card withBorder radius="md" padding="lg">
@@ -655,12 +722,17 @@ function PanelCobro({ paciente }: { paciente: Patient }): JSX.Element {
           placeholder="Elegí qué cobrar"
           data={opciones}
           value={seleccion}
-          onChange={setSeleccion}
+          onChange={(v) => {
+            setSeleccion(v);
+            setCotizacion(null);
+            setRegistro(null);
+            setError(null);
+          }}
           searchable
           w={360}
         />
-        <Button onClick={() => void calcular()} loading={calculando} disabled={!seleccion}>
-          Calcular cobro
+        <Button onClick={() => void calcular()} loading={trabajando === 'calcular'} disabled={!seleccion}>
+          Calcular
         </Button>
       </Group>
 
@@ -670,13 +742,60 @@ function PanelCobro({ paciente }: { paciente: Patient }): JSX.Element {
         </Alert>
       )}
 
-      {totalARS !== undefined && (
-        <Alert color="bio" mt="md" title="Total a cobrar">
-          <Text size="xl" fw={700}>
-            <NumberFormatter prefix="$ " value={totalARS} thousandSeparator="." decimalSeparator="," />
-          </Text>
-          <Text size="sm" c="dimmed">
-            Calculado por el bot (incluye conversión USD→ARS al TC vigente). La recepción solo elige el medio de pago.
+      {cotizacion && (
+        <Stack mt="md" gap="sm">
+          <Alert color="bio" title="Total a cobrar">
+            <Text size="xl" fw={700}>
+              <NumberFormatter prefix="$ " value={total} thousandSeparator="." decimalSeparator="," />
+            </Text>
+            {cotizacion.lineas?.map((l, i) => (
+              <Text key={i} size="sm" c="dimmed">
+                {l.descripcion}: ${l.montoARS.toLocaleString('es-AR')}
+                {l.descuentoPct
+                  ? ` (con ${Math.round(l.descuentoPct * 100)}% OFF ${l.descuentoOrigen === 'fm' ? 'Founding Member' : 'miembro a la carte'})`
+                  : ''}
+              </Text>
+            ))}
+          </Alert>
+
+          <Group align="flex-end">
+            <Select label={mixto ? 'Medio 1' : 'Medio de pago'} data={MEDIOS_SELECT} value={medio} onChange={(v) => setMedio(v ?? 'efectivo')} w={190} />
+            <Switch label="Pago mixto (2 medios)" checked={mixto} onChange={(e) => setMixto(e.currentTarget.checked)} mb={8} />
+          </Group>
+
+          {mixto && (
+            <Group align="flex-end">
+              <TextInput
+                label={`Monto medio 1 (${medio})`}
+                type="number"
+                value={String(monto1)}
+                onChange={(e) => setMonto1(Number(e.currentTarget.value) || 0)}
+                w={190}
+              />
+              <Select label="Medio 2" data={MEDIOS_SELECT.filter((m) => m.value !== medio)} value={medio2} onChange={(v) => setMedio2(v ?? 'tarjeta-debito')} w={190} />
+              <Text size="sm" c="dimmed" mb={10}>
+                Medio 2 paga: ${Math.max(total - monto1, 0).toLocaleString('es-AR')} (suma exacta al total)
+              </Text>
+            </Group>
+          )}
+
+          <Group>
+            <Button color="bio" onClick={() => void cobrar()} loading={trabajando === 'cobrar'}>
+              Registrar cobro
+            </Button>
+          </Group>
+        </Stack>
+      )}
+
+      {registro?.ok && (
+        <Alert color="bio" mt="md" title="Cobro registrado ✓">
+          {registro.invoices?.map((inv, i) => (
+            <Text key={i} size="sm">
+              {MEDIOS_SELECT.find((m) => m.value === inv.medio)?.label ?? inv.medio}: ${inv.montoARS.toLocaleString('es-AR')}
+            </Text>
+          ))}
+          <Text size="xs" c="dimmed" mt={4}>
+            Quedó registrado para el cierre de caja y los reportes de Administración.
           </Text>
         </Alert>
       )}

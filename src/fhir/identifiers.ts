@@ -61,8 +61,16 @@ export const EXT = {
   tcAplicado: `${BASE}/StructureDefinition/tc-aplicado`,
   /** Marca de que el Invoice es una seña (depósito). */
   esSena: `${BASE}/StructureDefinition/es-sena`,
-  /** Medio de pago elegido (efectivo / transferencia / tarjeta / mercadopago). */
+  /**
+   * Medio de pago del Invoice. CONTRATO con Administración: se escribe como
+   * **valueString** con uno de los 5 códigos de MEDIOS_PAGO (nunca texto libre).
+   */
   medioPago: `${BASE}/StructureDefinition/medio-pago`,
+  // Coverage — cobro recurrente MercadoPago (tokenización; nunca datos de tarjeta)
+  /** Id de customer de MercadoPago asociado al paciente. */
+  mpCustomerId: `${BASE}/StructureDefinition/mp-customer-id`,
+  /** Id de la tarjeta guardada en MercadoPago (token del lado de MP). */
+  mpCardId: `${BASE}/StructureDefinition/mp-card-id`,
   // Communication
   canal: `${BASE}/StructureDefinition/canal`,
   templateUsado: `${BASE}/StructureDefinition/template-usado`,
@@ -88,6 +96,8 @@ export const SYSTEM = {
   dni: `${BASE}/Identifier/dni`,
   /** Tag de datos de demostración (se autodestruyen a las 48 h). */
   demo: `${BASE}/demo`,
+  /** Bloqueos administrativos (R-11: pago rechazado → no se reserva). */
+  bloqueo: `${BASE}/CodeSystem/bloqueo`,
   config: `${BASE}/Identifier/config`,
 } as const;
 
@@ -96,3 +106,52 @@ export const CONFIG_TC_ID = 'config-tipo-cambio';
 
 /** Moneda de lista del catálogo. */
 export const MONEDA_LISTA = 'USD' as const;
+
+// ============================================================================
+// CONTRATO DE PAGOS con Administración (repo `administracion`) — INAMOVIBLE.
+// El bot kpis-finanzas y los tableros de Andrés leen EXACTAMENTE estos códigos
+// y URLs. Cambiarlos rompe los reportes. Ver docs/bots.md § Contrato de pagos.
+// ============================================================================
+
+/** Los 5 medios de pago canónicos. La UI de cobro es un select de ESTOS valores. */
+export const MEDIOS_PAGO = [
+  'efectivo',
+  'tarjeta-debito',
+  'tarjeta-credito',
+  'transferencia',
+  'mercadopago',
+] as const;
+
+export type MedioPago = (typeof MEDIOS_PAGO)[number];
+
+export function esMedioPago(v: string | undefined | null): v is MedioPago {
+  return Boolean(v) && (MEDIOS_PAGO as readonly string[]).includes(v as string);
+}
+
+/** Etiquetas para la UI (el valor persistido es SIEMPRE el código canónico). */
+export const MEDIOS_PAGO_LABELS: Record<MedioPago, string> = {
+  efectivo: 'Efectivo',
+  'tarjeta-debito': 'Tarjeta débito',
+  'tarjeta-credito': 'Tarjeta crédito',
+  transferencia: 'Transferencia',
+  mercadopago: 'MercadoPago',
+};
+
+/** Líneas comerciales del ChargeItem (las lee kpis-finanzas de administracion). */
+export const LINEAS_COMERCIALES = [
+  'membresias',
+  'sueltas-combos',
+  'paquetes',
+  'iv-tb',
+  'consultas',
+  'otros',
+] as const;
+
+export type LineaComercial = (typeof LINEAS_COMERCIALES)[number];
+
+/**
+ * Extensión linea-comercial del ChargeItem (valueCode). ⚠️ El system es del
+ * dominio del repo administracion (bio.medplum.com.ar), NO del nuestro: no
+ * "corregirlo" — es el string exacto que lee el tablero.
+ */
+export const EXT_LINEA_COMERCIAL = 'https://bio.medplum.com.ar/fhir/StructureDefinition/linea-comercial';

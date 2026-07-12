@@ -56,3 +56,18 @@ Ver [`docs/app-recepcion.md`](app-recepcion.md) y [`docs/bots.md`](bots.md).
 | Tema | Detalle | Estado |
 |---|---|---|
 | Medplum Cloud → self-hosted | Arrancamos en Cloud; migrar a self-hosted (Docker, datos en Argentina) cuando esté estable. Diseñado para no acoplarse a features propietarias. | Decidido (Cloud para arrancar) |
+
+
+## Pagos (Manual v9 / contrato Administración)
+
+- **Descuento a la carte de miembros (Std 10% / Int 15%) vs FM 20%**: implementado
+  PROVISORIO como "se aplica el MAYOR, no acumulan" (`src/lib/pricing.ts`).
+  ⚠️ Confirmar con Andrés si acumulan o se aplica el mayor.
+- **Handoff Manual v9** (docs/para-recepcionistas-v9.md del repo `administracion`):
+  8 altas + 1 baja del catálogo TB, tarifario de paquetes Starter/Core/Pro,
+  2 puestos IV en agenda, prioridad de reserva miembros Pareja. BLOQUEADO: ese
+  repo no está en el scope de esta sesión — pasar el contenido para aplicarlo
+  al catálogo.
+- **Tokenización MP para cobro recurrente**: el cron cobra con tarjeta guardada si
+  el Coverage tiene `mp-customer-id`/`mp-card-id`. Falta el flujo de captura de la
+  tarjeta (checkout de suscripción / Customers API) para poblar esas extensiones.

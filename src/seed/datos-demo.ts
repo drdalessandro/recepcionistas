@@ -211,7 +211,7 @@ async function generar(medplum: MedplumClient): Promise<void> {
   // Cobros (Invoice, ARS) para Reportes
   const cobros: Array<{ paciente?: Patient; desc: string; ars: number; sena: boolean; medio: string }> = [
     { paciente: maria, desc: 'Seña 50% · HBOT Monoplaza', ars: 119625, sena: true, medio: 'efectivo' },
-    { paciente: porNombre.get('Sofía'), desc: 'Consulta — Dra. Dos Santos', ars: 120000, sena: false, medio: 'tarjeta' },
+    { paciente: porNombre.get('Sofía'), desc: 'Consulta — Dra. Dos Santos', ars: 120000, sena: false, medio: 'tarjeta-credito' },
     { paciente: porNombre.get('Lucía'), desc: 'Seña 50% · IHHT Express', ars: 43500, sena: true, medio: 'mercadopago' },
   ];
   let invoices = 0;
@@ -229,7 +229,7 @@ async function generar(medplum: MedplumClient): Promise<void> {
       totalGross: { value: c.ars, currency: 'ARS' },
       extension: [
         { url: EXT.esSena, valueBoolean: c.sena },
-        { url: EXT.medioPago, valueCode: c.medio },
+        { url: EXT.medioPago, valueString: c.medio },
         { url: EXT.tcAplicado, valueDecimal: 1450 },
       ],
     });

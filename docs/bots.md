@@ -10,6 +10,7 @@ deployan al runtime **`awslambda`** de Medplum (configurable con la env
 | Bot | Qué hace | Cómo se invoca |
 |---|---|---|
 | `bw-calcular-cobro` | Calcula el cobro (USD→ARS al TC, splits) y emite `Invoice`. | `executeBot` desde el front (pantalla Atender). |
+| `bw-registrar-cobro` | **Registra** un cobro presencial: descuentos por tipo de cliente + ChargeItems + un Invoice `balanced` por medio (pago mixto = N Invoices). | `executeBot` (Atender → Cobro). |
 | `bw-validar-turno` | Valida un turno (orden HBOT, contraindicaciones, prescripción, capacidad/desfasaje, ventana, saldo). | `executeBot` al reservar/confirmar. |
 | `bw-reservar-turno` | Valida y, si está OK, **crea** el turno (`Appointment` + `Slot` ocupado). | `executeBot` desde el front (Reservar turno). |
 | `bw-reservar-combo` | Agenda un **combo** en secuencia (HBOT primero), auto-asignando sala por componente. | `executeBot` desde el front (Reservar combo). |
@@ -233,6 +234,30 @@ una vez en Medplum. Sin el cron, igual podés limpiar a mano con `--limpiar`.
 
 > El bot que borra necesita permiso de borrado sobre esos tipos (admin de proyecto
 > o una AccessPolicy con delete). La generación se hace por script, no por bot.
+
+## Contrato de pagos con Administración (INAMOVIBLE)
+
+El repo `administracion` (tableros de Andrés, bot `kpis-finanzas`) lee lo que
+este repo escribe. Reglas:
+
+- **Invoice**: `status` `balanced`=cobrado / `issued`=pendiente / `cancelled`=fallido;
+  monto **BRUTO** en `totalNet` y `totalGross` (la comisión de MP NUNCA se descuenta:
+  es un gasto del P&L de Administración, R-18); `date` = fecha del cobro; medio de
+  pago en la extensión `medio-pago` como **valueString** con uno de los 5 códigos
+  canónicos (`MEDIOS_PAGO` en `src/fhir/identifiers.ts`): `efectivo` ·
+  `tarjeta-debito` · `tarjeta-credito` · `transferencia` · `mercadopago`.
+- **ChargeItem** por ítem cobrado: monto en `priceOverride.value`, fecha en
+  `occurrenceDateTime`, servicio en `code.coding[0].code` (categoría: HBOT, IHHT,
+  CONSULTA…), profesional en `performer[0].actor`, y extensión `linea-comercial`
+  (system de administracion, `EXT_LINEA_COMERCIAL`): `membresias` · `sueltas-combos`
+  · `paquetes` · `iv-tb` · `consultas` · `otros`.
+- **Pago mixto** = N Invoices (uno por medio, cada uno con su porción, suma EXACTA)
+  referenciando los MISMOS ChargeItems.
+- **R-11**: cobro de membresía → Invoice `issued` + cobro MP (tarjeta tokenizada si
+  hay `mp-customer-id`/`mp-card-id` en el Coverage; si no, link). `approved` →
+  `balanced` + ChargeItem + se levanta el bloqueo; `rejected` → `cancelled` +
+  **bloqueo de reservas** (Flag system `bloqueo`) + **alerta a recepción** (Task).
+- Migración de Invoices viejos (valueCode → valueString): `npm run migrar:medios`.
 
 ## Invocación desde el front
 

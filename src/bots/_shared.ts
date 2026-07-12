@@ -2,13 +2,22 @@
  * Helpers compartidos por los bots de agenda (acceden a FHIR; no son "lib pura").
  */
 import type { BotEvent, MedplumClient } from '@medplum/core';
-import type { Appointment, Communication, Coverage, Flag, Invoice } from '@medplum/fhirtypes';
-import { CONFIG_TC_ID, EXT, SYSTEM } from '../fhir/identifiers.js';
+import type { Appointment, ChargeItem, Communication, Coverage, Flag, Invoice, Task } from '@medplum/fhirtypes';
+import {
+  CONFIG_TC_ID,
+  EXT,
+  EXT_LINEA_COMERCIAL,
+  SYSTEM,
+  esMedioPago,
+  type MedioPago,
+} from '../fhir/identifiers.js';
 import { estadoDeCoverage, planCodigoDeCoverage } from '../fhir/coverage.js';
 import { resolverTC } from '../config/tipo-cambio.js';
+import { getServicio } from '../config/catalogo.js';
 import { getMembresia } from '../config/membresias.js';
 import { getPaquete } from '../config/paquetes.js';
-import { calcularSenaARS, type ItemCobro } from '../lib/pricing.js';
+import { calcularSenaARS, type ItemCobro, type LineaCobro, type TipoItemCobro } from '../lib/pricing.js';
+import { lineaComercialDeItem } from '../lib/cobros.js';
 import { motivoNoDisponible, saldoPlan } from '../lib/planes.js';
 import type { ReservaRecurso } from '../lib/reglas-turno.js';
 
@@ -247,6 +256,151 @@ export async function cargarReservasDelDia(medplum: MedplumClient, dia: Date): P
   return reservas;
 }
 
+// ============================================================================
+// Contrato de pagos con Administración: helpers de Invoice / ChargeItem.
+// ============================================================================
+
+/** Extensión medio-pago del contrato: SIEMPRE valueString con código canónico. */
+export function extMedioPago(medio: string): { url: string; valueString: string } {
+  if (!esMedioPago(medio)) {
+    throw new Error(`Medio de pago inválido: "${medio}". Canónicos: efectivo, tarjeta-debito, tarjeta-credito, transferencia, mercadopago.`);
+  }
+  return { url: EXT.medioPago, valueString: medio };
+}
+
+/** Coding del ChargeItem: servicios → su CATEGORÍA (HBOT, CONSULTA…); resto → su código. */
+function codingDeItem(tipo: TipoItemCobro, codigo: string, descripcion: string): { system: string; code: string; display: string } {
+  if (tipo === 'servicio') {
+    return { system: SYSTEM.servicioCodigo, code: getServicio(codigo).categoria, display: descripcion };
+  }
+  const system =
+    tipo === 'combo' ? SYSTEM.comboCodigo : tipo === 'membresia' ? SYSTEM.membresiaCodigo : SYSTEM.paqueteCodigo;
+  return { system, code: codigo, display: descripcion };
+}
+
+export interface DatosChargeItem {
+  tipo: TipoItemCobro;
+  codigo: string;
+  descripcion: string;
+  /** Monto BRUTO cobrado por esta línea, en ARS. */
+  montoARS: number;
+  cantidad?: number;
+  splitBwUSD?: number;
+  splitProfesionalUSD?: number;
+}
+
+/**
+ * Crea los ChargeItem de un cobro (contrato con Administración): monto en
+ * priceOverride.value, fecha en occurrenceDateTime, servicio en code.coding[0].code,
+ * profesional en performer[0].actor (consultas) y extensión linea-comercial.
+ */
+export async function crearChargeItems(
+  medplum: MedplumClient,
+  opts: { pacienteRef: string; lineas: DatosChargeItem[]; tc: number; fecha?: string },
+): Promise<ChargeItem[]> {
+  const fecha = opts.fecha ?? new Date().toISOString();
+  const creados: ChargeItem[] = [];
+  for (const l of opts.lineas) {
+    // Profesional (liquidación por médico): consultas → el Practitioner del servicio.
+    let performer: ChargeItem['performer'];
+    if (l.tipo === 'servicio') {
+      const servicio = getServicio(l.codigo);
+      if (servicio.practitionerCodigo) {
+        const pract = await medplum.searchOne('Practitioner', `identifier=${SYSTEM.medico}|${servicio.practitionerCodigo}`);
+        if (pract?.id) {
+          performer = [{ actor: { reference: `Practitioner/${pract.id}`, display: pract.name?.[0]?.text } }];
+        }
+      }
+    }
+    const categoria = l.tipo === 'servicio' ? getServicio(l.codigo).categoria : undefined;
+    const ci = await medplum.createResource<ChargeItem>({
+      resourceType: 'ChargeItem',
+      status: 'billable',
+      subject: { reference: opts.pacienteRef },
+      code: { coding: [codingDeItem(l.tipo, l.codigo, l.descripcion)], text: l.descripcion },
+      occurrenceDateTime: fecha,
+      quantity: { value: l.cantidad ?? 1 },
+      priceOverride: { value: l.montoARS, currency: 'ARS' },
+      ...(performer ? { performer } : {}),
+      extension: [
+        { url: EXT_LINEA_COMERCIAL, valueCode: lineaComercialDeItem(l.tipo, categoria) },
+        { url: EXT.tcAplicado, valueDecimal: opts.tc },
+        ...(l.splitBwUSD != null ? [{ url: EXT.montoSplitBw, valueMoney: { value: l.splitBwUSD, currency: 'USD' as const } }] : []),
+        ...(l.splitProfesionalUSD != null
+          ? [{ url: EXT.montoSplitProfesional, valueMoney: { value: l.splitProfesionalUSD, currency: 'USD' as const } }]
+          : []),
+      ],
+    });
+    creados.push(ci);
+  }
+  return creados;
+}
+
+/** LineaCobro (pricing) → datos del ChargeItem, con su porción de splits. */
+export function lineaAChargeItem(l: LineaCobro): DatosChargeItem {
+  return {
+    tipo: l.tipo,
+    codigo: l.codigo,
+    descripcion: l.descripcion,
+    montoARS: l.subtotalARS,
+    cantidad: l.cantidad,
+    splitBwUSD: l.split.bwUSD,
+    splitProfesionalUSD: l.split.prescriptoresUSD ?? l.split.terapeutaUSD ?? l.split.proveedorUSD,
+  };
+}
+
+// ============================================================================
+// R-11 · Bloqueo administrativo por pago rechazado + alerta a recepción.
+// ============================================================================
+
+/** ¿Alguno de los Flags activos es un bloqueo administrativo (R-11)? */
+export function tieneBloqueoPago(flags: Flag[]): boolean {
+  return flags.some((f) => f.code?.coding?.some((c) => c.system === SYSTEM.bloqueo));
+}
+
+/** Marca al paciente con bloqueo de reservas por pago rechazado (idempotente). */
+export async function setBloqueoPago(medplum: MedplumClient, pacienteRef: string, motivo: string): Promise<void> {
+  const activos = await medplum.searchResources('Flag', `subject=${pacienteRef}&status=active`);
+  if (tieneBloqueoPago(activos)) {
+    return;
+  }
+  await medplum.createResource<Flag>({
+    resourceType: 'Flag',
+    status: 'active',
+    category: [{ text: 'administrativo' }],
+    code: { coding: [{ system: SYSTEM.bloqueo, code: 'PAGO_RECHAZADO' }], text: motivo },
+    subject: { reference: pacienteRef },
+  });
+}
+
+/** Levanta el bloqueo (pago regularizado): pasa los Flags de bloqueo a inactive. */
+export async function quitarBloqueoPago(medplum: MedplumClient, pacienteRef: string): Promise<void> {
+  const activos = await medplum.searchResources('Flag', `subject=${pacienteRef}&status=active`);
+  for (const f of activos) {
+    if (f.code?.coding?.some((c) => c.system === SYSTEM.bloqueo)) {
+      await medplum.updateResource<Flag>({ ...f, status: 'inactive' });
+    }
+  }
+}
+
+/** Alerta operativa para recepción (aparece como Task / Solicitudes). */
+export async function crearAlertaRecepcion(
+  medplum: MedplumClient,
+  opts: { titulo: string; detalle: string; pacienteRef?: string; focusRef?: string },
+): Promise<Task> {
+  return medplum.createResource<Task>({
+    resourceType: 'Task',
+    status: 'requested',
+    intent: 'order',
+    priority: 'urgent',
+    code: { text: opts.titulo },
+    description: opts.detalle,
+    authoredOn: new Date().toISOString(),
+    ...(opts.pacienteRef ? { for: { reference: opts.pacienteRef } } : {}),
+    ...(opts.focusRef ? { focus: { reference: opts.focusRef } } : {}),
+  });
+}
+
 export interface ResultadoConfirmacion {
   totalARS: number;
   senaARS: number;
@@ -297,23 +451,50 @@ export async function confirmarReserva(
   }
 
   const pacienteRef = appt.participant?.find((p) => p.actor?.reference?.startsWith('Patient/'))?.actor?.reference;
+
+  // Contrato: cada ítem cobrado deja su ChargeItem (acá, la seña del 50%).
+  const fecha = new Date().toISOString();
+  const descripcionSena = `Seña 50% · ${appt.description ?? itemCodigo}`;
+  let chargeItems: ChargeItem[] = [];
+  if (pacienteRef) {
+    chargeItems = await crearChargeItems(medplum, {
+      pacienteRef,
+      tc,
+      fecha,
+      lineas: [
+        {
+          tipo: itemTipo as TipoItemCobro,
+          codigo: itemCodigo,
+          descripcion: descripcionSena,
+          montoARS: senaARS,
+        },
+      ],
+    });
+  }
+
   const invoice = await medplum.createResource<Invoice>({
     resourceType: 'Invoice',
     status: 'balanced',
-    date: new Date().toISOString(),
+    date: fecha,
     identifier: [{ system: SYSTEM.invoice, value: invoiceKey }],
     ...(pacienteRef ? { subject: { reference: pacienteRef } } : {}),
-    lineItem: [
-      {
-        chargeItemCodeableConcept: { text: `Seña 50% · ${appt.description ?? itemCodigo}` },
-        priceComponent: [{ type: 'base', amount: { value: senaARS, currency: 'ARS' } }],
-      },
-    ],
+    lineItem: chargeItems.length
+      ? chargeItems.map((ci) => ({
+          chargeItemReference: { reference: `ChargeItem/${ci.id}`, display: descripcionSena },
+          priceComponent: [{ type: 'base' as const, amount: { value: senaARS, currency: 'ARS' } }],
+        }))
+      : [
+          {
+            chargeItemCodeableConcept: { text: descripcionSena },
+            priceComponent: [{ type: 'base' as const, amount: { value: senaARS, currency: 'ARS' } }],
+          },
+        ],
+    totalNet: { value: senaARS, currency: 'ARS' },
     totalGross: { value: senaARS, currency: 'ARS' },
     extension: [
       { url: EXT.esSena, valueBoolean: true },
       { url: EXT.tcAplicado, valueDecimal: tc },
-      ...(opts.medioPago ? [{ url: EXT.medioPago, valueCode: opts.medioPago }] : []),
+      ...(opts.medioPago ? [extMedioPago(opts.medioPago)] : []),
     ],
   });
 
@@ -329,50 +510,149 @@ export async function confirmarReserva(
 export interface CobroPlan {
   invoiceId?: string;
   yaExistia: boolean;
+  clave: string;
 }
 
 /**
  * Emite el Invoice de un plan (membresía mensual o paquete inicial). Idempotente
  * por la clave `plan-{coverageId}[-{ciclo}]`: si ya existe, no duplica. La usan el
  * alta del plan (asignar-plan) y el cron de cobro mensual (cobro-membresias).
+ *
+ * Contrato: `status:'balanced'` = cobrado (crea también el ChargeItem);
+ * `status:'issued'` = pendiente de pago (el ChargeItem se crea recién al
+ * confirmarse, ver `marcarInvoicePlanPagado`).
  */
 export async function emitirInvoicePlan(
   medplum: MedplumClient,
   opts: {
     coverageId: string;
     pacienteRef?: string;
+    tipo: 'membresia' | 'paquete';
+    planCodigo: string;
     descripcion: string;
     totalARS: number;
     tc: number;
     ciclo?: string;
-    medioPago?: string;
+    medioPago?: MedioPago;
+    status?: 'balanced' | 'issued';
   },
 ): Promise<CobroPlan> {
   const key = opts.ciclo ? `plan-${opts.coverageId}-${opts.ciclo}` : `plan-${opts.coverageId}`;
+  const status = opts.status ?? 'balanced';
   const existente = await medplum.searchOne('Invoice', `identifier=${SYSTEM.invoice}|${key}`);
   if (existente) {
-    return { invoiceId: existente.id, yaExistia: true };
+    return { invoiceId: existente.id, yaExistia: true, clave: key };
   }
+
+  const fecha = new Date().toISOString();
+  let chargeItems: ChargeItem[] = [];
+  if (status === 'balanced' && opts.pacienteRef) {
+    chargeItems = await crearChargeItems(medplum, {
+      pacienteRef: opts.pacienteRef,
+      tc: opts.tc,
+      fecha,
+      lineas: [{ tipo: opts.tipo, codigo: opts.planCodigo, descripcion: opts.descripcion, montoARS: opts.totalARS }],
+    });
+  }
+
   const invoice = await medplum.createResource<Invoice>({
     resourceType: 'Invoice',
-    status: 'balanced',
-    date: new Date().toISOString(),
+    status,
+    date: fecha,
     identifier: [{ system: SYSTEM.invoice, value: key }],
     ...(opts.pacienteRef ? { subject: { reference: opts.pacienteRef } } : {}),
-    lineItem: [
-      {
-        chargeItemCodeableConcept: { text: opts.descripcion },
-        priceComponent: [{ type: 'base', amount: { value: opts.totalARS, currency: 'ARS' } }],
-      },
-    ],
+    lineItem: chargeItems.length
+      ? chargeItems.map((ci) => ({
+          chargeItemReference: { reference: `ChargeItem/${ci.id}`, display: opts.descripcion },
+          priceComponent: [{ type: 'base' as const, amount: { value: opts.totalARS, currency: 'ARS' } }],
+        }))
+      : [
+          {
+            chargeItemCodeableConcept: { text: opts.descripcion },
+            priceComponent: [{ type: 'base' as const, amount: { value: opts.totalARS, currency: 'ARS' } }],
+          },
+        ],
+    totalNet: { value: opts.totalARS, currency: 'ARS' },
     totalGross: { value: opts.totalARS, currency: 'ARS' },
     extension: [
       { url: EXT.tcAplicado, valueDecimal: opts.tc },
+      // Para poder crear el ChargeItem al confirmarse el pago (webhook):
+      { url: EXT.itemTipo, valueCode: opts.tipo },
+      { url: EXT.itemCodigo, valueString: opts.planCodigo },
       ...(opts.ciclo ? [{ url: EXT.cicloMes, valueString: opts.ciclo }] : []),
-      ...(opts.medioPago ? [{ url: EXT.medioPago, valueCode: opts.medioPago }] : []),
+      ...(opts.medioPago ? [extMedioPago(opts.medioPago)] : []),
     ],
   });
-  return { invoiceId: invoice.id, yaExistia: false };
+  return { invoiceId: invoice.id, yaExistia: false, clave: key };
+}
+
+/**
+ * Desenlace del cobro de un plan pendiente (webhook de MP):
+ * - `pagado`: Invoice → balanced + medio mercadopago + ChargeItem del plan +
+ *   levanta el bloqueo R-11 si lo había.
+ * - `rechazado`: Invoice → cancelled + bloqueo de reservas (R-11) + alerta (Task).
+ * Idempotente: si el Invoice ya no está `issued`, no repite efectos.
+ */
+export async function resolverInvoicePlan(
+  medplum: MedplumClient,
+  opts: { clave: string; resultado: 'pagado' | 'rechazado'; detalle?: string },
+): Promise<{ ok: boolean; invoiceId?: string; mensaje?: string }> {
+  const invoice = await medplum.searchOne('Invoice', `identifier=${SYSTEM.invoice}|${opts.clave}`);
+  if (!invoice?.id) {
+    return { ok: false, mensaje: `No existe Invoice con clave ${opts.clave}.` };
+  }
+  if (invoice.status !== 'issued') {
+    return { ok: true, invoiceId: invoice.id, mensaje: `Invoice ya resuelto (${invoice.status}).` };
+  }
+
+  const pacienteRef = invoice.subject?.reference;
+  const tipo = invoice.extension?.find((e) => e.url === EXT.itemTipo)?.valueCode as 'membresia' | 'paquete' | undefined;
+  const planCodigo = invoice.extension?.find((e) => e.url === EXT.itemCodigo)?.valueString;
+  const tc = invoice.extension?.find((e) => e.url === EXT.tcAplicado)?.valueDecimal ?? resolverTC();
+  const totalARS = invoice.totalGross?.value ?? 0;
+  const descripcion = invoice.lineItem?.[0]?.chargeItemCodeableConcept?.text ?? planCodigo ?? 'Plan';
+
+  if (opts.resultado === 'pagado') {
+    const fecha = new Date().toISOString();
+    let lineItem = invoice.lineItem;
+    if (pacienteRef && tipo && planCodigo) {
+      const chargeItems = await crearChargeItems(medplum, {
+        pacienteRef,
+        tc,
+        fecha,
+        lineas: [{ tipo, codigo: planCodigo, descripcion, montoARS: totalARS }],
+      });
+      lineItem = chargeItems.map((ci) => ({
+        chargeItemReference: { reference: `ChargeItem/${ci.id}`, display: descripcion },
+        priceComponent: [{ type: 'base' as const, amount: { value: totalARS, currency: 'ARS' } }],
+      }));
+    }
+    await medplum.updateResource<Invoice>({
+      ...invoice,
+      status: 'balanced',
+      date: fecha,
+      lineItem,
+      totalNet: { value: totalARS, currency: 'ARS' },
+      extension: [...(invoice.extension ?? []).filter((e) => e.url !== EXT.medioPago), extMedioPago('mercadopago')],
+    });
+    if (pacienteRef) {
+      await quitarBloqueoPago(medplum, pacienteRef);
+    }
+    return { ok: true, invoiceId: invoice.id };
+  }
+
+  // Rechazado: Invoice cancelled + bloqueo R-11 + alerta a recepción.
+  await medplum.updateResource<Invoice>({ ...invoice, status: 'cancelled' });
+  if (pacienteRef) {
+    await setBloqueoPago(medplum, pacienteRef, `Cobro de ${descripcion} rechazado por MercadoPago (R-11).`);
+    await crearAlertaRecepcion(medplum, {
+      titulo: 'Pago de membresía rechazado',
+      detalle: `MercadoPago rechazó el cobro de "${descripcion}" ($${totalARS.toLocaleString('es-AR')}). ${opts.detalle ?? ''} El paciente queda bloqueado para nuevas reservas hasta regularizar (R-11).`,
+      pacienteRef,
+      focusRef: `Invoice/${invoice.id}`,
+    });
+  }
+  return { ok: true, invoiceId: invoice.id };
 }
 
 export interface ConsumoPlan {
