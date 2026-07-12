@@ -601,7 +601,11 @@ export async function resolverInvoicePlan(
   if (!invoice?.id) {
     return { ok: false, mensaje: `No existe Invoice con clave ${opts.clave}.` };
   }
-  if (invoice.status !== 'issued') {
+  // 'pagado' también recupera un Invoice `cancelled` (el paciente regularizó
+  // después de un rechazo: se acredita y se levanta el bloqueo R-11).
+  const puedeResolver =
+    opts.resultado === 'pagado' ? invoice.status === 'issued' || invoice.status === 'cancelled' : invoice.status === 'issued';
+  if (!puedeResolver) {
     return { ok: true, invoiceId: invoice.id, mensaje: `Invoice ya resuelto (${invoice.status}).` };
   }
 
