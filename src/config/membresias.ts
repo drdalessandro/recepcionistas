@@ -24,9 +24,9 @@ interface DefMembresia {
 }
 
 const DEFS: DefMembresia[] = [
-  // FOCUS (base BIO ENERGY)
-  { codigo: 'FOCUS_STD_IND', tier: 'FOCUS', intensidad: 'STANDARD', variante: 'INDIVIDUAL', comboBaseCodigo: 'BIO_ENERGY', sesionesMes: 8, frecuenciaSemanal: 2, precioMesUSD: 563, descuentoContinuidad: 0.2 },
-  { codigo: 'FOCUS_INT_IND', tier: 'FOCUS', intensidad: 'INTENSIVO', variante: 'INDIVIDUAL', comboBaseCodigo: 'BIO_ENERGY', sesionesMes: 12, frecuenciaSemanal: 3, precioMesUSD: 792, descuentoContinuidad: 0.25 },
+  // FOCUS (base BIO ENERGY) — precios v9 finales (arrastran BIO ENERGY 112)
+  { codigo: 'FOCUS_STD_IND', tier: 'FOCUS', intensidad: 'STANDARD', variante: 'INDIVIDUAL', comboBaseCodigo: 'BIO_ENERGY', sesionesMes: 8, frecuenciaSemanal: 2, precioMesUSD: 718, descuentoContinuidad: 0.2 },
+  { codigo: 'FOCUS_INT_IND', tier: 'FOCUS', intensidad: 'INTENSIVO', variante: 'INDIVIDUAL', comboBaseCodigo: 'BIO_ENERGY', sesionesMes: 12, frecuenciaSemanal: 3, precioMesUSD: 1008, descuentoContinuidad: 0.25 },
 
   // PRIME (base BIO RECOVERY) — sin cambios en v9
   { codigo: 'PRIME_STD_IND', tier: 'PRIME', intensidad: 'STANDARD', variante: 'INDIVIDUAL', comboBaseCodigo: 'BIO_RECOVERY', sesionesMes: 8, frecuenciaSemanal: 2, precioMesUSD: 1752, descuentoContinuidad: 0.25 },
@@ -34,11 +34,11 @@ const DEFS: DefMembresia[] = [
   { codigo: 'PRIME_STD_PAR', tier: 'PRIME', intensidad: 'STANDARD', variante: 'PAREJA', comboBaseCodigo: 'BIO_RECOVERY_PAREJA', sesionesMes: 8, frecuenciaSemanal: 2, precioMesUSD: 1920, descuentoContinuidad: 0.25 },
   { codigo: 'PRIME_INT_PAR', tier: 'PRIME', intensidad: 'INTENSIVO', variante: 'PAREJA', comboBaseCodigo: 'BIO_RECOVERY_PAREJA', sesionesMes: 12, frecuenciaSemanal: 3, precioMesUSD: 2688, descuentoContinuidad: 0.3 },
 
-  // HEALTHSPAN (base BIO LONGEVITY)
-  { codigo: 'HEALTHSPAN_STD_IND', tier: 'HEALTHSPAN', intensidad: 'STANDARD', variante: 'INDIVIDUAL', comboBaseCodigo: 'BIO_LONGEVITY', sesionesMes: 8, frecuenciaSemanal: 2, precioMesUSD: 2040, descuentoContinuidad: 0.25 },
-  { codigo: 'HEALTHSPAN_INT_IND', tier: 'HEALTHSPAN', intensidad: 'INTENSIVO', variante: 'INDIVIDUAL', comboBaseCodigo: 'BIO_LONGEVITY', sesionesMes: 12, frecuenciaSemanal: 3, precioMesUSD: 2856, descuentoContinuidad: 0.3 },
-  { codigo: 'HEALTHSPAN_STD_PAR', tier: 'HEALTHSPAN', intensidad: 'STANDARD', variante: 'PAREJA', comboBaseCodigo: 'BIO_LONGEVITY_PAREJA', sesionesMes: 8, frecuenciaSemanal: 2, precioMesUSD: 2496, descuentoContinuidad: 0.25 },
-  { codigo: 'HEALTHSPAN_INT_PAR', tier: 'HEALTHSPAN', intensidad: 'INTENSIVO', variante: 'PAREJA', comboBaseCodigo: 'BIO_LONGEVITY_PAREJA', sesionesMes: 12, frecuenciaSemanal: 3, precioMesUSD: 3494, descuentoContinuidad: 0.3 },
+  // HEALTHSPAN (base BIO LONGEVITY) — precios v9 finales (arrastran LONGEVITY 364/464)
+  { codigo: 'HEALTHSPAN_STD_IND', tier: 'HEALTHSPAN', intensidad: 'STANDARD', variante: 'INDIVIDUAL', comboBaseCodigo: 'BIO_LONGEVITY', sesionesMes: 8, frecuenciaSemanal: 2, precioMesUSD: 2184, descuentoContinuidad: 0.25 },
+  { codigo: 'HEALTHSPAN_INT_IND', tier: 'HEALTHSPAN', intensidad: 'INTENSIVO', variante: 'INDIVIDUAL', comboBaseCodigo: 'BIO_LONGEVITY', sesionesMes: 12, frecuenciaSemanal: 3, precioMesUSD: 3058, descuentoContinuidad: 0.3 },
+  { codigo: 'HEALTHSPAN_STD_PAR', tier: 'HEALTHSPAN', intensidad: 'STANDARD', variante: 'PAREJA', comboBaseCodigo: 'BIO_LONGEVITY_PAREJA', sesionesMes: 8, frecuenciaSemanal: 2, precioMesUSD: 2784, descuentoContinuidad: 0.25 },
+  { codigo: 'HEALTHSPAN_INT_PAR', tier: 'HEALTHSPAN', intensidad: 'INTENSIVO', variante: 'PAREJA', comboBaseCodigo: 'BIO_LONGEVITY_PAREJA', sesionesMes: 12, frecuenciaSemanal: 3, precioMesUSD: 3898, descuentoContinuidad: 0.3 },
 ];
 
 export const MEMBRESIAS: Membresia[] = DEFS;

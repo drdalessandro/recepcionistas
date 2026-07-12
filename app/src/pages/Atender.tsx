@@ -217,7 +217,7 @@ function PanelPlanes({
   const opciones =
     tipo === 'membresia'
       ? MEMBRESIAS.map((m) => ({ value: m.codigo, label: `${m.tier} ${m.intensidad} ${m.variante}` }))
-      : PAQUETES.map((p) => ({ value: p.codigo, label: p.codigo }));
+      : PAQUETES.map((p) => ({ value: p.codigo, label: `${p.nombre} (${p.tamano} sesiones)` }));
 
   async function asignar(): Promise<void> {
     if (!planCodigo) {

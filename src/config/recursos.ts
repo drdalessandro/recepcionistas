@@ -1,8 +1,9 @@
 /**
  * Recursos físicos agendables.
  *
- * Lista definitiva de 13 recursos (Documento de Requerimientos v4 §6.2),
- * confirmada por Andrés (2026-06-20).
+ * Lista de 14 recursos: los 13 del Documento de Requerimientos v4 §6.2
+ * (confirmados por Andrés, 2026-06-20) + el 2.º puesto IV del handoff v9
+ * de Administración (2 puestos IV en agenda).
  *
  * `comparteCon` modela cuellos de botella de agenda (R-07): dos recursos que
  * comparten una misma clave NO pueden solaparse en la misma franja. Los dos
@@ -41,6 +42,13 @@ export const RECURSOS: RecursoFisico[] = [
   { codigo: 'R_CAMILLA_MASAJES', nombre: 'Camilla de masajes', tipo: 'SALA', capacidad: 1 },
   { codigo: 'R_CONSULTORIO', nombre: 'Consultorio médico', tipo: 'CONSULTORIO', capacidad: 1 },
   { codigo: 'R_SALA_TB', nombre: 'Sala de Terapias Biológicas / IV', tipo: 'BOX_CLINICO', capacidad: 1 },
+  {
+    codigo: 'R_IV_2',
+    nombre: 'Puesto IV 2',
+    tipo: 'BOX_CLINICO',
+    capacidad: 1,
+    nota: 'Segundo puesto IV (handoff v9 Administración): permite 2 sesiones IV/TB en simultáneo.',
+  },
 ];
 
 export const RECURSOS_POR_CODIGO: ReadonlyMap<string, RecursoFisico> = new Map(

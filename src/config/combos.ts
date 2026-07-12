@@ -1,11 +1,11 @@
 /**
- * Combos — Manual de Protocolos v9. Descuento estándar 20% sobre lista.
- * El componente "IHHT 30 min" de los combos es IHHT EXPRESS (USD 60).
+ * Combos — Manual de Protocolos v9. Descuento ~20% sobre lista (el Manual fija
+ * lista Y precio por combo; en BIO OXYGEN el OFF real es 21%, por eso el
+ * `descuento` se deriva de lista/precio en vez de asumir 20%).
+ * El componente IHHT dura 30 min en combo pero lista a precio de sesión (USD 90).
  * Secuencia ordenada: HBOT siempre primero (R-01).
  */
 import type { Combo, ComponenteCombo } from '../domain/types.js';
-
-const DESC = 0.2;
 
 interface DefCombo {
   codigo: string;
@@ -23,11 +23,11 @@ const DEFS: DefCombo[] = [
     nombre: 'BIO ENERGY',
     variante: 'INDIVIDUAL',
     componentes: [
-      ['IHHT_EXPRESS', 30, 1],
+      ['IHHT', 30, 1],
       ['RED_LIGHT', 30, 1],
     ],
-    precioListaUSD: 110,
-    precioUSD: 88,
+    precioListaUSD: 140,
+    precioUSD: 112,
   },
   {
     codigo: 'BIO_COMPRESS',
@@ -57,10 +57,10 @@ const DEFS: DefCombo[] = [
     variante: 'INDIVIDUAL',
     componentes: [
       ['HBOT_MONO', 60, 1],
-      ['IHHT_EXPRESS', 30, 1],
+      ['IHHT', 30, 1],
     ],
-    precioListaUSD: 225,
-    precioUSD: 180,
+    precioListaUSD: 255,
+    precioUSD: 200,
   },
   {
     codigo: 'BIO_OXYGEN_PAREJA',
@@ -68,10 +68,10 @@ const DEFS: DefCombo[] = [
     variante: 'PAREJA',
     componentes: [
       ['HBOT_BIPLAZA', 60, 2],
-      ['IHHT_EXPRESS', 30, 2],
+      ['IHHT', 30, 2],
     ],
-    precioListaUSD: 320,
-    precioUSD: 256,
+    precioListaUSD: 380,
+    precioUSD: 300,
   },
   {
     codigo: 'BIO_RECOVERY',
@@ -101,11 +101,11 @@ const DEFS: DefCombo[] = [
     variante: 'INDIVIDUAL',
     componentes: [
       ['HBOT_MONO', 60, 1],
-      ['IHHT_EXPRESS', 30, 1],
+      ['IHHT', 30, 1],
       ['RECOVERY_PRO', 60, 1],
     ],
-    precioListaUSD: 425,
-    precioUSD: 340,
+    precioListaUSD: 455,
+    precioUSD: 364,
   },
   {
     codigo: 'BIO_LONGEVITY_PAREJA',
@@ -113,11 +113,11 @@ const DEFS: DefCombo[] = [
     variante: 'PAREJA',
     componentes: [
       ['HBOT_BIPLAZA', 60, 2],
-      ['IHHT_EXPRESS', 30, 2],
+      ['IHHT', 30, 2],
       ['RECOVERY_PRO', 60, 2],
     ],
-    precioListaUSD: 520,
-    precioUSD: 416,
+    precioListaUSD: 580,
+    precioUSD: 464,
   },
 ];
 
@@ -135,7 +135,7 @@ export const COMBOS: Combo[] = DEFS.map((d) => {
     componentes,
     precioListaUSD: d.precioListaUSD,
     precioUSD: d.precioUSD,
-    descuento: DESC,
+    descuento: 1 - d.precioUSD / d.precioListaUSD,
     duracionTotalMin: componentes.reduce((acc, c) => acc + c.duracionMin, 0),
   };
 });

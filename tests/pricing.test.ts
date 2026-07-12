@@ -45,19 +45,23 @@ describe('Pricing — Recovery Pro indivisible', () => {
 });
 
 describe('Pricing — IHHT v9', () => {
-  it('Express 60, Premium 120', () => {
-    expect(precioSueltoUSD(getServicio('IHHT_EXPRESS'))).toBe(60);
-    expect(precioSueltoUSD(getServicio('IHHT_PREMIUM'))).toBe(120);
+  it('Sesión única 45 min = USD 90', () => {
+    const ihht = getServicio('IHHT');
+    expect(precioSueltoUSD(ihht)).toBe(90);
+    expect(ihht.duracionMin).toBe(45);
   });
 });
 
 describe('Catálogo — Combos v9', () => {
-  it('Precios v9 conocidos', () => {
-    expect(getCombo('BIO_ENERGY').precioUSD).toBe(88);
-    expect(getCombo('BIO_OXYGEN').precioUSD).toBe(180);
+  it('Precios v9 conocidos (tabla Sección 3 del Manual)', () => {
+    expect(getCombo('BIO_ENERGY').precioUSD).toBe(112);
+    expect(getCombo('BIO_ENERGY').precioListaUSD).toBe(140);
+    expect(getCombo('BIO_COMPRESS').precioUSD).toBe(88);
+    expect(getCombo('BIO_OXYGEN').precioUSD).toBe(200); // OFF 21% según el Manual
+    expect(getCombo('BIO_OXYGEN_PAREJA').precioUSD).toBe(300);
     expect(getCombo('BIO_RECOVERY').precioUSD).toBe(292);
-    expect(getCombo('BIO_LONGEVITY').precioUSD).toBe(340);
-    expect(getCombo('BIO_LONGEVITY_PAREJA').precioUSD).toBe(416);
+    expect(getCombo('BIO_LONGEVITY').precioUSD).toBe(364);
+    expect(getCombo('BIO_LONGEVITY_PAREJA').precioUSD).toBe(464);
   });
 
   it('Coherencia: precio == round(lista * (1 - descuento))', () => {
@@ -69,34 +73,46 @@ describe('Catálogo — Combos v9', () => {
   it('Los combos no reciben descuento FM (no aplica a combos)', () => {
     // Un combo se cobra a su precio fijo (sin la rama FM de sueltas).
     const r = calcularCobro([{ tipo: 'combo', codigo: 'BIO_LONGEVITY' }], { tc: 1450 });
-    expect(r.totalUSD).toBe(340);
+    expect(r.totalUSD).toBe(364);
   });
 
   it('Un combo se cobra a su precio de combo convertido a ARS', () => {
     const r = calcularCobro([{ tipo: 'combo', codigo: 'BIO_LONGEVITY' }], { tc: 1450 });
-    expect(r.totalUSD).toBe(340);
-    expect(r.totalARS).toBe(340 * 1450); // 493.000
+    expect(r.totalUSD).toBe(364);
+    expect(r.totalARS).toBe(364 * 1450); // 527.800
   });
 });
 
 describe('Catálogo — Membresías v9', () => {
-  it('Precios v9 conocidos', () => {
-    expect(getMembresia('FOCUS_STD_IND').precioMesUSD).toBe(563);
-    expect(getMembresia('FOCUS_INT_IND').precioMesUSD).toBe(792);
-    expect(getMembresia('HEALTHSPAN_INT_PAR').precioMesUSD).toBe(3494);
+  it('Precios v9 conocidos (tabla Sección 4 del Manual)', () => {
+    expect(getMembresia('FOCUS_STD_IND').precioMesUSD).toBe(718);
+    expect(getMembresia('FOCUS_INT_IND').precioMesUSD).toBe(1008);
+    expect(getMembresia('PRIME_INT_IND').precioMesUSD).toBe(2453); // PRIME sin cambios
+    expect(getMembresia('HEALTHSPAN_STD_IND').precioMesUSD).toBe(2184);
+    expect(getMembresia('HEALTHSPAN_INT_PAR').precioMesUSD).toBe(3898);
   });
 
   it('AC-06: la membresía no recibe el 20% FM', () => {
     const r = calcularCobro([{ tipo: 'membresia', codigo: 'FOCUS_STD_IND', fm: true }], { tc: 1450 });
-    expect(r.totalUSD).toBe(563);
+    expect(r.totalUSD).toBe(718);
   });
 });
 
 describe('Catálogo — Paquetes', () => {
   it('HBOT mono x5 = 784; FM = 627 (AC-06: FM sí aplica a paquetes)', () => {
     const p = getPaquete('PAQ_HBOT_MONO_X5');
+    expect(p.nombre).toBe('HBOT MONO — Starter');
     expect(p.totalUSD).toBe(784);
     expect(p.totalFMUSD).toBe(627);
+  });
+
+  it('IHHT (base v9 USD 90): Core = 810; Pro FM = 1224', () => {
+    const core = getPaquete('PAQ_IHHT_X10');
+    expect(core.nombre).toBe('IHHT — Core');
+    expect(core.totalUSD).toBe(810);
+    const pro = getPaquete('PAQ_IHHT_X20');
+    expect(pro.totalUSD).toBe(1530);
+    expect(pro.totalFMUSD).toBe(1224);
   });
 });
 
@@ -172,8 +188,8 @@ describe('Seña (50%)', () => {
 
   it('Combo: seña = 50% del precio de combo en ARS', () => {
     const { totalARS, senaARS } = calcularSenaARS([{ tipo: 'combo', codigo: 'BIO_LONGEVITY' }], { tc: 1450 });
-    expect(totalARS).toBe(340 * 1450);
-    expect(senaARS).toBe((340 * 1450) / 2);
+    expect(totalARS).toBe(364 * 1450);
+    expect(senaARS).toBe((364 * 1450) / 2);
   });
 
   it('Consulta en ARS: seña = 50% del precio fijo', () => {

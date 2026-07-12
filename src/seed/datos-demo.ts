@@ -72,7 +72,7 @@ const CONSULTA_DOS_SANTOS = codigoConsulta('MED_DOS_SANTOS');
 const TURNOS: TurnoDemo[] = [
   { paciente: 'María', servicioCodigo: 'HBOT_MONO', recursoCodigo: 'R_HBOT_MONO', offsetDias: 0, hhmm: '09:00', status: 'fulfilled' },
   { paciente: 'Juan', servicioCodigo: 'RED_LIGHT', recursoCodigo: 'R_RED_LIGHT', offsetDias: 0, hhmm: '10:00', status: 'arrived' },
-  { paciente: 'Lucía', servicioCodigo: 'IHHT_EXPRESS', recursoCodigo: 'R_IHHT_1', offsetDias: 0, hhmm: '11:30', status: 'booked' },
+  { paciente: 'Lucía', servicioCodigo: 'IHHT', recursoCodigo: 'R_IHHT_1', offsetDias: 0, hhmm: '11:30', status: 'booked' },
   { paciente: 'Diego', servicioCodigo: 'COMPRESION', recursoCodigo: 'R_IPC06', offsetDias: 0, hhmm: '15:00', status: 'pending' },
   { paciente: 'Sofía', servicioCodigo: CONSULTA_DOS_SANTOS, recursoCodigo: 'R_CONSULTORIO', offsetDias: 0, hhmm: '16:00', status: 'booked' },
   { paciente: 'Andrés', servicioCodigo: 'CRIO', recursoCodigo: 'R_COT03', offsetDias: 1, hhmm: '09:30', status: 'booked' },
@@ -212,7 +212,7 @@ async function generar(medplum: MedplumClient): Promise<void> {
   const cobros: Array<{ paciente?: Patient; desc: string; ars: number; sena: boolean; medio: string }> = [
     { paciente: maria, desc: 'Seña 50% · HBOT Monoplaza', ars: 119625, sena: true, medio: 'efectivo' },
     { paciente: porNombre.get('Sofía'), desc: 'Consulta — Dra. Dos Santos', ars: 120000, sena: false, medio: 'tarjeta-credito' },
-    { paciente: porNombre.get('Lucía'), desc: 'Seña 50% · IHHT Express', ars: 43500, sena: true, medio: 'mercadopago' },
+    { paciente: porNombre.get('Lucía'), desc: 'Seña 50% · IHHT', ars: 65250, sena: true, medio: 'mercadopago' },
   ];
   let invoices = 0;
   for (const c of cobros) {
