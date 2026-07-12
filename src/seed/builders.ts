@@ -119,7 +119,7 @@ export function buildPaquetePlanDefinition(codigo: string): PlanDefinition {
     resourceType: 'PlanDefinition',
     url: canonical('PlanDefinition', codigo),
     name: codigo,
-    title: `Paquete ${codigo}`,
+    title: `Paquete ${p.nombre}`,
     status: 'active',
     type: { text: 'package' },
     identifier: [{ system: SYSTEM.paqueteCodigo, value: codigo }],

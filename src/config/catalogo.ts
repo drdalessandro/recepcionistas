@@ -1,9 +1,9 @@
 /**
- * Catálogo de servicios — Manual de Protocolos v9 (changelog aplicado sobre v8).
+ * Catálogo de servicios — Manual de Protocolos v9 (documento final).
  * Todos los precios en USD. Fuente de verdad de precios: el Manual.
  *
- * Cambio v9 vs v8: la IHHT única (45 min / USD 90) se reemplaza por
- * IHHT EXPRESS (30 min / USD 60) e IHHT PREMIUM (60 min / USD 120).
+ * v9 final: IHHT vuelve a ser una única sesión (45 min / USD 90); las variantes
+ * Express/Premium del changelog intermedio quedaron descartadas.
  */
 import type { Servicio, Split } from '../domain/types.js';
 import { MEDICOS, codigoConsulta } from './medicos.js';
@@ -52,28 +52,16 @@ export const SERVICIOS: Servicio[] = [
 
   // ---------------------- 02 · IHHT (v9) ----------------------
   {
-    codigo: 'IHHT_EXPRESS',
-    nombre: 'IHHT Express',
+    codigo: 'IHHT',
+    nombre: 'IHHT',
     categoria: 'IHHT',
-    duracionMin: 30, // 3 ciclos (a confirmar ciclos/duración con equipo médico)
-    precioUSD: 60,
+    duracionMin: 45,
+    precioUSD: 90,
     requierePrescripcion: false,
     reglaPricing: 'POR_SESION',
     split: BW100,
     fmAplica: true,
-    nota: 'v9. Componente de combos = IHHT Express. Ciclos/duración pendientes de confirmar.',
-  },
-  {
-    codigo: 'IHHT_PREMIUM',
-    nombre: 'IHHT Premium',
-    categoria: 'IHHT',
-    duracionMin: 60, // 6-7 ciclos (a confirmar)
-    precioUSD: 120,
-    requierePrescripcion: false,
-    reglaPricing: 'POR_SESION',
-    split: BW100,
-    fmAplica: true,
-    nota: 'v9. Biohacking / deportivo. Ciclos/duración pendientes de confirmar.',
+    nota: 'Sesión individual 45 min. En combos dura 30 min pero lista a precio de sesión (USD 90).',
   },
 
   // ---------------------- 03 · RED LIGHT ----------------------

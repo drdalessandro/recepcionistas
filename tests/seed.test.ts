@@ -8,12 +8,12 @@ describe('Seed — composición', () => {
   it('Construye los grupos de recursos esperados', () => {
     expect(seed.structureDefinitions.length).toBeGreaterThanOrEqual(28);
     expect(seed.accessPolicies.length).toBe(6); // 5 roles internos + Paciente — Portal
-    expect(seed.activityDefinitions.length).toBe(36); // 33 + 3 consultas médicas
+    expect(seed.activityDefinitions.length).toBe(35); // 32 + 3 consultas médicas (v9: IHHT única)
     expect(seed.combos.length).toBe(9);
     expect(seed.membresias.length).toBe(10);
     expect(seed.paquetes.length).toBe(18);
-    expect(seed.locations.length).toBe(13);
-    expect(seed.schedules.length).toBe(13);
+    expect(seed.locations.length).toBe(14); // 13 + Puesto IV 2 (handoff v9)
+    expect(seed.schedules.length).toBe(14);
     expect(seed.practitioners.length).toBe(3);
   });
 });

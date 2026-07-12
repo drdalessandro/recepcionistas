@@ -8,18 +8,25 @@ una parte del avance; el resto se resuelve en paralelo.
 | # | Decisión | Definición confirmada por Andrés |
 |---|---|---|
 | 1 | **Horario de atención** | Lunes a Viernes 08:00–22:00 · Sábados 08:00–20:00 · Domingo cerrado · franja de 30 min (`src/config/horario.ts`). |
-| 2 | **Lista definitiva de salas y equipos** | Los 13 recursos del Requerimientos §6.2, confirmados sin cambios (`src/config/recursos.ts`). |
+| 2 | **Lista definitiva de salas y equipos** | Los 13 recursos del Requerimientos §6.2, confirmados sin cambios (`src/config/recursos.ts`). 2026-07: se sumó el **Puesto IV 2** (handoff v9 de Administración) ⇒ 14 recursos. |
 
 > Para cargar la agenda real en Medplum: `npm run seed -- --with-slots --dias=14`
-> (genera ~4.264 franjas: 13 salas × 2 semanas).
+> (genera ~4.592 franjas: 14 salas × 2 semanas).
 
 ## Catálogo (v9)
 
+**2026-07-12 — Manual v9 final aplicado al catálogo** (fuente de verdad):
+IHHT vuelve a ser **sesión única 45 min / USD 90** (Express/Premium descartados);
+combos con IHHT recalculados (BIO ENERGY 140/112 · BIO OXYGEN 255/200 **OFF 21%**
+· Pareja 380/300 · BIO LONGEVITY 455/364 · Pareja 580/464); membresías FOCUS
+(718/1008) y HEALTHSPAN (2184/3058/2784/3898) arrastran los combos nuevos, PRIME
+sin cambios; paquetes con nombre comercial **Starter/Core/Pro** (paquete IHHT
+base 90: 428/810/1530); Terapias Biológicas ya estaban al día (18 terapias,
+Esferoides dado de baja).
+
 | Tema | Detalle | Estado |
 |---|---|---|
-| Ciclos/duración IHHT | v9 define IHHT Express (30 min, 3 ciclos) y Premium (60 min, 6-7 ciclos), a confirmar con el equipo médico. | A confirmar |
-| Paquetes de IHHT | El changelog v9 no recalculó los paquetes de IHHT. Se generan paquetes de **IHHT Express** (base USD 60). ¿Se ofrecen también de IHHT Premium? | A confirmar |
-| Descuento BIO OXYGEN | Pasó de ~21% a 20% por el recálculo v9. Validar que se mantiene en 20%. | A confirmar |
+| Prioridad de reserva Pareja | v9: "Miembros PAREJA tienen prioridad de reserva en Membresías Prime y Healthspan". Es cualitativo (sin ventana ni número). ¿Cómo se operativiza? (¿más días de anticipación? ¿prioridad en lista de espera?) | ⚠️ Preguntar a Andrés |
 | FM en masajes/osteopatía | ¿El 20% FM aplica a masajes/osteopatía sueltos? Hoy `fmAplica = false` para ellos. | A confirmar |
 | Insumos Regenerar (cascada TB) | La cascada de IV/TB (R-08) necesita el costo de insumo por terapia (lista Regenerar) para el neto real de BW. Hoy se pasa como parámetro. | A confirmar |
 
@@ -63,11 +70,13 @@ Ver [`docs/app-recepcion.md`](app-recepcion.md) y [`docs/bots.md`](bots.md).
 - **Descuento a la carte de miembros (Std 10% / Int 15%) vs FM 20%**: implementado
   PROVISORIO como "se aplica el MAYOR, no acumulan" (`src/lib/pricing.ts`).
   ⚠️ Confirmar con Andrés si acumulan o se aplica el mayor.
-- **Handoff Manual v9** (docs/para-recepcionistas-v9.md del repo `administracion`):
-  8 altas + 1 baja del catálogo TB, tarifario de paquetes Starter/Core/Pro,
-  2 puestos IV en agenda, prioridad de reserva miembros Pareja. BLOQUEADO: ese
-  repo no está en el scope de esta sesión — pasar el contenido para aplicarlo
-  al catálogo.
+- **Handoff Manual v9**: ✅ APLICADO (2026-07-12) contra el PDF del Manual v9:
+  catálogo TB al día, IHHT única 45/90, combos y membresías recalculados,
+  paquetes Starter/Core/Pro con nombre comercial, Puesto IV 2 en agenda.
+  Queda la prioridad de reserva Pareja (ver Catálogo v9: preguntar a Andrés).
+  **Después de deployar: correr `npm run seed` para actualizar el catálogo en
+  Medplum** (los códigos `IHHT_EXPRESS`/`IHHT_PREMIUM` viejos quedan huérfanos;
+  el seed crea `IHHT` y los paquetes `PAQ_IHHT_X*`).
 - **Tokenización MP para cobro recurrente**: el cron cobra con tarjeta guardada si
   el Coverage tiene `mp-customer-id`/`mp-card-id`. Falta el flujo de captura de la
   tarjeta (checkout de suscripción / Customers API) para poblar esas extensiones.

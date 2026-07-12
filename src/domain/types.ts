@@ -118,6 +118,8 @@ export interface Membresia {
 
 export interface Paquete {
   codigo: string;
+  /** Nombre comercial del Manual (p. ej. "HBOT MONO — Starter"). */
+  nombre: string;
   servicioBaseCodigo: string;
   /** Cantidad de sesiones (5 / 10 / 20). */
   tamano: number;

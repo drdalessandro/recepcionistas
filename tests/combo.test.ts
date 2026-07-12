@@ -17,7 +17,7 @@ describe('planificarCombo', () => {
   it('BIO LONGEVITY agenda HBOT -> IHHT -> Recovery, consecutivos y con sala', () => {
     const r = planificarCombo(getCombo('BIO_LONGEVITY'), INICIO, []);
     expect(r.ok).toBe(true);
-    expect(r.plan.map((p) => p.servicioCodigo)).toEqual(['HBOT_MONO', 'IHHT_EXPRESS', 'RECOVERY_PRO']);
+    expect(r.plan.map((p) => p.servicioCodigo)).toEqual(['HBOT_MONO', 'IHHT', 'RECOVERY_PRO']);
 
     // HBOT 14:00-15:00, IHHT 15:00-15:30, Recovery 15:30-16:30.
     expect(r.plan[0]!.inicio.toISOString()).toBe(new Date('2026-06-22T14:00:00-03:00').toISOString());

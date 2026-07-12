@@ -26,7 +26,7 @@ export function nombreYBase(tipo: EstadoPlan['tipo'], planCodigo: string): { nom
     };
   }
   const p = PAQUETES_POR_CODIGO.get(planCodigo);
-  return { nombre: p ? `Paquete ${p.codigo}` : planCodigo, base: p?.servicioBaseCodigo ?? '' };
+  return { nombre: p ? `Paquete ${p.nombre}` : planCodigo, base: p?.servicioBaseCodigo ?? '' };
 }
 
 /** Planes activos (Coverage status=active) del paciente, con saldo resuelto. */
