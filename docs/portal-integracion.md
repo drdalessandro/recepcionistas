@@ -140,3 +140,36 @@ https://code.claude.com/docs/en/claude-code-on-the-web
 
 Mientras no esté en el scope, recepción **no** puede leer ese repo (proxy de git y
 GitHub MCP están acotados a `biowellness/recepcionistas`).
+
+
+## Catálogo de servicios — misma lista que Recepción
+
+El catálogo v9 (fuente de verdad: este repo, `src/config/catalogo.ts`) se seedea en
+Medplum como recursos FHIR. Desde 2026-07-13 la AccessPolicy **"Paciente — Portal"**
+permite leerlos (`ActivityDefinition` y `PlanDefinition`, sólo lectura), así el
+portal arma su selector de servicios desde el servidor y **siempre ve lo mismo que
+Recepción** (sin listas duplicadas ni hardcodeadas).
+
+Consultas (con el login del paciente):
+
+- Servicios: `ActivityDefinition?status=active&_count=100`
+  - código de negocio: `identifier` con system `https://biowellness.ar/fhir/CodeSystem/servicio` (ej. `HBOT_MONO`, `IHHT`)
+  - nombre visible: `title` · categoría: `topic[0].text` (HBOT, IHHT, …)
+  - precio USD: extensión `https://biowellness.ar/fhir/StructureDefinition/precio-usd` (decimal); consultas en ARS: `precio-ars`
+  - requiere prescripción (IV/TB): extensión `https://biowellness.ar/fhir/StructureDefinition/requiere-prescripcion` (boolean) — el portal puede ocultarlos o marcarlos "requiere consulta médica"
+  - duración: `timingTiming.repeat.duration` (minutos)
+- Combos: `PlanDefinition?type=combo&status=active` (título, precio en ext `precio-usd`)
+
+Al crear la solicitud (`bw-solicitar-turno`), mandar **`terapiaCodigo`** con el
+código de negocio del servicio elegido (o su categoría). Ese dato permite que,
+cuando Recepción reserva el turno, el bot resuelva la solicitud correcta
+automáticamente (ver abajo).
+
+## Auto-resolución de solicitudes (2026-07-13)
+
+`bw-reservar-turno` y `bw-reservar-combo` completan solos el `Task` de solicitud
+pendiente del paciente al reservar: si hay UNA pendiente se completa esa; si hay
+varias, la que coincida por `terapiaCodigo` (código de servicio o categoría); si
+ninguna coincide, no se toca (se resuelve a mano). El Task completado guarda la
+referencia del turno en `output` (`type.text = "appointment"`). El portal puede
+mostrar la solicitud como "confirmada" leyendo ese output.

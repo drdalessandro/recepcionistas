@@ -144,6 +144,11 @@ export const POLICY_PACIENTE_PORTAL: AccessPolicy = {
     // `patient` mapea a Task.for (que el bot setea al paciente).
     { resourceType: 'Task', readonly: true, criteria: 'Task?patient=%patient' },
     // Catálogo, agenda y profesionales — sólo lectura (para mostrar la oferta).
+    // ActivityDefinition (servicios) y PlanDefinition (combos/membresías/paquetes)
+    // son el catálogo v9 que seedea este repo: el portal los lee para que su lista
+    // de servicios sea EXACTAMENTE la misma que ve Recepción. No contienen PHI.
+    { resourceType: 'ActivityDefinition', readonly: true },
+    { resourceType: 'PlanDefinition', readonly: true },
     { resourceType: 'ObservationDefinition', readonly: true },
     { resourceType: 'Questionnaire', readonly: true },
     { resourceType: 'Schedule', readonly: true },

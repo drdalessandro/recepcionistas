@@ -4,6 +4,7 @@ import {
   resumenSolicitud,
   preferenciaLegible,
   mensajeWhatsAppRecepcion,
+  indiceSolicitudAResolver,
   type SolicitudTurno,
 } from '../src/lib/solicitudes.js';
 
@@ -52,5 +53,23 @@ describe('Solicitudes de turno — textos', () => {
     expect(m).toContain('Juan Pérez');
     expect(m).toContain('Cámara hiperbárica (HBOT)');
     expect(m).toContain('mañana');
+  });
+});
+
+describe('indiceSolicitudAResolver (auto-resolver al reservar)', () => {
+  it('Una sola pendiente => esa, coincida o no la terapia', () => {
+    expect(indiceSolicitudAResolver([{ terapiaCodigo: 'IHHT' }], ['HBOT_MONO', 'HBOT'])).toBe(0);
+    expect(indiceSolicitudAResolver([{}], ['HBOT_MONO', 'HBOT'])).toBe(0);
+  });
+
+  it('Varias => la primera que coincide por código de servicio o categoría', () => {
+    const pendientes = [{ terapiaCodigo: 'IHHT' }, { terapiaCodigo: 'HBOT' }, { terapiaCodigo: 'HBOT' }];
+    expect(indiceSolicitudAResolver(pendientes, ['HBOT_MONO', 'HBOT'])).toBe(1);
+  });
+
+  it('Varias sin coincidencia => ninguna (se resuelve a mano, no cerramos de más)', () => {
+    const pendientes = [{ terapiaCodigo: 'IHHT' }, { terapiaCodigo: 'CRIO' }];
+    expect(indiceSolicitudAResolver(pendientes, ['HBOT_MONO', 'HBOT'])).toBe(-1);
+    expect(indiceSolicitudAResolver([], ['HBOT'])).toBe(-1);
   });
 });

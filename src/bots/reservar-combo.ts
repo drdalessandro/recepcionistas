@@ -27,7 +27,7 @@ import {
   type ReservaRecurso,
   type ResultadoValidacion,
 } from '../lib/reglas-turno.js';
-import { cargarReservasDelDia, consumirSesionDePlan, enviarWhatsApp, extraerCodigos, scheduleIdDeRecurso, tieneBloqueoPago, type ConsumoPlan } from './_shared.js';
+import { cargarReservasDelDia, consumirSesionDePlan, enviarWhatsApp, extraerCodigos, resolverSolicitudTurno, scheduleIdDeRecurso, tieneBloqueoPago, type ConsumoPlan } from './_shared.js';
 
 export interface EntradaCombo {
   pacienteRef: string;
@@ -259,6 +259,15 @@ export async function handler(medplum: MedplumClient, event: BotEvent<EntradaCom
       appointmentIds.push(appt.id);
     }
     orden++;
+  }
+
+  // La solicitud de turno pendiente del paciente (si la hay) queda resuelta sola.
+  if (appointmentIds.length > 0) {
+    const codigos = [
+      e.comboCodigo,
+      ...combo.componentes.flatMap((c) => [c.servicioCodigo, getServicio(c.servicioCodigo).categoria]),
+    ];
+    await resolverSolicitudTurno(medplum, e.pacienteRef, codigos, `Appointment/${appointmentIds[0]}`);
   }
 
   if (e.notificar !== false) {

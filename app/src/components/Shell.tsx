@@ -31,6 +31,7 @@ export function Shell({ vista, onVista, children }: ShellProps): JSX.Element {
   const esquema = useComputedColorScheme('light', { getInitialValueInEffect: true });
   const oscuro = esquema === 'dark';
   const [mensajesSinLeer, setMensajesSinLeer] = useState(0);
+  const [solicitudesPendientes, setSolicitudesPendientes] = useState(0);
 
   return (
     <AppShell header={{ height: 64 }} padding="md">
@@ -50,7 +51,7 @@ export function Shell({ vista, onVista, children }: ShellProps): JSX.Element {
             onChange={(v) => onVista(v as Vista)}
             data={[
               { value: 'agenda', label: segLabel(<IconCalendarEvent size={16} />, 'Agenda') },
-              { value: 'solicitudes', label: segLabel(<IconInbox size={16} />, 'Solicitudes') },
+              { value: 'solicitudes', label: segLabel(<IconInbox size={16} />, 'Solicitudes', solicitudesPendientes, 'red') },
               { value: 'mensajes', label: segLabel(<IconMessages size={16} />, 'Mensajes', mensajesSinLeer) },
               { value: 'planes', label: segLabel(<IconLicense size={16} />, 'Planes y sesiones') },
               { value: 'atender', label: segLabel(<IconUserHeart size={16} />, 'Atender paciente') },
@@ -62,7 +63,11 @@ export function Shell({ vista, onVista, children }: ShellProps): JSX.Element {
             <Text size="sm" visibleFrom="sm">
               {profile ? getDisplayString(profile) : ''}
             </Text>
-            <CampanitaNovedades onVista={onVista} onMensajesSinLeer={setMensajesSinLeer} />
+            <CampanitaNovedades
+              onVista={onVista}
+              onMensajesSinLeer={setMensajesSinLeer}
+              onSolicitudesPendientes={setSolicitudesPendientes}
+            />
             <ActionIcon
               variant="default"
               size="lg"
@@ -89,14 +94,14 @@ export function Shell({ vista, onVista, children }: ShellProps): JSX.Element {
   );
 }
 
-function segLabel(icon: ReactNode, label: string, sinLeer = 0): ReactNode {
+function segLabel(icon: ReactNode, label: string, pendientes = 0, color = 'teal'): ReactNode {
   return (
     <Group gap={6} wrap="nowrap">
       {icon}
       <span>{label}</span>
-      {sinLeer > 0 && (
-        <Badge size="sm" circle color="teal" variant="filled">
-          {sinLeer > 9 ? '9+' : sinLeer}
+      {pendientes > 0 && (
+        <Badge size="sm" circle color={color} variant="filled">
+          {pendientes > 9 ? '9+' : pendientes}
         </Badge>
       )}
     </Group>
