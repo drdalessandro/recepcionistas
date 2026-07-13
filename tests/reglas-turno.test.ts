@@ -4,6 +4,7 @@ import {
   validarOrdenHBOT,
   recomendarHbotPrevio,
   validarCapacidadRecurso,
+  validarMinimoGrupal,
   validarDesfasajeRecovery,
   validarVentanaReserva,
   evaluarCancelacion,
@@ -19,8 +20,8 @@ function h(hhmm: string): Date {
   return new Date(`2026-06-22T${hhmm}:00-03:00`);
 }
 
-function reserva(recursoCodigo: string, desde: string, hasta: string): ReservaRecurso {
-  return { recursoCodigo, inicio: h(desde), fin: h(hasta) };
+function reserva(recursoCodigo: string, desde: string, hasta: string, ocupantes?: number): ReservaRecurso {
+  return { recursoCodigo, inicio: h(desde), fin: h(hasta), ocupantes };
 }
 
 describe('R-01 · HBOT siempre primero', () => {
@@ -75,6 +76,58 @@ describe('R-07 · Capacidad y desfasaje', () => {
       reserva('R_HBOT_MULTIPLAZA', '09:00', '10:00'),
     ]);
     expect(r.ok).toBe(true);
+  });
+
+  it('Multiplaza suma PERSONAS: 4 + 2 = 6 => OK; 4 + 3 = 7 => bloqueo', () => {
+    const cuatro = reserva('R_HBOT_MULTIPLAZA', '09:00', '10:00', 4);
+    expect(validarCapacidadRecurso([cuatro, reserva('R_HBOT_MULTIPLAZA', '09:00', '10:00', 2)]).ok).toBe(true);
+    const r = validarCapacidadRecurso([cuatro, reserva('R_HBOT_MULTIPLAZA', '09:00', '10:00', 3)]);
+    expect(r.ok).toBe(false);
+    expect(r.bloqueos[0]?.mensaje).toContain('personas');
+  });
+
+  it('Biplaza es de reserva EXCLUSIVA: una pareja la toma completa', () => {
+    const r = validarCapacidadRecurso([
+      reserva('R_HBOT_BIPLAZA', '09:00', '10:00', 2),
+      reserva('R_HBOT_BIPLAZA', '09:00', '10:00', 1),
+    ]);
+    expect(r.ok).toBe(false);
+    expect(r.bloqueos[0]?.mensaje).toContain('exclusiva');
+  });
+
+  it('Biplaza: 1 persona sola también la toma completa (nunca comparten desconocidos)', () => {
+    const r = validarCapacidadRecurso([
+      reserva('R_HBOT_BIPLAZA', '09:00', '10:00', 1),
+      reserva('R_HBOT_BIPLAZA', '09:30', '10:30', 1),
+    ]);
+    expect(r.ok).toBe(false);
+  });
+
+  it('Gabinete Recovery también es exclusivo (privado, USD 200 indivisible)', () => {
+    const r = validarCapacidadRecurso([
+      reserva('R_RECOVERY_G1', '09:00', '10:00', 2),
+      reserva('R_RECOVERY_G1', '09:00', '10:00', 1),
+    ]);
+    expect(r.ok).toBe(false);
+  });
+
+  it('Mínimo grupal Multiplaza (3): reservar con menos ADVIERTE, no bloquea', () => {
+    const nueva = reserva('R_HBOT_MULTIPLAZA', '09:00', '10:00', 2);
+    const r = validarMinimoGrupal([nueva], nueva);
+    expect(r.ok).toBe(true);
+    expect(r.advertencias).toHaveLength(1);
+    expect(r.advertencias[0]?.mensaje).toContain('mínimo 3');
+  });
+
+  it('Mínimo grupal: al llegar a 3 personas en la franja no advierte', () => {
+    const nueva = reserva('R_HBOT_MULTIPLAZA', '09:00', '10:00', 1);
+    const r = validarMinimoGrupal([reserva('R_HBOT_MULTIPLAZA', '09:00', '10:00', 2), nueva], nueva);
+    expect(r.advertencias).toHaveLength(0);
+  });
+
+  it('Mínimo grupal: no aplica a recursos sin mínimo (mono)', () => {
+    const nueva = reserva('R_HBOT_MONO', '09:00', '10:00', 1);
+    expect(validarMinimoGrupal([nueva], nueva).advertencias).toHaveLength(0);
   });
 
   it('Turnos contiguos en el mismo recurso (uno termina cuando arranca el otro) => OK', () => {

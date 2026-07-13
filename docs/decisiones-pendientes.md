@@ -26,6 +26,7 @@ Esferoides dado de baja).
 
 | Tema | Detalle | Estado |
 |---|---|---|
+| IHHT en pareja (combos Pareja) | Físicamente usa los 2 puestos JAY-20H, pero la reserva de combo Pareja hoy ocupa 1 puesto (una reserva con `ocupantes: 2`); el otro puesto queda reservable. Pendiente: asignación multi-puesto en `planificarCombo`. | Mejora pendiente |
 | Prioridad de reserva Pareja | v9: "Miembros PAREJA tienen prioridad de reserva en Membresías Prime y Healthspan". Es cualitativo (sin ventana ni número). ¿Cómo se operativiza? (¿más días de anticipación? ¿prioridad en lista de espera?) | ⚠️ Preguntar a Andrés |
 | FM en masajes/osteopatía | ¿El 20% FM aplica a masajes/osteopatía sueltos? Hoy `fmAplica = false` para ellos. | A confirmar |
 | Insumos Regenerar (cascada TB) | La cascada de IV/TB (R-08) necesita el costo de insumo por terapia (lista Regenerar) para el neto real de BW. Hoy se pasa como parámetro. | A confirmar |

@@ -49,6 +49,7 @@ export function ReservaModal({
   const [fecha, setFecha] = useState(hoy);
   const [hora, setHora] = useState<string | null>(null);
   const [prescripcion, setPrescripcion] = useState(false);
+  const [ocupantes, setOcupantes] = useState('1');
   const [resultado, setResultado] = useState<ResultadoReserva | null>(null);
   const [reservando, setReservando] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -76,6 +77,7 @@ export function ReservaModal({
       setResultado(null);
       setError(null);
       setPrescripcion(false);
+      setOcupantes('1');
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [preset]);
@@ -115,13 +117,18 @@ export function ReservaModal({
         servicioCodigo,
         recursoCodigo: preset.recursoCodigo,
         inicio: `${fecha}T${hora}:00-03:00`,
+        ocupantes: Number(ocupantes) || 1,
         prescripcionActiva: prescripcion,
         confirmar: true,
       });
       setResultado(r);
       if (r.creado) {
         onReservado();
-        onClose();
+        // Con advertencias (p. ej. multiplaza bajo el mínimo de 3) el modal queda
+        // abierto para que la recepción las vea; sin advertencias se cierra solo.
+        if (r.advertencias.length === 0) {
+          onClose();
+        }
       }
     } catch (e) {
       setError(mensajeError(e));
@@ -202,6 +209,20 @@ export function ReservaModal({
           }}
         />
 
+        {recurso && recurso.capacidad > 1 && (
+          <Select
+            label="Personas"
+            description={
+              recurso.reservaExclusiva
+                ? 'La cámara queda reservada completa para esta reserva (1 o 2 personas juntas).'
+                : `Sesión grupal: hasta ${recurso.capacidad} personas.${recurso.minimoPersonas ? ` Mínimo operativo ${recurso.minimoPersonas} (se puede reservar con menos).` : ''}`
+            }
+            data={Array.from({ length: recurso.capacidad }, (_, i) => String(i + 1))}
+            value={ocupantes}
+            onChange={(v) => setOcupantes(v ?? '1')}
+          />
+        )}
+
         {servicio?.requierePrescripcion && (
           <Switch
             label="Prescripción médica activa (IV / Terapias Biológicas)"
@@ -228,13 +249,31 @@ export function ReservaModal({
           </Alert>
         )}
 
+        {resultado?.creado && resultado.advertencias.length > 0 && (
+          <Alert color="yellow" title="Turno reservado, con avisos" icon={<IconInfoCircle size={16} />}>
+            <List size="sm">
+              {resultado.advertencias.map((a, i) => (
+                <List.Item key={i}>
+                  [{a.regla}] {a.mensaje}
+                </List.Item>
+              ))}
+            </List>
+          </Alert>
+        )}
+
         <Group justify="flex-end">
-          <Button variant="default" onClick={onClose}>
-            Cancelar
-          </Button>
-          <Button onClick={() => void reservar()} loading={reservando} disabled={!paciente || !servicioCodigo || !hora}>
-            Reservar turno
-          </Button>
+          {resultado?.creado ? (
+            <Button onClick={onClose}>Listo</Button>
+          ) : (
+            <>
+              <Button variant="default" onClick={onClose}>
+                Cancelar
+              </Button>
+              <Button onClick={() => void reservar()} loading={reservando} disabled={!paciente || !servicioCodigo || !hora}>
+                Reservar turno
+              </Button>
+            </>
+          )}
         </Group>
       </Stack>
     </Modal>

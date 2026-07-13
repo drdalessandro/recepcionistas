@@ -85,16 +85,25 @@ function seSolapan(aIni: Date, aFin: Date, bIni: Date, bFin: Date): boolean {
 
 /**
  * ¿Cabe un turno nuevo en `recursoCodigo` [inicio,fin) dado lo ya ocupado?
- * Chequea capacidad del propio recurso y desfasaje (R-07) contra recursos que
- * comparten equipo. Sólo evalúa el turno nuevo (ignora conflictos preexistentes).
+ * Chequea capacidad del propio recurso (por PERSONAS; los recursos de reserva
+ * exclusiva se llenan con una sola reserva) y desfasaje (R-07) contra recursos
+ * que comparten equipo. Sólo evalúa el turno nuevo (ignora conflictos preexistentes).
  */
-function cabe(recursoCodigo: string, inicio: Date, fin: Date, ocupadas: ReservaRecurso[]): boolean {
-  const capacidad = RECURSOS_POR_CODIGO.get(recursoCodigo)?.capacidad ?? 1;
-  const concurrentes = ocupadas.filter(
+function cabe(recursoCodigo: string, inicio: Date, fin: Date, ocupantes: number, ocupadas: ReservaRecurso[]): boolean {
+  const recurso = RECURSOS_POR_CODIGO.get(recursoCodigo);
+  const capacidad = recurso?.capacidad ?? 1;
+  const solapadas = ocupadas.filter(
     (o) => o.recursoCodigo === recursoCodigo && seSolapan(inicio, fin, o.inicio, o.fin),
-  ).length;
-  if (concurrentes + 1 > capacidad) {
-    return false;
+  );
+  if (recurso?.reservaExclusiva) {
+    if (solapadas.length > 0) {
+      return false;
+    }
+  } else {
+    const personas = solapadas.reduce((acc, o) => acc + Math.min(o.ocupantes ?? 1, capacidad), 0);
+    if (personas + Math.min(ocupantes, capacidad) > capacidad) {
+      return false;
+    }
   }
   const offsetMs = DESFASAJE_RECOVERY_MIN * 60_000;
   for (const o of ocupadas) {
@@ -126,7 +135,7 @@ export function planificarCombo(combo: Combo, inicio: Date, reservasExistentes: 
     const fin = new Date(t.getTime() + comp.duracionMin * 60_000);
     const candidatos = recursosParaCategoria(servicio.categoria);
 
-    const elegido = candidatos.find((cand) => cabe(cand.codigo, t, fin, [...reservasExistentes, ...asignadas]));
+    const elegido = candidatos.find((cand) => cabe(cand.codigo, t, fin, comp.ocupantes, [...reservasExistentes, ...asignadas]));
 
     if (!elegido) {
       bloqueos.push({
@@ -137,7 +146,7 @@ export function planificarCombo(combo: Combo, inicio: Date, reservasExistentes: 
       break;
     }
 
-    asignadas.push({ recursoCodigo: elegido.codigo, inicio: t, fin });
+    asignadas.push({ recursoCodigo: elegido.codigo, inicio: t, fin, ocupantes: comp.ocupantes });
     plan.push({
       servicioCodigo: servicio.codigo,
       servicioNombre: servicio.nombre,
@@ -222,7 +231,10 @@ export async function handler(medplum: MedplumClient, event: BotEvent<EntradaCom
       schedule: { reference: `Schedule/${scheduleId}` },
       start: item.inicio.toISOString(),
       end: item.fin.toISOString(),
-      extension: [{ url: EXT.recursoFisico, valueString: item.recursoCodigo }],
+      extension: [
+        { url: EXT.recursoFisico, valueString: item.recursoCodigo },
+        { url: EXT.ocupantes, valueInteger: item.ocupantes },
+      ],
     });
     const appt = await medplum.createResource<Appointment>({
       resourceType: 'Appointment',

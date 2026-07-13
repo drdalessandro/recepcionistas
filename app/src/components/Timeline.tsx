@@ -18,6 +18,55 @@ function fmt(min: number): string {
   return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
 }
 
+interface TurnoPosicionado extends TurnoTimeline {
+  /** Offset de asiento dentro de la sala (0 = arriba). */
+  asiento: number;
+  /** Asientos que ocupa esta reserva (multiplaza: ocupantes; exclusiva: todos). */
+  peso: number;
+}
+
+/** Asientos que pesa un turno contra la capacidad de la sala. */
+function pesoTurno(t: TurnoTimeline, capacidad: number, exclusiva: boolean): number {
+  if (exclusiva || capacidad <= 1) {
+    return Math.max(1, capacidad);
+  }
+  return Math.max(1, Math.min(t.ocupantes, capacidad));
+}
+
+/**
+ * Asigna a cada turno una banda vertical proporcional a las personas que trae
+ * (multiplaza: 2 personas = 2/6 del alto de la fila). Los turnos que solapan en
+ * el tiempo se apilan en asientos distintos, así ninguno tapa a otro.
+ */
+function posicionarTurnos(turnos: TurnoTimeline[], capacidad: number, exclusiva: boolean): TurnoPosicionado[] {
+  const cap = Math.max(1, capacidad);
+  const orden = [...turnos].sort((a, b) => a.inicioMin - b.inicioMin || a.finMin - b.finMin);
+  const out: TurnoPosicionado[] = [];
+  for (const t of orden) {
+    const peso = pesoTurno(t, cap, exclusiva);
+    const solapados = out
+      .filter((o) => o.inicioMin < t.finMin && t.inicioMin < o.finMin)
+      .sort((a, b) => a.asiento - b.asiento);
+    let asiento = 0;
+    for (const o of solapados) {
+      if (asiento + peso <= o.asiento) {
+        break;
+      }
+      asiento = Math.max(asiento, o.asiento + o.peso);
+    }
+    if (asiento + peso > cap) {
+      asiento = Math.max(0, cap - peso); // sobrecupo legado: se superpone al final en vez de desaparecer
+    }
+    out.push({ ...t, asiento, peso });
+  }
+  return out;
+}
+
+/** Personas ocupando la sala en el minuto `m` (para saber si la franja admite más). */
+function ocupacionEn(turnos: TurnoPosicionado[], m: number): number {
+  return turnos.filter((t) => m >= t.inicioMin && m < t.finMin).reduce((acc, t) => acc + t.peso, 0);
+}
+
 export function Timeline({
   data,
   onReservar,
@@ -45,11 +94,16 @@ export function Timeline({
   const anchoPct = (desdeMin: number, hastaMin: number): string =>
     `${(((hastaMin - desdeMin) / totalMin) * 100).toFixed(4)}%`;
 
-  const turnosPorSala = new Map<string, TurnoTimeline[]>();
-  for (const t of data.turnos) {
-    const arr = turnosPorSala.get(t.recursoCodigo) ?? [];
-    arr.push(t);
-    turnosPorSala.set(t.recursoCodigo, arr);
+  const turnosPorSala = new Map<string, TurnoPosicionado[]>();
+  for (const sala of data.salas) {
+    turnosPorSala.set(
+      sala.codigo,
+      posicionarTurnos(
+        data.turnos.filter((t) => t.recursoCodigo === sala.codigo),
+        sala.capacidad,
+        sala.reservaExclusiva,
+      ),
+    );
   }
 
   // Líneas de grilla cada 30' (en %) — la de la hora en punto un toque más notoria.
@@ -99,18 +153,20 @@ export function Timeline({
           </Box>
 
           <Box style={{ position: 'relative', flex: 1, minHeight: 0, backgroundImage: lineas }}>
-            {/* Franjas libres clickeables para reservar */}
+            {/* Franjas clickeables para reservar: libres, o con aforo restante (multiplaza) */}
             {onReservar &&
               cols.map((m, i) => {
-                const ocupado = (turnosPorSala.get(sala.codigo) ?? []).some((t) => m >= t.inicioMin && m < t.finMin);
-                if (ocupado) {
-                  return null;
+                const cap = Math.max(1, sala.capacidad);
+                const usadas = ocupacionEn(turnosPorSala.get(sala.codigo) ?? [], m);
+                if (usadas >= cap) {
+                  return null; // franja completa
                 }
+                const aforo = cap > 1 && !sala.reservaExclusiva && usadas > 0 ? ` (${usadas}/${cap} ocupadas)` : '';
                 return (
                   <Box
                     key={`slot-${i}`}
                     className="bw-slot"
-                    title={`Reservar ${fmt(m)} · ${sala.nombre}`}
+                    title={`Reservar ${fmt(m)} · ${sala.nombre}${aforo}`}
                     onClick={() => onReservar(sala.codigo, m)}
                     style={{
                       position: 'absolute',
@@ -124,40 +180,47 @@ export function Timeline({
                 );
               })}
 
-            {(turnosPorSala.get(sala.codigo) ?? []).map((t, i) => (
-              <Tooltip
-                key={i}
-                label={`${t.paciente || 'Paciente'} · ${t.servicio} · ${fmt(t.inicioMin)}–${fmt(t.finMin)} · ${labelEstado(t.estado)}`}
-                withArrow
-              >
-                <Box
-                  onClick={() => onTurno?.(t)}
-                  style={{
-                    position: 'absolute',
-                    left: `calc(${pct(t.inicioMin)} + 1px)`,
-                    width: `calc(${anchoPct(t.inicioMin, Math.max(t.finMin, t.inicioMin + 30))} - 2px)`,
-                    top: 2,
-                    bottom: 2,
-                    background: `var(--mantine-color-${colorEstado(t.estado)}-6)`,
-                    color: 'white',
-                    borderRadius: 5,
-                    padding: '1px 5px',
-                    overflow: 'hidden',
-                    cursor: onTurno ? 'pointer' : 'default',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    justifyContent: 'center',
-                  }}
+            {(turnosPorSala.get(sala.codigo) ?? []).map((t, i) => {
+              const cap = Math.max(1, sala.capacidad);
+              const compacto = t.peso / cap < 0.5; // banda angosta (multiplaza): una sola línea de texto
+              const pers = t.ocupantes > 1 ? ` · ${t.ocupantes} pers.` : '';
+              return (
+                <Tooltip
+                  key={i}
+                  label={`${t.paciente || 'Paciente'} · ${t.servicio}${pers} · ${fmt(t.inicioMin)}–${fmt(t.finMin)} · ${labelEstado(t.estado)}`}
+                  withArrow
                 >
-                  <Text fz={11} c="white" fw={700} lineClamp={1} lh={1.2}>
-                    {t.servicio}
-                  </Text>
-                  <Text fz={10} c="white" lineClamp={1} lh={1.2}>
-                    {t.paciente || `${fmt(t.inicioMin)}–${fmt(t.finMin)}`}
-                  </Text>
-                </Box>
-              </Tooltip>
-            ))}
+                  <Box
+                    onClick={() => onTurno?.(t)}
+                    style={{
+                      position: 'absolute',
+                      left: `calc(${pct(t.inicioMin)} + 1px)`,
+                      width: `calc(${anchoPct(t.inicioMin, Math.max(t.finMin, t.inicioMin + 30))} - 2px)`,
+                      top: `calc(${((t.asiento / cap) * 100).toFixed(2)}% + 1px)`,
+                      height: `calc(${((t.peso / cap) * 100).toFixed(2)}% - 2px)`,
+                      background: `var(--mantine-color-${colorEstado(t.estado)}-6)`,
+                      color: 'white',
+                      borderRadius: 5,
+                      padding: '1px 5px',
+                      overflow: 'hidden',
+                      cursor: onTurno ? 'pointer' : 'default',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      justifyContent: 'center',
+                    }}
+                  >
+                    <Text fz={11} c="white" fw={700} lineClamp={1} lh={1.2}>
+                      {compacto ? `${t.paciente || t.servicio}${pers}` : t.servicio}
+                    </Text>
+                    {!compacto && (
+                      <Text fz={10} c="white" lineClamp={1} lh={1.2}>
+                        {(t.paciente || `${fmt(t.inicioMin)}–${fmt(t.finMin)}`) + pers}
+                      </Text>
+                    )}
+                  </Box>
+                </Tooltip>
+              );
+            })}
 
             {ahoraVisible && (
               <Box
