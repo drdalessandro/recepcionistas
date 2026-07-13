@@ -23,10 +23,13 @@ function esMensajeNoLeido(c: Communication): boolean {
 export function CampanitaNovedades({
   onVista,
   onMensajesSinLeer,
+  onSolicitudesPendientes,
 }: {
   onVista: (v: Vista) => void;
   /** Avisa al Shell cuántos mensajes de pacientes hay sin leer (badge de la pestaña Mensajes). */
   onMensajesSinLeer?: (n: number) => void;
+  /** Avisa al Shell cuántas solicitudes de turno hay pendientes (badge rojo de la pestaña Solicitudes). */
+  onSolicitudesPendientes?: (n: number) => void;
 }): JSX.Element {
   const medplum = useMedplum();
   const [abierta, setAbierta] = useState(false);
@@ -42,7 +45,11 @@ export function CampanitaNovedades({
     // Nunca rompemos el header por la campanita: fallos silenciosos.
     medplum
       .get(`fhir/R4/Task?code=solicitud-turno&status=requested&_count=0&_total=accurate`, { cache: 'no-cache' })
-      .then((b) => setSolicitudes((b as Bundle).total ?? 0))
+      .then((b) => {
+        const n = (b as Bundle).total ?? 0;
+        setSolicitudes(n);
+        onSolicitudesPendientes?.(n);
+      })
       .catch(() => undefined);
     medplum
       .searchResources(
@@ -56,7 +63,7 @@ export function CampanitaNovedades({
         onMensajesSinLeer?.(n);
       })
       .catch(() => undefined);
-  }, [medplum, onMensajesSinLeer]);
+  }, [medplum, onMensajesSinLeer, onSolicitudesPendientes]);
 
   useEffect(() => {
     refrescar();

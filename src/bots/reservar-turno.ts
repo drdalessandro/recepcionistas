@@ -15,7 +15,7 @@ import type { Servicio } from '../domain/types.js';
 import { getServicio } from '../config/catalogo.js';
 import type { PerfilReserva } from '../config/reglas.js';
 import { EXT, SYSTEM } from '../fhir/identifiers.js';
-import { cargarReservasDelDia, consumirSesionDePlan, enviarWhatsApp, extraerCodigos, scheduleIdDeRecurso, tieneBloqueoPago, type ConsumoPlan } from './_shared.js';
+import { cargarReservasDelDia, consumirSesionDePlan, enviarWhatsApp, extraerCodigos, resolverSolicitudTurno, scheduleIdDeRecurso, tieneBloqueoPago, type ConsumoPlan } from './_shared.js';
 
 const fmtFechaHora = new Intl.DateTimeFormat('es-AR', {
   day: '2-digit',
@@ -233,6 +233,9 @@ export async function handler(
       ...(consumo ? [{ url: EXT.coberturaUsada, valueString: `Coverage/${e.coverageId}` }] : []),
     ],
   });
+
+  // La solicitud de turno pendiente del paciente (si la hay) queda resuelta sola.
+  await resolverSolicitudTurno(medplum, e.pacienteRef, [e.servicioCodigo, servicio.categoria], `Appointment/${appointment.id}`);
 
   await enviarWhatsApp(medplum, event.secrets, {
     template: consumo ? 'reserva-plan' : 'reserva-tentativa',

@@ -3,7 +3,7 @@
  */
 import type { BotEvent, MedplumClient } from '@medplum/core';
 import type { Appointment, ChargeItem, Communication, Coverage, Flag, Invoice, Task } from '@medplum/fhirtypes';
-import {
+import { COD, 
   CONFIG_TC_ID,
   EXT,
   EXT_LINEA_COMERCIAL,
@@ -11,6 +11,7 @@ import {
   esMedioPago,
   type MedioPago,
 } from '../fhir/identifiers.js';
+import { indiceSolicitudAResolver } from '../lib/solicitudes.js';
 import { estadoDeCoverage, planCodigoDeCoverage } from '../fhir/coverage.js';
 import { resolverTC } from '../config/tipo-cambio.js';
 import { getServicio } from '../config/catalogo.js';
@@ -260,6 +261,49 @@ export async function cargarReservasDelDia(medplum: MedplumClient, dia: Date): P
     reservas.push({ recursoCodigo: codigo, inicio: new Date(s.start), fin: new Date(s.end), ocupantes });
   }
   return reservas;
+}
+
+/**
+ * Al reservar un turno/combo, da por RESUELTA la solicitud de turno pendiente del
+ * paciente (Task `solicitud-turno`), para que desaparezca sola de la bandeja de
+ * Recepción. Elige con `indiceSolicitudAResolver` (1 pendiente → esa; varias → la
+ * que coincida por terapia; sin coincidencia → ninguna). Best-effort: un fallo acá
+ * jamás rompe la reserva.
+ */
+export async function resolverSolicitudTurno(
+  medplum: MedplumClient,
+  pacienteRef: string,
+  codigosReservados: string[],
+  appointmentRef: string,
+): Promise<void> {
+  try {
+    const pacienteId = pacienteRef.split('/')[1];
+    if (!pacienteId) {
+      return;
+    }
+    const pendientes = await medplum.searchResources(
+      'Task',
+      `code=${COD.solicitudTurno}&status=requested&patient=${pacienteId}&_sort=authored-on&_count=20`,
+    );
+    const idx = indiceSolicitudAResolver(
+      pendientes.map((t) => ({ terapiaCodigo: t.input?.find((i) => i.type?.text === 'terapia-codigo')?.valueString })),
+      codigosReservados,
+    );
+    const elegida = idx >= 0 ? pendientes[idx] : undefined;
+    if (!elegida) {
+      return;
+    }
+    await medplum.updateResource({
+      ...elegida,
+      status: 'completed',
+      output: [
+        ...(elegida.output ?? []),
+        { type: { text: 'appointment' }, valueReference: { reference: appointmentRef } },
+      ],
+    });
+  } catch {
+    // Best-effort: si no se pudo, la solicitud queda para resolver a mano.
+  }
 }
 
 // ============================================================================

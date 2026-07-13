@@ -49,6 +49,28 @@ export function validarSolicitud(s: SolicitudTurno): SolicitudValidacion {
   return { ok: true };
 }
 
+/**
+ * ¿Qué solicitud pendiente se da por RESUELTA cuando se reserva un turno?
+ * Regla determinista (sin adivinar):
+ *  - una sola pendiente → esa (el caso normal);
+ *  - varias → la primera cuya terapia (código de servicio o categoría) coincida
+ *    con lo reservado;
+ *  - varias sin coincidencia → ninguna (se resuelve a mano, no cerramos de más).
+ * Devuelve el índice en el array, o -1.
+ */
+export function indiceSolicitudAResolver(
+  solicitudes: Array<{ terapiaCodigo?: string }>,
+  codigosReservados: string[],
+): number {
+  if (solicitudes.length === 0) {
+    return -1;
+  }
+  if (solicitudes.length === 1) {
+    return 0;
+  }
+  return solicitudes.findIndex((s) => Boolean(s.terapiaCodigo) && codigosReservados.includes(s.terapiaCodigo as string));
+}
+
 const fmtFechaHora = new Intl.DateTimeFormat('es-AR', {
   weekday: 'long',
   day: '2-digit',

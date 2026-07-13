@@ -1,8 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Badge, Button, Card, Group, Loader, Stack, Text, Title } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { IconInbox, IconUserHeart, IconCheck } from '@tabler/icons-react';
-import { useMedplum } from '@medplum/react';
+import { useMedplum, useSubscription } from '@medplum/react';
 import { getDisplayString } from '@medplum/core';
 import type { Patient, Task } from '@medplum/fhirtypes';
 
@@ -10,8 +10,12 @@ import type { Patient, Task } from '@medplum/fhirtypes';
  * Solicitudes de turno del portal (modelo de "solicitud"): el paciente pide y acá
  * Recepción confirma. Lista los Task pendientes (`code=solicitud-turno`,
  * `status=requested`); cada uno se atiende (ir a Atender para reservar con los bots)
- * y luego se marca resuelto. La reserva sigue pasando por los bots (reglas).
+ * y luego se marca resuelto. La reserva sigue pasando por los bots (reglas), y al
+ * reservar el bot COMPLETA la solicitud solo, así la card desaparece de acá sin
+ * tocar nada (tiempo real por WebSocket + polling de respaldo, como la campanita).
  */
+
+const POLL_MS = 30_000;
 const fmtFecha = new Intl.DateTimeFormat('es-AR', {
   day: '2-digit',
   month: '2-digit',
@@ -32,23 +36,18 @@ export function Solicitudes({ onAtender }: { onAtender: (pacienteId: string) => 
   const [nombres, setNombres] = useState<Map<string, string>>(new Map());
   const [resolviendo, setResolviendo] = useState<string>();
 
-  useEffect(() => {
-    let vivo = true;
+  const cargar = useCallback((): void => {
     medplum
-      .searchResources('Task', 'code=solicitud-turno&status=requested&_sort=-_lastUpdated&_count=100')
+      .searchResources('Task', 'code=solicitud-turno&status=requested&_sort=-_lastUpdated&_count=100', {
+        cache: 'no-cache',
+      })
       .then(async (ts) => {
-        if (!vivo) {
-          return;
-        }
         setTasks(ts);
         const ids = [...new Set(ts.map(pacienteIdDeTask).filter((x): x is string => Boolean(x)))];
         if (ids.length > 0) {
           const pacientes = await medplum
             .searchResources('Patient', { _id: ids.join(','), _count: ids.length })
             .catch(() => [] as Patient[]);
-          if (!vivo) {
-            return;
-          }
           const m = new Map<string, string>();
           for (const p of pacientes) {
             if (p.id) {
@@ -59,10 +58,25 @@ export function Solicitudes({ onAtender }: { onAtender: (pacienteId: string) => 
         }
       })
       .catch((err) => notifications.show({ color: 'red', title: 'Error', message: String(err?.message ?? err) }));
-    return () => {
-      vivo = false;
-    };
   }, [medplum]);
+
+  // Carga inicial + tiempo real (WebSocket) + polling/foco de respaldo: una
+  // solicitud nueva aparece sola, y la resuelta (por el bot o a mano) desaparece.
+  useEffect(() => {
+    cargar();
+    const interval = window.setInterval(cargar, POLL_MS);
+    const onFocus = (): void => cargar();
+    window.addEventListener('focus', onFocus);
+    return () => {
+      window.clearInterval(interval);
+      window.removeEventListener('focus', onFocus);
+    };
+  }, [cargar]);
+
+  useSubscription('Task?code=solicitud-turno', cargar, {
+    onError: () => undefined,
+    onWebSocketClose: () => undefined,
+  });
 
   const marcarResuelta = async (t: Task): Promise<void> => {
     setResolviendo(t.id);
