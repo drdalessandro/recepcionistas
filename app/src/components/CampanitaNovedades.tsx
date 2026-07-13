@@ -20,7 +20,14 @@ function esMensajeNoLeido(c: Communication): boolean {
   return Boolean(c.sender?.reference?.startsWith('Patient/')) && !c.received;
 }
 
-export function CampanitaNovedades({ onVista }: { onVista: (v: Vista) => void }): JSX.Element {
+export function CampanitaNovedades({
+  onVista,
+  onMensajesSinLeer,
+}: {
+  onVista: (v: Vista) => void;
+  /** Avisa al Shell cuántos mensajes de pacientes hay sin leer (badge de la pestaña Mensajes). */
+  onMensajesSinLeer?: (n: number) => void;
+}): JSX.Element {
   const medplum = useMedplum();
   const [abierta, setAbierta] = useState(false);
   const [solicitudes, setSolicitudes] = useState(0);
@@ -43,9 +50,13 @@ export function CampanitaNovedades({ onVista }: { onVista: (v: Vista) => void })
         'part-of:missing=false&status=in-progress&received:missing=true&_count=100',
         { cache: 'no-cache' },
       )
-      .then((ms) => setMensajes(ms.filter(esMensajeNoLeido).length))
+      .then((ms) => {
+        const n = ms.filter(esMensajeNoLeido).length;
+        setMensajes(n);
+        onMensajesSinLeer?.(n);
+      })
       .catch(() => undefined);
-  }, [medplum]);
+  }, [medplum, onMensajesSinLeer]);
 
   useEffect(() => {
     refrescar();

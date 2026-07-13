@@ -137,6 +137,7 @@ export async function cargarProximos(dias: number): Promise<DiaAgenda[]> {
       servicio: a.description ?? 'Turno',
       paciente: (pacienteId && nombrePaciente.get(pacienteId)) || '',
       estado: a.status ?? 'booked',
+      ocupantes: a.extension?.find((e) => e.url === EXT.ocupantes)?.valueInteger ?? 1,
     });
   }
 

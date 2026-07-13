@@ -1,6 +1,7 @@
-import type { ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import {
   AppShell,
+  Badge,
   Group,
   Title,
   SegmentedControl,
@@ -29,6 +30,7 @@ export function Shell({ vista, onVista, children }: ShellProps): JSX.Element {
   const { setColorScheme } = useMantineColorScheme();
   const esquema = useComputedColorScheme('light', { getInitialValueInEffect: true });
   const oscuro = esquema === 'dark';
+  const [mensajesSinLeer, setMensajesSinLeer] = useState(0);
 
   return (
     <AppShell header={{ height: 64 }} padding="md">
@@ -49,7 +51,7 @@ export function Shell({ vista, onVista, children }: ShellProps): JSX.Element {
             data={[
               { value: 'agenda', label: segLabel(<IconCalendarEvent size={16} />, 'Agenda') },
               { value: 'solicitudes', label: segLabel(<IconInbox size={16} />, 'Solicitudes') },
-              { value: 'mensajes', label: segLabel(<IconMessages size={16} />, 'Mensajes') },
+              { value: 'mensajes', label: segLabel(<IconMessages size={16} />, 'Mensajes', mensajesSinLeer) },
               { value: 'planes', label: segLabel(<IconLicense size={16} />, 'Planes y sesiones') },
               { value: 'atender', label: segLabel(<IconUserHeart size={16} />, 'Atender paciente') },
               { value: 'reportes', label: segLabel(<IconChartBar size={16} />, 'Reportes') },
@@ -60,7 +62,7 @@ export function Shell({ vista, onVista, children }: ShellProps): JSX.Element {
             <Text size="sm" visibleFrom="sm">
               {profile ? getDisplayString(profile) : ''}
             </Text>
-            <CampanitaNovedades onVista={onVista} />
+            <CampanitaNovedades onVista={onVista} onMensajesSinLeer={setMensajesSinLeer} />
             <ActionIcon
               variant="default"
               size="lg"
@@ -87,11 +89,16 @@ export function Shell({ vista, onVista, children }: ShellProps): JSX.Element {
   );
 }
 
-function segLabel(icon: ReactNode, label: string): ReactNode {
+function segLabel(icon: ReactNode, label: string, sinLeer = 0): ReactNode {
   return (
     <Group gap={6} wrap="nowrap">
       {icon}
       <span>{label}</span>
+      {sinLeer > 0 && (
+        <Badge size="sm" circle color="teal" variant="filled">
+          {sinLeer > 9 ? '9+' : sinLeer}
+        </Badge>
+      )}
     </Group>
   );
 }

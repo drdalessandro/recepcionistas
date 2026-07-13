@@ -52,11 +52,20 @@ function texto(c: Communication): string {
   return c.payload?.find((p) => p.contentString)?.contentString ?? '';
 }
 
+/** Resumen estilo WhatsApp de un hilo: último mensaje + cantidad sin leer. */
+interface ResumenHilo {
+  ultimoTexto: string;
+  ultimoSent: string;
+  /** Mensajes del paciente que Recepción todavía no abrió. */
+  sinLeer: number;
+}
+
 export function Mensajes(): JSX.Element {
   const medplum = useMedplum();
   const profile = useMedplumProfile();
   const [estado, setEstado] = useState<'in-progress' | 'completed'>('in-progress');
   const [hilos, setHilos] = useState<Communication[]>();
+  const [resumen, setResumen] = useState<Map<string, ResumenHilo>>(new Map());
   const [nombres, setNombres] = useState<Map<string, string>>(new Map());
   const [hiloId, setHiloId] = useState<string>();
   const [mensajes, setMensajes] = useState<Communication[]>();
@@ -66,6 +75,13 @@ export function Mensajes(): JSX.Element {
   const viewportRef = useRef<HTMLDivElement>(null);
 
   const hilo = hilos?.find((h) => h.id === hiloId);
+  const totalSinLeer = hilos?.reduce((acc, t) => acc + (resumen.get(t.id ?? '')?.sinLeer ?? 0), 0) ?? 0;
+  // Orden estilo WhatsApp: por último mensaje (los hilos sin hijos caen al final por lastUpdated).
+  const hilosOrdenados = [...(hilos ?? [])].sort((a, b) => {
+    const ta = resumen.get(a.id ?? '')?.ultimoSent || a.meta?.lastUpdated || '';
+    const tb = resumen.get(b.id ?? '')?.ultimoSent || b.meta?.lastUpdated || '';
+    return tb.localeCompare(ta);
+  });
 
   const cargarHilos = useCallback((): void => {
     // Solo topics con mensajes (mismo criterio que el inbox del portal).
@@ -77,6 +93,31 @@ export function Mensajes(): JSX.Element {
       )
       .then(async (ts) => {
         setHilos(ts);
+        // Últimos mensajes de todos los hilos (una sola búsqueda): alimentan la
+        // vista previa, el orden por actividad y el contador de no leídos.
+        medplum
+          .searchResources('Communication', 'part-of:missing=false&_sort=-sent&_count=250', { cache: 'no-cache' })
+          .then((hijos) => {
+            const m = new Map<string, ResumenHilo>();
+            for (const c of hijos) {
+              const padre = c.partOf?.[0]?.reference?.split('/')[1];
+              if (!padre) {
+                continue;
+              }
+              const r = m.get(padre) ?? { ultimoTexto: '', ultimoSent: '', sinLeer: 0 };
+              if (!r.ultimoSent) {
+                // Vienen ordenados de más nuevo a más viejo: el primero es el último mensaje.
+                r.ultimoTexto = texto(c);
+                r.ultimoSent = c.sent ?? c.meta?.lastUpdated ?? '';
+              }
+              if (c.sender?.reference?.startsWith('Patient/') && !c.received) {
+                r.sinLeer++;
+              }
+              m.set(padre, r);
+            }
+            setResumen(m);
+          })
+          .catch(() => undefined);
         const ids = [
           ...new Set(
             ts
@@ -115,6 +156,16 @@ export function Mensajes(): JSX.Element {
               medplum.updateResource<Communication>({ ...m, received: ahora }).catch(() => undefined);
             }
           }
+          // El hilo abierto ya no tiene mensajes sin leer: apagar su badge al toque.
+          setResumen((prev) => {
+            const r = prev.get(id);
+            if (!r?.sinLeer) {
+              return prev;
+            }
+            const n = new Map(prev);
+            n.set(id, { ...r, sinLeer: 0 });
+            return n;
+          });
         })
         .catch((err) => notifications.show({ color: 'red', title: 'Error', message: String(err?.message ?? err) }));
     },
@@ -201,6 +252,11 @@ export function Mensajes(): JSX.Element {
               {hilos.length} {estado === 'in-progress' ? 'abiertas' : 'cerradas'}
             </Badge>
           )}
+          {totalSinLeer > 0 && (
+            <Badge color="teal" variant="filled">
+              {totalSinLeer} sin leer
+            </Badge>
+          )}
         </Group>
         <Group gap="xs">
           <SegmentedControl
@@ -238,27 +294,44 @@ export function Mensajes(): JSX.Element {
                 escriba desde el portal, aparece acá.
               </Text>
             ) : (
-              hilos.map((t) => (
-                <Box
-                  key={t.id}
-                  p="sm"
-                  style={{ cursor: 'pointer', borderBottom: '1px solid var(--mantine-color-default-border)' }}
-                  bg={t.id === hiloId ? 'var(--mantine-color-default-hover)' : undefined}
-                  onClick={() => setHiloId(t.id)}
-                >
-                  <Group justify="space-between" wrap="nowrap" gap="xs">
-                    <Text fw={600} size="sm" truncate>
-                      {nombreDe(t)}
-                    </Text>
-                    <Text size="xs" c="dimmed" style={{ whiteSpace: 'nowrap' }}>
-                      {t.meta?.lastUpdated ? fmtHora.format(new Date(t.meta.lastUpdated)) : ''}
-                    </Text>
-                  </Group>
-                  <Text size="sm" c="dimmed" truncate>
-                    {asunto(t)}
-                  </Text>
-                </Box>
-              ))
+              hilosOrdenados.map((t) => {
+                const r = resumen.get(t.id ?? '');
+                const sinLeer = r?.sinLeer ?? 0;
+                const hora = r?.ultimoSent || t.meta?.lastUpdated;
+                return (
+                  <Box
+                    key={t.id}
+                    p="sm"
+                    style={{ cursor: 'pointer', borderBottom: '1px solid var(--mantine-color-default-border)' }}
+                    bg={t.id === hiloId ? 'var(--mantine-color-default-hover)' : undefined}
+                    onClick={() => setHiloId(t.id)}
+                  >
+                    <Group justify="space-between" wrap="nowrap" gap="xs">
+                      <Text fw={sinLeer > 0 ? 700 : 600} size="sm" truncate>
+                        {nombreDe(t)}
+                      </Text>
+                      <Text
+                        size="xs"
+                        c={sinLeer > 0 ? 'teal' : 'dimmed'}
+                        fw={sinLeer > 0 ? 700 : undefined}
+                        style={{ whiteSpace: 'nowrap' }}
+                      >
+                        {hora ? fmtHora.format(new Date(hora)) : ''}
+                      </Text>
+                    </Group>
+                    <Group justify="space-between" wrap="nowrap" gap="xs">
+                      <Text size="sm" c={sinLeer > 0 ? undefined : 'dimmed'} fw={sinLeer > 0 ? 600 : undefined} truncate>
+                        {r?.ultimoTexto || asunto(t)}
+                      </Text>
+                      {sinLeer > 0 && (
+                        <Badge color="teal" variant="filled" size="md" circle>
+                          {sinLeer > 9 ? '9+' : sinLeer}
+                        </Badge>
+                      )}
+                    </Group>
+                  </Box>
+                );
+              })
             )}
           </ScrollArea>
         </Card>
