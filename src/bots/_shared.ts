@@ -255,7 +255,9 @@ export async function cargarReservasDelDia(medplum: MedplumClient, dia: Date): P
     if (!codigo || !s.start || !s.end || s.start > finDia.toISOString()) {
       continue;
     }
-    reservas.push({ recursoCodigo: codigo, inicio: new Date(s.start), fin: new Date(s.end) });
+    // Personas de la reserva (Slots viejos sin la extensión cuentan como 1).
+    const ocupantes = s.extension?.find((x) => x.url === EXT.ocupantes)?.valueInteger ?? 1;
+    reservas.push({ recursoCodigo: codigo, inicio: new Date(s.start), fin: new Date(s.end), ocupantes });
   }
   return reservas;
 }

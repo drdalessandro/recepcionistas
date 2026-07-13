@@ -30,12 +30,14 @@ import {
   recomendarHbotPrevio,
   validarBloqueoAdministrativo,
   validarContraindicaciones,
+  validarMinimoGrupal,
   validarPrescripcion,
   validarRecursos,
   validarVentanaReserva,
   type ReservaRecurso,
   type ResultadoValidacion,
 } from '../lib/reglas-turno.js';
+import { RECURSOS_POR_CODIGO } from '../config/recursos.js';
 
 export interface EntradaReserva {
   pacienteRef: string; // "Patient/123"
@@ -69,6 +71,8 @@ export interface ContextoReserva {
   inicio: Date;
   fin: Date;
   recursoCodigo: string;
+  /** Personas de esta reserva (biplaza 1-2, multiplaza 1-6). Default 1. */
+  ocupantes?: number;
   contraindicacionesActivas: string[];
   prescripcionActiva: boolean;
   autorizacionMedica: boolean;
@@ -101,8 +105,20 @@ export function validarReserva(ctx: ContextoReserva): ResultadoValidacion {
     }),
   );
 
-  const nueva: ReservaRecurso = { recursoCodigo: ctx.recursoCodigo, inicio: ctx.inicio, fin: ctx.fin };
+  const ocupantes = ctx.ocupantes ?? 1;
+  const capacidad = RECURSOS_POR_CODIGO.get(ctx.recursoCodigo)?.capacidad ?? 1;
+  if (ocupantes > capacidad) {
+    partes.push({
+      ok: false,
+      bloqueos: [{ regla: 'R-07', nivel: 'bloqueo', mensaje: `El recurso ${ctx.recursoCodigo} admite hasta ${capacidad} personas por reserva.` }],
+      advertencias: [],
+    });
+  }
+
+  const nueva: ReservaRecurso = { recursoCodigo: ctx.recursoCodigo, inicio: ctx.inicio, fin: ctx.fin, ocupantes };
   partes.push(validarRecursos([...ctx.reservasExistentes, nueva]));
+  // Mínimo operativo de sesiones grupales (Multiplaza 3): advierte, no bloquea.
+  partes.push(validarMinimoGrupal([...ctx.reservasExistentes, nueva], nueva));
 
   if (ctx.perfil) {
     partes.push(validarVentanaReserva(ctx.perfil, ctx.ahora, ctx.inicio));
@@ -135,6 +151,7 @@ export async function handler(
     inicio,
     fin,
     recursoCodigo: e.recursoCodigo,
+    ocupantes: e.ocupantes,
     contraindicacionesActivas,
     prescripcionActiva: e.prescripcionActiva ?? false,
     autorizacionMedica: e.autorizacionMedica ?? false,
@@ -180,7 +197,10 @@ export async function handler(
     schedule: { reference: `Schedule/${scheduleId}` },
     start: inicio.toISOString(),
     end: fin.toISOString(),
-    extension: [{ url: EXT.recursoFisico, valueString: e.recursoCodigo }],
+    extension: [
+      { url: EXT.recursoFisico, valueString: e.recursoCodigo },
+      { url: EXT.ocupantes, valueInteger: e.ocupantes ?? 1 },
+    ],
   });
 
   const participant: AppointmentParticipant[] = [{ actor: { reference: e.pacienteRef }, status: 'accepted' }];

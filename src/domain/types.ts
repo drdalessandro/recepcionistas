@@ -154,6 +154,17 @@ export interface RecursoFisico {
   /** Capacidad máxima de personas en simultáneo. */
   capacidad: number;
   /**
+   * Una reserva ocupa el recurso COMPLETO aunque traiga menos personas que la
+   * capacidad (Biplaza y gabinetes Recovery: 1 o 2 personas de la MISMA reserva;
+   * nunca desconocidos compartiendo).
+   */
+  reservaExclusiva?: boolean;
+  /**
+   * Mínimo de personas para que la sesión opere (Multiplaza: 3, del Manual).
+   * Reservar por debajo NO bloquea: genera advertencia para la recepción.
+   */
+  minimoPersonas?: number;
+  /**
    * Códigos de equipos/recursos que comparte (cuello de botella de agenda).
    * Ej.: los gabinetes Recovery Pro comparten las 2 tumbonas Red Light.
    */

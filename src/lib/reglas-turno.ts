@@ -151,15 +151,27 @@ export interface ReservaRecurso {
   recursoCodigo: string;
   inicio: Date;
   fin: Date;
+  /** Personas que trae ESTA reserva (default 1). Multiplaza suma por personas. */
+  ocupantes?: number;
   etiqueta?: string;
 }
 
-/** Máximo de reservas simultáneas en un conjunto de intervalos (barrido). */
-function maxConcurrentes(reservas: ReservaRecurso[]): number {
+/**
+ * Peso de una reserva contra la capacidad del recurso, en personas.
+ * Se acota a la capacidad: una reserva nunca pesa más que el puesto entero
+ * (p. ej. IHHT pareja —ocupantes 2— sobre un puesto de capacidad 1 lo llena).
+ */
+function pesoPersonas(r: ReservaRecurso, capacidad: number): number {
+  return Math.min(Math.max(r.ocupantes ?? 1, 1), capacidad);
+}
+
+/** Máximo simultáneo (barrido), pesando cada reserva con `peso(r)`. */
+function maxConcurrentes(reservas: ReservaRecurso[], peso: (r: ReservaRecurso) => number = () => 1): number {
   const eventos: Array<{ t: number; delta: number }> = [];
   for (const r of reservas) {
-    eventos.push({ t: r.inicio.getTime(), delta: 1 });
-    eventos.push({ t: r.fin.getTime(), delta: -1 });
+    const p = peso(r);
+    eventos.push({ t: r.inicio.getTime(), delta: p });
+    eventos.push({ t: r.fin.getTime(), delta: -p });
   }
   // Cierres antes que aperturas al mismo instante (un turno termina justo cuando otro arranca).
   eventos.sort((a, b) => a.t - b.t || a.delta - b.delta);
@@ -175,8 +187,11 @@ function maxConcurrentes(reservas: ReservaRecurso[]): number {
 }
 
 /**
- * No se puede exceder la capacidad de un mismo recurso físico en una franja.
- * (HBOT multiplaza cap 6, biplaza 2, el resto 1.)
+ * No se puede exceder la capacidad de un recurso físico en una franja.
+ * - Recursos de RESERVA EXCLUSIVA (Biplaza, gabinetes Recovery): una reserva
+ *   toma el recurso completo; la segunda que solape bloquea, sin importar personas.
+ * - Resto (Multiplaza cap 6): se suman las PERSONAS (`ocupantes`) de las
+ *   reservas solapadas contra la capacidad.
  */
 export function validarCapacidadRecurso(reservas: ReservaRecurso[]): ResultadoValidacion {
   const issues: Issue[] = [];
@@ -187,16 +202,51 @@ export function validarCapacidadRecurso(reservas: ReservaRecurso[]): ResultadoVa
     porRecurso.set(r.recursoCodigo, arr);
   }
   for (const [codigo, arr] of porRecurso) {
-    const capacidad = RECURSOS_POR_CODIGO.get(codigo)?.capacidad ?? 1;
-    if (maxConcurrentes(arr) > capacidad) {
+    const recurso = RECURSOS_POR_CODIGO.get(codigo);
+    const capacidad = recurso?.capacidad ?? 1;
+    if (recurso?.reservaExclusiva) {
+      if (maxConcurrentes(arr) > 1) {
+        issues.push({
+          regla: 'R-07',
+          nivel: 'bloqueo',
+          mensaje: `${recurso.nombre} es de reserva exclusiva: ya hay una reserva en esa franja.`,
+        });
+      }
+    } else if (maxConcurrentes(arr, (r) => pesoPersonas(r, capacidad)) > capacidad) {
       issues.push({
         regla: 'R-07',
         nivel: 'bloqueo',
-        mensaje: `Se excede la capacidad del recurso ${codigo} (máx ${capacidad}).`,
+        mensaje: `Se excede la capacidad del recurso ${codigo} (máx ${capacidad} personas).`,
       });
     }
   }
   return resultado(issues);
+}
+
+/**
+ * Mínimo operativo de una sesión grupal (Multiplaza: 3 personas, del Manual).
+ * NO bloquea: advierte a la recepción que la sesión todavía no llega al mínimo,
+ * contando las personas de todas las reservas que solapan la franja de `nueva`.
+ */
+export function validarMinimoGrupal(reservas: ReservaRecurso[], nueva: ReservaRecurso): ResultadoValidacion {
+  const recurso = RECURSOS_POR_CODIGO.get(nueva.recursoCodigo);
+  const minimo = recurso?.minimoPersonas;
+  if (!recurso || !minimo) {
+    return resultado([]);
+  }
+  const personas = reservas
+    .filter((r) => r.recursoCodigo === nueva.recursoCodigo && r.inicio < nueva.fin && nueva.inicio < r.fin)
+    .reduce((acc, r) => acc + pesoPersonas(r, recurso.capacidad), 0);
+  if (personas < minimo) {
+    return resultado([
+      {
+        regla: 'R-07',
+        nivel: 'advertencia',
+        mensaje: `${recurso.nombre}: la sesión necesita mínimo ${minimo} personas y por ahora hay ${personas}. Se reserva igual; confirmar el aforo antes de la sesión.`,
+      },
+    ]);
+  }
+  return resultado([]);
 }
 
 /** Offset mínimo de inicio entre gabinetes que comparten tumbonas (Recovery Pro). */

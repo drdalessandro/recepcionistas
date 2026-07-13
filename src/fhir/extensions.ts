@@ -34,7 +34,7 @@ const SPECS: SpecExtension[] = [
   // Appointment
   { url: EXT.ordenProtocolo, nombre: 'orden-protocolo', contexto: ['Appointment'], tipoValor: 'integer', descripcion: 'Orden de ejecución dentro de un combo (HBOT primero).' },
   { url: EXT.requiereHbotPrevio, nombre: 'requiere-hbot-previo', contexto: ['Appointment'], tipoValor: 'boolean', descripcion: 'El turno se beneficia de HBOT previo.' },
-  { url: EXT.ocupantes, nombre: 'ocupantes', contexto: ['Appointment'], tipoValor: 'integer', descripcion: 'Cantidad de ocupantes (multiplaza / biplaza).' },
+  { url: EXT.ocupantes, nombre: 'ocupantes', contexto: ['Appointment', 'Slot'], tipoValor: 'integer', descripcion: 'Cantidad de ocupantes de la reserva (multiplaza / biplaza).' },
   // ActivityDefinition (catálogo)
   { url: EXT.precioUsd, nombre: 'precio-usd', contexto: ['ActivityDefinition'], tipoValor: 'decimal', descripcion: 'Precio de lista en USD.' },
   { url: EXT.reglaPricingRecurso, nombre: 'regla-pricing-recurso', contexto: ['ActivityDefinition'], tipoValor: 'code', descripcion: 'Regla de pricing del recurso.' },

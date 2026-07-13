@@ -15,12 +15,18 @@ export interface TurnoTimeline {
   paciente: string;
   /** Estado del turno (Appointment.status): booked / arrived / checked-in / fulfilled / noshow. */
   estado: string;
+  /** Personas de esta reserva (biplaza pareja = 2, multiplaza 1-6). */
+  ocupantes: number;
 }
 
 export interface SalaFila {
   codigo: string;
   nombre: string;
   comparteEquipo: boolean;
+  /** Capacidad en personas (multiplaza 6, biplaza 2, resto 1). */
+  capacidad: number;
+  /** Una reserva toma el recurso completo (biplaza, gabinetes Recovery). */
+  reservaExclusiva: boolean;
 }
 
 export interface TimelineData {
@@ -57,6 +63,8 @@ export async function cargarTimeline(fecha: Date = new Date()): Promise<Timeline
     codigo: r.codigo,
     nombre: r.nombre,
     comparteEquipo: Boolean(r.comparteCon?.length),
+    capacidad: r.capacidad,
+    reservaExclusiva: Boolean(r.reservaExclusiva),
   }));
 
   const horarioDia = HORARIO_SEMANAL.find((h) => h.dia === fecha.getDay());
@@ -124,6 +132,7 @@ export async function cargarTimeline(fecha: Date = new Date()): Promise<Timeline
       servicio: a.description ?? 'Turno',
       paciente: (pacienteId && nombrePaciente.get(pacienteId)) || '',
       estado: a.status ?? 'booked',
+      ocupantes: a.extension?.find((e) => e.url === EXT.ocupantes)?.valueInteger ?? 1,
     });
   }
 

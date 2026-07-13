@@ -14,6 +14,7 @@ function ctx(over: Partial<ContextoReserva> & { servicioCodigo: string; recursoC
     inicio,
     fin,
     recursoCodigo: over.recursoCodigo,
+    ocupantes: over.ocupantes,
     contraindicacionesActivas: over.contraindicacionesActivas ?? [],
     prescripcionActiva: over.prescripcionActiva ?? false,
     autorizacionMedica: over.autorizacionMedica ?? false,
@@ -103,6 +104,59 @@ describe('validarReserva', () => {
     );
     expect(r.ok).toBe(false);
     expect(r.bloqueos.some((b) => b.regla === 'R-07')).toBe(true);
+  });
+
+  it('Biplaza ya reservada (aunque sea 1 persona) => bloqueo: reserva exclusiva', () => {
+    const r = validarReserva(
+      ctx({
+        servicioCodigo: 'HBOT_BIPLAZA',
+        recursoCodigo: 'R_HBOT_BIPLAZA',
+        inicio: new Date('2026-06-22T09:00:00-03:00'),
+        ocupantes: 2,
+        reservasExistentes: [{ ...reserva('R_HBOT_BIPLAZA', '09:00', '10:00'), ocupantes: 1 }],
+      }),
+    );
+    expect(r.ok).toBe(false);
+    expect(r.bloqueos.some((b) => b.mensaje.includes('exclusiva'))).toBe(true);
+  });
+
+  it('Multiplaza con lugar => ok, con ADVERTENCIA de mínimo 3 si no llega', () => {
+    const r = validarReserva(
+      ctx({
+        servicioCodigo: 'HBOT_MULTIPLAZA',
+        recursoCodigo: 'R_HBOT_MULTIPLAZA',
+        inicio: new Date('2026-06-22T09:00:00-03:00'),
+        ocupantes: 2,
+      }),
+    );
+    expect(r.ok).toBe(true);
+    expect(r.advertencias.some((a) => a.mensaje.includes('mínimo 3'))).toBe(true);
+  });
+
+  it('Multiplaza llena por personas (4 + 3 > 6) => bloqueo (R-07)', () => {
+    const r = validarReserva(
+      ctx({
+        servicioCodigo: 'HBOT_MULTIPLAZA',
+        recursoCodigo: 'R_HBOT_MULTIPLAZA',
+        inicio: new Date('2026-06-22T09:00:00-03:00'),
+        ocupantes: 3,
+        reservasExistentes: [{ ...reserva('R_HBOT_MULTIPLAZA', '09:00', '10:00'), ocupantes: 4 }],
+      }),
+    );
+    expect(r.ok).toBe(false);
+  });
+
+  it('Más personas que la capacidad del recurso => bloqueo', () => {
+    const r = validarReserva(
+      ctx({
+        servicioCodigo: 'HBOT_MULTIPLAZA',
+        recursoCodigo: 'R_HBOT_MULTIPLAZA',
+        inicio: new Date('2026-06-22T09:00:00-03:00'),
+        ocupantes: 7,
+      }),
+    );
+    expect(r.ok).toBe(false);
+    expect(r.bloqueos.some((b) => b.mensaje.includes('hasta 6 personas'))).toBe(true);
   });
 
   it('Contraindicación absoluta activa => bloqueo (R-02)', () => {
