@@ -454,16 +454,22 @@ export async function crearAlertaRecepcion(
 export interface ResultadoConfirmacion {
   totalARS: number;
   senaARS: number;
+  /** 50% restante que queda como Invoice pendiente (`saldo-{appointmentId}`). */
+  saldoARS: number;
   invoiceId?: string;
+  saldoInvoiceId?: string;
   confirmados: number;
   yaConfirmado: boolean;
 }
 
 /**
- * Confirma una reserva al cobrarse la seña (50%): emite el Invoice de la seña,
- * pasa el/los turno(s) a 'booked' (combos: todos los componentes) y dispara el
- * WhatsApp de confirmación. Idempotente: si ya existe el Invoice de esa seña
- * (misma clave), no duplica ni reenvía. La usan el cobro manual y el webhook de MP.
+ * Confirma una reserva al cobrarse la seña (50%): emite el Invoice de la seña
+ * (`balanced`) Y el Invoice PENDIENTE del saldo restante (`issued`, clave
+ * `saldo-{appointmentId}`), pasa el/los turno(s) a 'booked' (combos: todos los
+ * componentes) y dispara el WhatsApp de confirmación. El saldo pendiente después
+ * se cobra en mostrador (bw-cobrar-pendiente) o con link de MP (concepto saldo).
+ * Idempotente: si ya existe el Invoice de esa seña (misma clave), no duplica ni
+ * reenvía. La usan el cobro manual y el webhook de MP.
  */
 export async function confirmarReserva(
   medplum: MedplumClient,
@@ -480,11 +486,28 @@ export async function confirmarReserva(
   const tc = opts.tc ?? (await leerTcVigente(medplum));
   const { totalARS, senaARS } = calcularSenaARS([{ tipo: itemTipo as ItemCobro['tipo'], codigo: itemCodigo }], { tc });
 
-  // Idempotencia: una sola seña por clave (pago MP o turno).
-  const invoiceKey = opts.mpPaymentId ? `mp-${opts.mpPaymentId}` : `sena-${opts.appointmentId}`;
-  const existente = await medplum.searchOne('Invoice', `identifier=${SYSTEM.invoice}|${invoiceKey}`);
+  const saldoARS = totalARS - senaARS;
+  const claveSena = `sena-${opts.appointmentId}`;
+  const claveSaldo = `saldo-${opts.appointmentId}`;
+
+  // Idempotencia: una sola seña por turno. La clave del turno se busca SIEMPRE
+  // (cubre seña manual y seña por MP); la clave mp-{paymentId} cubre reintentos
+  // del webhook e Invoices viejos que solo tienen esa clave.
+  const invoiceKey = opts.mpPaymentId ? `mp-${opts.mpPaymentId}` : claveSena;
+  const existente =
+    (await medplum.searchOne('Invoice', `identifier=${SYSTEM.invoice}|${claveSena}`)) ??
+    (opts.mpPaymentId ? await medplum.searchOne('Invoice', `identifier=${SYSTEM.invoice}|${invoiceKey}`) : undefined);
   if (existente) {
-    return { totalARS, senaARS, invoiceId: existente.id, confirmados: 0, yaConfirmado: true };
+    const saldoExistente = await medplum.searchOne('Invoice', `identifier=${SYSTEM.invoice}|${claveSaldo}`);
+    return {
+      totalARS,
+      senaARS,
+      saldoARS,
+      invoiceId: existente.id,
+      saldoInvoiceId: saldoExistente?.id,
+      confirmados: 0,
+      yaConfirmado: true,
+    };
   }
 
   // Confirmar el/los turno(s) (todos los componentes del combo si aplica).
@@ -526,7 +549,12 @@ export async function confirmarReserva(
     resourceType: 'Invoice',
     status: 'balanced',
     date: fecha,
-    identifier: [{ system: SYSTEM.invoice, value: invoiceKey }],
+    identifier: [
+      // Clave del turno SIEMPRE (permite rastrear la seña desde el Appointment,
+      // también cuando entró por MP) + la clave del pago MP si corresponde.
+      { system: SYSTEM.invoice, value: claveSena },
+      ...(opts.mpPaymentId ? [{ system: SYSTEM.invoice, value: invoiceKey }] : []),
+    ],
     ...(pacienteRef ? { subject: { reference: pacienteRef } } : {}),
     lineItem: chargeItems.length
       ? chargeItems.map((ci) => ({
@@ -548,10 +576,48 @@ export async function confirmarReserva(
     ],
   });
 
+  // El 50% restante queda como Invoice PENDIENTE (`issued`): aparece en "Pagos
+  // pendientes" de Atender y en el modal del turno, y Administración ve seña y
+  // saldo como dos Invoices del mismo turno. El ChargeItem del saldo se crea
+  // recién al cobrarse (resolverInvoicePlan), igual que las cuotas de planes.
+  let saldoInvoiceId: string | undefined;
+  if (saldoARS > 0) {
+    const saldoExistente = await medplum.searchOne('Invoice', `identifier=${SYSTEM.invoice}|${claveSaldo}`);
+    if (saldoExistente) {
+      saldoInvoiceId = saldoExistente.id;
+    } else {
+      const descripcionSaldo = `Saldo 50% · ${appt.description ?? itemCodigo}`;
+      const saldoInvoice = await medplum.createResource<Invoice>({
+        resourceType: 'Invoice',
+        status: 'issued',
+        date: fecha,
+        identifier: [{ system: SYSTEM.invoice, value: claveSaldo }],
+        ...(pacienteRef ? { subject: { reference: pacienteRef } } : {}),
+        lineItem: [
+          {
+            chargeItemCodeableConcept: { text: descripcionSaldo },
+            priceComponent: [{ type: 'base' as const, amount: { value: saldoARS, currency: 'ARS' } }],
+          },
+        ],
+        totalNet: { value: saldoARS, currency: 'ARS' },
+        totalGross: { value: saldoARS, currency: 'ARS' },
+        extension: [
+          { url: EXT.tcAplicado, valueDecimal: tc },
+          // Para crear el ChargeItem correcto (categoría / línea comercial) al cobrarse:
+          { url: EXT.itemTipo, valueCode: itemTipo },
+          { url: EXT.itemCodigo, valueString: itemCodigo },
+        ],
+      });
+      saldoInvoiceId = saldoInvoice.id;
+    }
+  }
+
   await enviarWhatsApp(medplum, secrets, {
     template: 'turno-confirmado',
     pacienteRef,
-    body: `BioWellness: ¡tu turno quedó confirmado! ${appt.description ?? ''}. Recibimos la seña de $${senaARS.toLocaleString('es-AR')}. ¡Te esperamos! 💚`,
+    body: `BioWellness: ¡tu turno quedó confirmado! ${appt.description ?? ''}. Recibimos la seña de $${senaARS.toLocaleString('es-AR')}${
+      saldoARS > 0 ? ` (saldo restante: $${saldoARS.toLocaleString('es-AR')}, se abona el día de la sesión)` : ''
+    }. ¡Te esperamos! 💚`,
   });
 
   // Campanita del portal: confirmación de la reserva + constancia del pago de la
@@ -575,7 +641,7 @@ export async function confirmarReserva(
     }. ¡Gracias!`,
   });
 
-  return { totalARS, senaARS, invoiceId: invoice.id, confirmados, yaConfirmado: false };
+  return { totalARS, senaARS, saldoARS, invoiceId: invoice.id, saldoInvoiceId, confirmados, yaConfirmado: false };
 }
 
 export interface CobroPlan {
@@ -681,7 +747,7 @@ export async function resolverInvoicePlan(
   }
 
   const pacienteRef = invoice.subject?.reference;
-  const tipo = invoice.extension?.find((e) => e.url === EXT.itemTipo)?.valueCode as 'membresia' | 'paquete' | undefined;
+  const tipo = invoice.extension?.find((e) => e.url === EXT.itemTipo)?.valueCode as TipoItemCobro | undefined;
   const planCodigo = invoice.extension?.find((e) => e.url === EXT.itemCodigo)?.valueString;
   const tc = invoice.extension?.find((e) => e.url === EXT.tcAplicado)?.valueDecimal ?? resolverTC();
   const totalARS = invoice.totalGross?.value ?? 0;

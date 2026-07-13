@@ -1,7 +1,10 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Alert, Anchor, Badge, Button, Divider, Group, Modal, NumberFormatter, Select, Stack, Text } from '@mantine/core';
+import type { Invoice } from '@medplum/fhirtypes';
+import { medplum } from '../medplum';
 import {
   cambiarEstadoTurno,
+  cobrarPendiente,
   pagarSena,
   linkMercadoPago,
   mensajeError,
@@ -10,6 +13,7 @@ import {
 } from '../lib/bots';
 import { colorEstado, labelEstado } from '../lib/estados';
 import { MEDIOS_SELECT } from '../lib/medios';
+import { SYSTEM } from '@bw/fhir/identifiers';
 import type { TurnoTimeline } from '../lib/timeline';
 
 const ACCIONES: Array<{ estado: EstadoTurno; label: string; color: string }> = [
@@ -38,11 +42,44 @@ export function TurnoModal({
   const [error, setError] = useState<string | null>(null);
   const [medioPago, setMedioPago] = useState<string | null>('efectivo');
   const [mp, setMp] = useState<ResultadoLinkMP | null>(null);
+  const [saldo, setSaldo] = useState<Invoice | null>(null);
+  const [confirmarCompletar, setConfirmarCompletar] = useState(false);
 
   const tentativo = turno?.estado === 'pending' || turno?.estado === 'proposed';
+  const saldoPendiente = saldo?.status === 'issued';
+  const saldoARS = saldo?.totalGross?.value ?? 0;
+
+  // Saldo restante del turno (Invoice `saldo-{appointmentId}` emitido al cobrar
+  // la seña). Si no existe (plan, turno viejo), no se muestra nada.
+  useEffect(() => {
+    setSaldo(null);
+    setMp(null);
+    setError(null);
+    setConfirmarCompletar(false);
+    if (!turno || turno.estado === 'pending' || turno.estado === 'proposed') {
+      return;
+    }
+    let vivo = true;
+    medplum
+      .searchOne('Invoice', `identifier=${SYSTEM.invoice}|saldo-${turno.appointmentId}`)
+      .then((inv) => {
+        if (vivo) {
+          setSaldo(inv ?? null);
+        }
+      })
+      .catch(() => undefined);
+    return () => {
+      vivo = false;
+    };
+  }, [turno]);
 
   async function cambiar(estado: EstadoTurno): Promise<void> {
     if (!turno) {
+      return;
+    }
+    // Completar con saldo impago: primer click advierte, el segundo confirma.
+    if (estado === 'fulfilled' && saldoPendiente && !confirmarCompletar) {
+      setConfirmarCompletar(true);
       return;
     }
     setCargando(estado);
@@ -79,7 +116,7 @@ export function TurnoModal({
     }
   }
 
-  async function generarLinkMP(): Promise<void> {
+  async function generarLinkMP(concepto: 'sena' | 'saldo' = 'sena'): Promise<void> {
     if (!turno) {
       return;
     }
@@ -87,7 +124,29 @@ export function TurnoModal({
     setError(null);
     setMp(null);
     try {
-      setMp(await linkMercadoPago(turno.appointmentId));
+      setMp(await linkMercadoPago(turno.appointmentId, concepto));
+    } catch (e) {
+      setError(mensajeError(e));
+    } finally {
+      setCargando(null);
+    }
+  }
+
+  async function cobrarSaldo(): Promise<void> {
+    if (!saldo?.id || !medioPago) {
+      return;
+    }
+    setCargando('saldo');
+    setError(null);
+    try {
+      const r = await cobrarPendiente(saldo.id, medioPago);
+      if (!r.ok) {
+        setError(r.mensaje ?? 'No se pudo cobrar el saldo.');
+        return;
+      }
+      setSaldo({ ...saldo, status: 'balanced' });
+      setConfirmarCompletar(false);
+      onCambiado();
     } catch (e) {
       setError(mensajeError(e));
     } finally {
@@ -130,29 +189,68 @@ export function TurnoModal({
                 <Button color="bio" loading={cargando === 'sena'} onClick={() => void registrarSena()}>
                   Registrar seña
                 </Button>
-                <Button variant="light" loading={cargando === 'mp'} onClick={() => void generarLinkMP()}>
+                <Button variant="light" loading={cargando === 'mp'} onClick={() => void generarLinkMP('sena')}>
                   Link MercadoPago
                 </Button>
               </Group>
-              {mp?.ok && mp.url && (
-                <Alert color="bio" variant="light">
-                  Link de pago:{' '}
-                  <Anchor href={mp.url} target="_blank" rel="noreferrer">
-                    abrir checkout
-                  </Anchor>
-                  {mp.senaARS !== undefined && (
-                    <Text size="sm">
-                      Seña: <NumberFormatter prefix="$ " value={mp.senaARS} thousandSeparator="." decimalSeparator="," />
-                    </Text>
-                  )}
-                </Alert>
-              )}
-              {mp && !mp.ok && (
-                <Alert color="yellow" variant="light">
-                  {mp.mensaje}
-                </Alert>
-              )}
             </>
+          )}
+
+          {/* Saldo restante (50%) del turno confirmado */}
+          {saldoPendiente && (
+            <>
+              <Divider label="Saldo restante (50%)" labelPosition="center" />
+              <Text size="sm">
+                Debe: <NumberFormatter prefix="$ " value={saldoARS} thousandSeparator="." decimalSeparator="," />
+              </Text>
+              <Group align="flex-end">
+                <Select label="Medio de pago" data={MEDIOS_SELECT} value={medioPago} onChange={setMedioPago} w={180} />
+                <Button color="bio" loading={cargando === 'saldo'} onClick={() => void cobrarSaldo()}>
+                  Cobrar saldo
+                </Button>
+                <Button variant="light" loading={cargando === 'mp'} onClick={() => void generarLinkMP('saldo')}>
+                  Link MercadoPago
+                </Button>
+              </Group>
+            </>
+          )}
+          {saldo?.status === 'balanced' && (
+            <Text size="sm" c="teal" fw={600}>
+              ✓ Saldo pagado
+            </Text>
+          )}
+
+          {confirmarCompletar && saldoPendiente && (
+            <Alert color="orange" variant="light" title="Saldo pendiente">
+              Este turno tiene un saldo de{' '}
+              <NumberFormatter prefix="$ " value={saldoARS} thousandSeparator="." decimalSeparator="," /> sin cobrar.
+              Cobralo acá arriba, o tocá «Completar igual» si corresponde dejarlo pendiente.
+            </Alert>
+          )}
+
+          {mp?.ok && mp.url && (
+            <Alert color="bio" variant="light">
+              Link de pago:{' '}
+              <Anchor href={mp.url} target="_blank" rel="noreferrer">
+                abrir checkout
+              </Anchor>
+              {(mp.montoARS ?? mp.senaARS) !== undefined && (
+                <Text size="sm">
+                  Monto:{' '}
+                  <NumberFormatter
+                    prefix="$ "
+                    value={mp.montoARS ?? mp.senaARS}
+                    thousandSeparator="."
+                    decimalSeparator=","
+                  />
+                </Text>
+              )}
+            </Alert>
+          )}
+          {mp && !mp.ok && (
+            <Alert color="yellow" variant="light">
+              {mp.mensaje}
+            </Alert>
           )}
 
           <Divider label="Estado del turno" labelPosition="center" />
@@ -165,7 +263,7 @@ export function TurnoModal({
                 loading={cargando === a.estado}
                 onClick={() => void cambiar(a.estado)}
               >
-                {a.label}
+                {a.estado === 'fulfilled' && confirmarCompletar && saldoPendiente ? 'Completar igual' : a.label}
               </Button>
             ))}
           </Group>

@@ -11,13 +11,13 @@ deployan al runtime **`awslambda`** de Medplum (configurable con la env
 |---|---|---|
 | `bw-calcular-cobro` | Calcula el cobro (USD→ARS al TC, splits) y emite `Invoice`. | `executeBot` desde el front (pantalla Atender). |
 | `bw-registrar-cobro` | **Registra** un cobro presencial: descuentos por tipo de cliente + ChargeItems + un Invoice `balanced` por medio (pago mixto = N Invoices). | `executeBot` (Atender → Cobro). |
-| `bw-cobrar-pendiente` | Cobra en recepción una cuota de plan `issued`/`cancelled`: `balanced` + ChargeItem + levanta el bloqueo R-11. | `executeBot` (Atender → Pagos pendientes). |
+| `bw-cobrar-pendiente` | Cobra en recepción un Invoice pendiente `issued`/`cancelled` — cuota de plan (`plan-…`) o **saldo de turno** (`saldo-…`, el 50% restante tras la seña): `balanced` + ChargeItem + levanta el bloqueo R-11. | `executeBot` (Atender → Pagos pendientes · modal del turno → Cobrar saldo). |
 | `bw-validar-turno` | Valida un turno (orden HBOT, contraindicaciones, prescripción, capacidad/desfasaje, ventana, saldo). | `executeBot` al reservar/confirmar. |
 | `bw-reservar-turno` | Valida y, si está OK, **crea** el turno (`Appointment` + `Slot` ocupado). | `executeBot` desde el front (Reservar turno). |
 | `bw-reservar-combo` | Agenda un **combo** en secuencia (HBOT primero), auto-asignando sala por componente. | `executeBot` desde el front (Reservar combo). |
 | `bw-estado-turno` | Check-in/out: cambia el estado del turno, gestiona el `Encounter` y libera la sala al completar/cancelar. | `executeBot` desde el front (clic en el turno). |
-| `bw-pagar-sena` | Registra la seña (50%), confirma el turno (pending→booked) y envía WhatsApp de confirmación. | `executeBot` (clic en turno tentativo). |
-| `bw-link-mercadopago` | Genera un link de MercadoPago por el monto de la seña (si está configurado el token). | `executeBot` (botón en turno tentativo). |
+| `bw-pagar-sena` | Registra la seña (50%), confirma el turno (pending→booked), **emite el Invoice pendiente del saldo restante** (`saldo-{turno}`, `issued`) y envía WhatsApp de confirmación (informa el saldo). | `executeBot` (clic en turno tentativo). |
+| `bw-link-mercadopago` | Genera un link de MercadoPago por la seña (`concepto:'sena'`, default) o por el **saldo restante** (`concepto:'saldo'`, lee el Invoice pendiente). | `executeBot` (turno tentativo → seña · turno confirmado → saldo). |
 | `bw-webhook-mercadopago` | Webhook de MP: verifica el pago contra la API de MP y confirma el turno automáticamente al acreditarse. | URL pública que llama MercadoPago. |
 | `bw-asignar-plan` | Asigna una membresía/paquete: crea el `Coverage`, emite el cobro inicial y envía WhatsApp de bienvenida. | `executeBot` desde el front (Atender → Planes). |
 | `bw-cobro-membresias` | **Cron días 1-5:** renueva cada membresía activa (reset de sesiones + cobro mensual + WhatsApp). | `cronTimer` del Bot (a diario). |

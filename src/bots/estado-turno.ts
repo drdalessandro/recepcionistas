@@ -8,6 +8,7 @@
  */
 import type { BotEvent, MedplumClient } from '@medplum/core';
 import type { Appointment, Encounter } from '@medplum/fhirtypes';
+import { SYSTEM } from '../fhir/identifiers.js';
 
 export type EstadoTurno = 'arrived' | 'checked-in' | 'fulfilled' | 'cancelled';
 
@@ -33,6 +34,15 @@ export async function handler(medplum: MedplumClient, event: BotEvent<EntradaEst
     await asegurarEncounter(medplum, appointmentId, pacienteRef);
   } else if (estado === 'fulfilled' || estado === 'cancelled') {
     await cerrarEncounter(medplum, appointmentId, estado === 'fulfilled' ? 'finished' : 'cancelled');
+  }
+
+  // Turno cancelado: el saldo pendiente (50% restante) no se debe más.
+  // (La seña ya cobrada no se toca: la política de devolución es de R-14.)
+  if (estado === 'cancelled') {
+    const saldo = await medplum.searchOne('Invoice', `identifier=${SYSTEM.invoice}|saldo-${appointmentId}`);
+    if (saldo?.status === 'issued') {
+      await medplum.updateResource({ ...saldo, status: 'cancelled' });
+    }
   }
 
   // Liberar la(s) sala(s) al terminar.

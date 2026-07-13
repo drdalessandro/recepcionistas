@@ -1,13 +1,13 @@
 /**
  * Bot · Cobrar en recepción un Invoice pendiente (`issued`).
  *
- * Cierra el circuito R-11 en el mostrador: cuando la cuota de membresía (o el
- * cobro inicial de un plan) quedó `issued` (sin MP configurado, o el paciente
- * prefiere pagar presencial), la recepcionista la cobra eligiendo el medio.
+ * Cubre dos pendientes:
+ *  - cuotas de plan (`plan-…`): cierra el circuito R-11 en el mostrador;
+ *  - saldos de turno (`saldo-…`): el 50% restante después de la seña.
  * Reutiliza `resolverInvoicePlan`: Invoice → `balanced` (monto bruto, medio
- * canónico en valueString), crea el ChargeItem del plan y LEVANTA el bloqueo de
- * reservas si lo había. También recupera un Invoice `cancelled` (regularización
- * después de un rechazo de MP).
+ * canónico en valueString), crea el ChargeItem correspondiente y LEVANTA el
+ * bloqueo de reservas si lo había. También recupera un Invoice `cancelled`
+ * (regularización después de un rechazo de MP).
  */
 import type { BotEvent, MedplumClient } from '@medplum/core';
 import { SYSTEM, esMedioPago } from '../fhir/identifiers.js';
@@ -36,8 +36,8 @@ export async function handler(
     }
     const invoice = await medplum.readResource('Invoice', e.invoiceId);
     const clave = invoice.identifier?.find((i) => i.system === SYSTEM.invoice)?.value;
-    if (!clave?.startsWith('plan-')) {
-      return { ok: false, mensaje: 'Este Invoice no es una cuota de plan pendiente.' };
+    if (!clave?.startsWith('plan-') && !clave?.startsWith('saldo-')) {
+      return { ok: false, mensaje: 'Este Invoice no es un pendiente cobrable (cuota de plan o saldo de turno).' };
     }
     const r = await resolverInvoicePlan(medplum, { clave, resultado: 'pagado', medio: e.medio });
     return { ok: r.ok, invoiceId: r.invoiceId, mensaje: r.mensaje };
