@@ -426,9 +426,9 @@ function PagosPendientes({
           medplum.searchResources('Invoice', { subject: `Patient/${paciente.id}`, status: 'cancelled', _count: 20 }),
         ]);
         if (activo) {
-          const esPlan = (i: Invoice): boolean =>
-            Boolean(i.identifier?.some((x) => x.value?.startsWith('plan-')));
-          setPendientes([...issued, ...cancelled].filter(esPlan));
+          const esCobrable = (i: Invoice): boolean =>
+            Boolean(i.identifier?.some((x) => x.value?.startsWith('plan-') || x.value?.startsWith('saldo-')));
+          setPendientes([...issued, ...cancelled].filter(esCobrable));
         }
       } catch {
         // sin permisos o sin datos: no mostrar el panel
@@ -467,7 +467,7 @@ function PagosPendientes({
     <Card withBorder radius="md" padding="lg">
       <Group gap="xs" mb="sm">
         <IconCash size={18} />
-        <Text fw={600}>Pagos pendientes del plan</Text>
+        <Text fw={600}>Pagos pendientes (planes y saldos de turno)</Text>
       </Group>
       <Stack gap="xs">
         {pendientes.map((inv) => (
@@ -758,6 +758,9 @@ function PanelCobro({ paciente }: { paciente: Patient }): JSX.Element {
   const [monto1, setMonto1] = useState<number>(0);
   const [trabajando, setTrabajando] = useState<'calcular' | 'cobrar' | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Clave idempotente del cobro: se genera UNA vez al cotizar; si la recepcionista
+  // hace doble click en "Registrar cobro" (o se reintenta), el bot deduplica.
+  const [claveCobro, setClaveCobro] = useState<string>('');
 
   const opciones = [
     { group: 'Combos', items: COMBOS.map((c) => ({ value: c.codigo, label: c.nombre })) },
@@ -782,6 +785,7 @@ function PanelCobro({ paciente }: { paciente: Patient }): JSX.Element {
         return;
       }
       setCotizacion(r);
+      setClaveCobro(`${paciente.id}-${seleccion}-${Date.now()}`);
       setMonto1(Math.floor((r.totalARS ?? 0) / 2)); // precarga 50/50 para el mixto
     } catch (e) {
       setError(mensajeError(e));
@@ -808,7 +812,7 @@ function PanelCobro({ paciente }: { paciente: Patient }): JSX.Element {
         pacienteRef: `Patient/${paciente.id}`,
         items: items(),
         medios,
-        clave: `${paciente.id}-${seleccion}-${Date.now()}`,
+        clave: claveCobro || `${paciente.id}-${seleccion}-${Date.now()}`,
       });
       if (!r.ok) {
         setError(r.mensaje ?? 'No se pudo registrar el cobro.');
@@ -817,6 +821,7 @@ function PanelCobro({ paciente }: { paciente: Patient }): JSX.Element {
       setRegistro(r);
       setCotizacion(null);
       setSeleccion(null);
+      setClaveCobro('');
     } catch (e) {
       setError(mensajeError(e));
     } finally {

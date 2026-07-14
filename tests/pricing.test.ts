@@ -192,6 +192,14 @@ describe('Seña (50%)', () => {
     expect(senaARS).toBe((364 * 1450) / 2);
   });
 
+  it('Total impar: la seña redondea y el saldo es el complemento exacto (seña + saldo = total)', () => {
+    // HBOT 165 USD a TC 1451 = ARS 239.415 (impar) => seña 119.708, saldo 119.707.
+    const { totalARS, senaARS } = calcularSenaARS([{ tipo: 'servicio', codigo: 'HBOT_MONO' }], { tc: 1451 });
+    expect(totalARS).toBe(239415);
+    expect(senaARS).toBe(119708);
+    expect(totalARS - senaARS).toBe(119707); // así lo emite confirmarReserva como Invoice de saldo
+  });
+
   it('Consulta en ARS: seña = 50% del precio fijo', () => {
     const { totalARS, senaARS } = calcularSenaARS([{ tipo: 'servicio', codigo: 'CONSULTA_MED_DALESSANDRO' }]);
     expect(totalARS).toBe(120000);

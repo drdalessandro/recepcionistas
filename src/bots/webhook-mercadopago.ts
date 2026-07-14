@@ -78,6 +78,17 @@ export async function handler(medplum: MedplumClient, event: BotEvent): Promise<
     return { ok: true, confirmado: false, status: pago.status, motivo: 'estado no terminal' };
   }
 
+  // Saldos de turno (Invoice pendiente con clave `saldo-{appointmentId}`).
+  // Un rechazo NO cancela ni bloquea (a diferencia de las cuotas de plan): el
+  // saldo sigue pendiente y se cobra en el mostrador.
+  if (ref.startsWith('saldo-')) {
+    if (pago.status === 'approved') {
+      const r = await resolverInvoicePlan(medplum, { clave: ref, resultado: 'pagado', medio: 'mercadopago' });
+      return { ok: r.ok, confirmado: true, status: 'approved', motivo: r.mensaje ?? 'saldo acreditado' };
+    }
+    return { ok: true, confirmado: false, status: pago.status, motivo: 'saldo sigue pendiente' };
+  }
+
   // Señas de turno (external_reference = appointmentId).
   if (pago.status !== 'approved') {
     return { ok: true, confirmado: false, status: pago.status };

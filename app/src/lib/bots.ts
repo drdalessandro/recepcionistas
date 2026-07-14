@@ -151,14 +151,16 @@ export async function pagarSena(appointmentId: string, medioPago: string): Promi
 export interface ResultadoLinkMP {
   ok: boolean;
   mensaje?: string;
+  /** Monto del link (seña o saldo, según concepto). */
+  montoARS?: number;
   senaARS?: number;
   url?: string;
 }
 
 /** Genera un link de MercadoPago para pagar la seña. */
-export async function linkMercadoPago(appointmentId: string): Promise<ResultadoLinkMP> {
+export async function linkMercadoPago(appointmentId: string, concepto: 'sena' | 'saldo' = 'sena'): Promise<ResultadoLinkMP> {
   const id = await botIdPorNombre('bw-link-mercadopago');
-  return (await medplum.executeBot(id, { appointmentId })) as ResultadoLinkMP;
+  return (await medplum.executeBot(id, { appointmentId, concepto })) as ResultadoLinkMP;
 }
 
 export interface AsignarPlanInput {
