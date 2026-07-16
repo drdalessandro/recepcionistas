@@ -54,7 +54,7 @@ export function Duplicados(): JSX.Element {
 
   const cargar = useCallback((): void => {
     medplum
-      .searchResources('Task', 'code=posible-duplicado&status=requested&_sort=-authoredOn&_count=100', {
+      .searchResources('Task', 'code=posible-duplicado&status=requested&_sort=-authored-on&_count=100', {
         cache: 'no-cache',
       })
       .then(async (ts) => {
