@@ -27,8 +27,8 @@ deployan al runtime **`awslambda`** de Medplum (configurable con la env
 | `bw-limpiar-demo` | **Cron:** borra los datos demo (tag `demo`) con más de 48 h. | `cronTimer` del Bot (cada ~1 h). |
 | `bw-enviar-whatsapp` | Envía WhatsApp (Twilio) y registra `Communication`. | `executeBot` por evento o manual. |
 | `bw-solicitar-turno` | **Portal:** crea una solicitud de turno (`Task` `code=solicitud-turno`) del paciente y avisa a Recepción por WhatsApp (`RECEPCION_WHATSAPP_TO`). No reserva: Recepción confirma. | `executeBot` desde el **portal** del paciente (único bot que puede ejecutar). |
-| `bw-dedup-paciente` | Subscription sobre `Patient` (create/update): detecta fichas duplicadas por email/DNI/teléfono y abre una Task `posible-duplicado`. Nunca fusiona solo. | Subscription rest-hook (ver abajo). |
-| `bw-fusionar-paciente` | Fusiona un duplicado en la ficha canónica: completa datos sin pisar, reapunta el login (ProjectMembership), inactiva+enlaza el duplicado (`replaced-by`), reasigna lo clínico del interín y cierra la Task. **Requiere membership admin.** | `executeBot` (vista Duplicados). |
+| `bw-dedup-paciente` | Subscription sobre `Patient` (create/update): detecta fichas duplicadas por email/DNI (variantes con/sin puntos)/teléfono y abre una Task `posible-duplicado`. El descarte es durable (candidatos ya revisados no se reabren). Nunca fusiona solo. | Subscription rest-hook (ver abajo). |
+| `bw-fusionar-paciente` | Fusiona un duplicado en la canónica: valida estados (no invierte fusiones viejas), inactiva+enlaza el duplicado PRIMERO (evita tareas espurias del propio dedup), completa datos sin pisar, reapunta el login, reasigna lo del interín paginando (incl. `recipient` de Communication y solicitudes de turno) y cierra la Task + cancela las espejo. **Requiere membership admin.** | `executeBot` (vista Duplicados). |
 | `bw-recordatorios` | **Cron horario:** recordatorios de turno (24h/1h) y de saldo en riesgo, por WhatsApp **y** email. | `cronTimer` del Bot (cada hora). |
 
 ## Deploy

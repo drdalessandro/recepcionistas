@@ -7,8 +7,10 @@
  * abre una Task `posible-duplicado` para que Recepción revise y fusione
  * (bw-fusionar-paciente + vista "Duplicados" — NUNCA fusión automática).
  *
- * Idempotente y silencioso: si ya hay una Task abierta para este paciente, o la
- * ficha ya está enlazada/inactiva, no hace nada. Nunca lanza.
+ * Idempotente y silencioso: si ya hay una Task abierta para este paciente no crea
+ * otra, y los candidatos que Recepción YA revisó (tarea descartada o completada)
+ * no se reabren en cada update de la ficha — solo dispara ante candidatos nuevos.
+ * Si la ficha está enlazada/inactiva, no hace nada. Nunca lanza.
  *
  * Complementa a bw-alta-paciente (que dedupea al CREAR desde Recepción): este bot
  * cubre el camino del autoregistro del portal, donde el server crea el Patient.
@@ -17,14 +19,7 @@ import type { BotEvent, MedplumClient } from '@medplum/core';
 import { getReferenceString } from '@medplum/core';
 import type { Patient, Task } from '@medplum/fhirtypes';
 import { COD, SYSTEM } from '../fhir/identifiers.js';
-
-function normEmail(v?: string): string | undefined {
-  const e = v?.trim().toLowerCase();
-  return e || undefined;
-}
-function soloDigitos(v?: string): string {
-  return (v ?? '').replace(/\D/g, '');
-}
+import { candidatosNuevos, normalizarEmail, variantesDni } from '../lib/dedup.js';
 
 export async function handler(medplum: MedplumClient, event: BotEvent<Patient>): Promise<unknown> {
   try {
@@ -33,17 +28,26 @@ export async function handler(medplum: MedplumClient, event: BotEvent<Patient>):
       return { ok: true, motivo: 'ficha inactiva o ya enlazada' };
     }
 
-    // Idempotencia: una sola tarea abierta por ficha.
-    const yaAbierta = await medplum.searchOne(
+    // Idempotencia: (a) una sola tarea abierta por ficha; (b) los candidatos ya
+    // revisados en tareas anteriores (canceladas/completadas) no se reabren.
+    const previas = await medplum.searchResources(
       'Task',
-      `code=${COD.posibleDuplicado}&status=requested&patient=${getReferenceString(p)}`,
+      `code=${COD.posibleDuplicado}&patient=${getReferenceString(p)}&_count=50`,
     );
-    if (yaAbierta) {
+    if (previas.some((t) => t.status === 'requested')) {
       return { ok: true, motivo: 'ya hay tarea abierta' };
     }
+    const yaRevisados = new Set<string>(
+      previas.flatMap((t) =>
+        (t.input ?? [])
+          .map((i) => i.valueReference?.reference)
+          .filter((r): r is string => Boolean(r?.startsWith('Patient/')))
+          .map((r) => r.slice('Patient/'.length)),
+      ),
+    );
 
-    const emails = (p.telecom ?? []).filter((t) => t.system === 'email').map((t) => normEmail(t.value));
-    const dnis = (p.identifier ?? []).map((i) => soloDigitos(i.value)).filter((v) => v.length >= 6);
+    const emails = (p.telecom ?? []).filter((t) => t.system === 'email').map((t) => normalizarEmail(t.value));
+    const documentos = (p.identifier ?? []).flatMap((i) => variantesDni(i.value));
     const telefonos = (p.telecom ?? []).filter((t) => t.system === 'phone' || t.system === 'sms');
 
     const candidatos = new Map<string, { paciente: Patient; llaves: string[] }>();
@@ -66,25 +70,33 @@ export async function handler(medplum: MedplumClient, event: BotEvent<Patient>):
         agregar(otro, `email ${email}`);
       }
     }
-    for (const dni of dnis) {
-      for (const otro of await medplum.searchResources('Patient', `identifier=${encodeURIComponent(dni)}&_count=10`)) {
-        agregar(otro, `DNI ${dni}`);
+    // La búsqueda token es EXACTA: se consultan las variantes del documento
+    // (crudo / solo dígitos / con puntos) para cubrir cómo se cargó en cada lado.
+    for (const doc of [...new Set(documentos)]) {
+      for (const otro of await medplum.searchResources('Patient', `identifier=${encodeURIComponent(doc)}&_count=10`)) {
+        agregar(otro, `DNI ${doc}`);
       }
     }
+    // `telecom=` matchea cualquier system (phone y sms; acá los emails ya se
+    // buscaron aparte y un valor de teléfono no colisiona con un email).
     for (const t of telefonos) {
       if (!t.value) {
         continue;
       }
-      for (const otro of await medplum.searchResources('Patient', `phone=${encodeURIComponent(t.value)}&_count=10`)) {
+      for (const otro of await medplum.searchResources('Patient', `telecom=${encodeURIComponent(t.value)}&_count=10`)) {
         agregar(otro, `teléfono ${t.value}`);
       }
     }
 
-    if (candidatos.size === 0) {
-      return { ok: true, duplicados: 0 };
+    const nuevos = candidatosNuevos(
+      [...candidatos.entries()].map(([id, c]) => ({ id, ...c })),
+      yaRevisados,
+    );
+    if (nuevos.length === 0) {
+      return { ok: true, duplicados: 0, motivo: candidatos.size > 0 ? 'candidatos ya revisados' : undefined };
     }
 
-    const detalle = [...candidatos.values()]
+    const detalle = nuevos
       .map((c) => {
         const n = c.paciente.name?.[0];
         const nombre = [n?.given?.join(' '), n?.family].filter(Boolean).join(' ') || c.paciente.id;
@@ -101,13 +113,13 @@ export async function handler(medplum: MedplumClient, event: BotEvent<Patient>):
       for: { reference: getReferenceString(p) },
       authoredOn: new Date().toISOString(),
       description: `Posible duplicado al registrarse: ${detalle}`,
-      input: [...candidatos.values()].map((c) => ({
+      input: nuevos.map((c) => ({
         type: { text: 'candidato' },
-        valueReference: { reference: `Patient/${c.paciente.id}`, display: c.llaves.join(', ') },
+        valueReference: { reference: `Patient/${c.id}`, display: c.llaves.join(', ') },
       })),
     });
 
-    return { ok: true, duplicados: candidatos.size, taskId: task.id };
+    return { ok: true, duplicados: nuevos.length, taskId: task.id };
   } catch (err) {
     // Bot de fondo: jamás rompe el alta/edición de la ficha que lo disparó.
     return { ok: false, mensaje: err instanceof Error ? err.message : 'dedup falló' };
