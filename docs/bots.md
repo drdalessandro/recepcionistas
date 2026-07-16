@@ -27,6 +27,8 @@ deployan al runtime **`awslambda`** de Medplum (configurable con la env
 | `bw-limpiar-demo` | **Cron:** borra los datos demo (tag `demo`) con más de 48 h. | `cronTimer` del Bot (cada ~1 h). |
 | `bw-enviar-whatsapp` | Envía WhatsApp (Twilio) y registra `Communication`. | `executeBot` por evento o manual. |
 | `bw-solicitar-turno` | **Portal:** crea una solicitud de turno (`Task` `code=solicitud-turno`) del paciente y avisa a Recepción por WhatsApp (`RECEPCION_WHATSAPP_TO`). No reserva: Recepción confirma. | `executeBot` desde el **portal** del paciente (único bot que puede ejecutar). |
+| `bw-dedup-paciente` | Subscription sobre `Patient` (create/update): detecta fichas duplicadas por email/DNI/teléfono y abre una Task `posible-duplicado`. Nunca fusiona solo. | Subscription rest-hook (ver abajo). |
+| `bw-fusionar-paciente` | Fusiona un duplicado en la ficha canónica: completa datos sin pisar, reapunta el login (ProjectMembership), inactiva+enlaza el duplicado (`replaced-by`), reasigna lo clínico del interín y cierra la Task. **Requiere membership admin.** | `executeBot` (vista Duplicados). |
 | `bw-recordatorios` | **Cron horario:** recordatorios de turno (24h/1h) y de saldo en riesgo, por WhatsApp **y** email. | `cronTimer` del Bot (cada hora). |
 
 ## Deploy
@@ -280,3 +282,40 @@ este repo escribe. Reglas:
 El front llama a los bots **por nombre** (`Bot?name=bw-calcular-cobro` →
 `executeBot`). Por eso los nombres de los bots no deben cambiarse sin actualizar
 `app/src/lib/bots.ts`.
+
+
+## Deduplicación de fichas (2 capas, decide un humano)
+
+Cuando alguien que YA tiene ficha se autoregistra en el portal, el server crea un
+`Patient` nuevo → dos fichas. El circuito: `bw-dedup-paciente` (disparado por
+Subscription sobre `Patient`) abre una Task `posible-duplicado`; Recepción la ve en
+la vista **Duplicados** y decide fusionar (`bw-fusionar-paciente`) o descartar.
+**Nunca hay fusión automática**, y la fusión no borra nada (duplicado inactivo +
+`link replaced-by` = auditable). Complementa el dedupe de `bw-alta-paciente` (alta
+manual desde Recepción).
+
+Configuración (una vez, en el admin de Medplum):
+
+1. `npm run deploy:bots` (crea/deploya los 2 bots).
+2. La ProjectMembership del bot `bw-fusionar-paciente` debe tener `admin: true`
+   (toca ProjectMemberships de pacientes).
+3. Crear la Subscription — ⚠️ el endpoint lleva el UUID REAL del bot, **sin `<` ni `>`**:
+
+```json
+{
+  "resourceType": "Subscription",
+  "status": "active",
+  "reason": "Detección de fichas duplicadas al registrarse/completar datos",
+  "criteria": "Patient",
+  "channel": { "type": "rest-hook", "endpoint": "Bot/UUID-DE-bw-dedup-paciente" }
+}
+```
+
+Prueba end-to-end: (1) crear ficha "Ana Pérez" en Recepción con email y DNI;
+(2) autoregistrarse en el portal con ese email → segunda ficha; (3) en segundos
+aparece la Task en Duplicados (coincidencia por email); (4) completar el wizard del
+portal con el DNI → el update re-dispara el bot y sigue habiendo UNA tarea
+(idempotencia); (5) fusionar eligiendo la ficha de Recepción → el login de Ana ve
+la historia vieja, la ficha nueva queda `active=false` con `link replaced-by`, lo
+creado en el interín apunta a la canónica y la Task queda `completed`;
+(6) regresión: un email inédito NO genera tarea.

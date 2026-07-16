@@ -4,6 +4,7 @@ import { SignInForm, useMedplumProfile } from '@medplum/react';
 import { Shell, type Vista } from './components/Shell';
 import { AgendaDelDia } from './pages/AgendaDelDia';
 import { Solicitudes } from './pages/Solicitudes';
+import { Duplicados } from './pages/Duplicados';
 import { Mensajes } from './pages/Mensajes';
 import { PlanesSesiones } from './pages/PlanesSesiones';
 import { Atender } from './pages/Atender';
@@ -28,6 +29,7 @@ export function App(): JSX.Element {
     <Shell vista={vista} onVista={setVista}>
       {vista === 'agenda' && <AgendaDelDia />}
       {vista === 'solicitudes' && <Solicitudes onAtender={irAtender} />}
+      {vista === 'duplicados' && <Duplicados />}
       {vista === 'mensajes' && <Mensajes />}
       {vista === 'planes' && <PlanesSesiones onAtender={irAtender} />}
       {vista === 'atender' && <Atender pacienteInicialId={atenderId} onPacienteInicialCargado={() => setAtenderId(null)} />}
