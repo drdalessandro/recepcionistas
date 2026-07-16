@@ -272,3 +272,22 @@ export async function invitarPaciente(
   const id = await botIdPorNombre('bw-invitar-paciente');
   return (await medplum.executeBot(id, { pacienteRef, canal, email })) as ResultadoInvitarPaciente;
 }
+
+export interface EntradaFusion {
+  duplicadoId: string;
+  canonicoId: string;
+  taskId?: string;
+}
+
+export interface ResultadoFusion {
+  ok: boolean;
+  mensaje?: string;
+  loginsReapuntados?: number;
+  reasignados?: number;
+}
+
+/** Fusiona una ficha duplicada en la canónica (decisión humana desde la vista Duplicados). */
+export async function fusionarPaciente(entrada: EntradaFusion): Promise<ResultadoFusion> {
+  const id = await botIdPorNombre('bw-fusionar-paciente');
+  return (await medplum.executeBot(id, entrada)) as ResultadoFusion;
+}

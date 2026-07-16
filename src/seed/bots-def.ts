@@ -29,4 +29,6 @@ export const BOTS: DefBot[] = [
   { name: 'bw-limpiar-demo', source: 'src/bots/limpiar-demo.ts', dist: 'dist/bots/limpiar-demo.js', description: 'Cron: borra los datos demo (tag demo) con más de 48 h.' },
   { name: 'bw-enviar-whatsapp', source: 'src/bots/enviar-whatsapp.ts', dist: 'dist/bots/enviar-whatsapp.js', description: 'Envía WhatsApp (Twilio) y registra Communication.' },
   { name: 'bw-solicitar-turno', source: 'src/bots/solicitar-turno.ts', dist: 'dist/bots/solicitar-turno.js', description: 'Crea una solicitud de turno (Task) desde el portal del paciente y avisa a Recepción por WhatsApp.' },
+  { name: 'bw-dedup-paciente', source: 'src/bots/dedup-paciente.ts', dist: 'dist/bots/dedup-paciente.js', description: 'Detecta fichas duplicadas (email/DNI/teléfono) y abre tarea de revisión.' },
+  { name: 'bw-fusionar-paciente', source: 'src/bots/fusionar-paciente.ts', dist: 'dist/bots/fusionar-paciente.js', description: 'Fusiona un duplicado en la ficha canónica (login, datos, recursos). Requiere admin.' },
 ];

@@ -107,6 +107,8 @@ export const SYSTEM = {
 export const COD = {
   /** Task.code de una solicitud de turno creada desde el portal del paciente. */
   solicitudTurno: 'solicitud-turno',
+  /** Task de revisión de fichas duplicadas (bw-dedup-paciente → vista Duplicados). */
+  posibleDuplicado: 'posible-duplicado',
 } as const;
 
 /** Clave del recurso de configuración de Tipo de Cambio (Basic). */
