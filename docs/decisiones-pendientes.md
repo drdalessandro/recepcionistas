@@ -55,8 +55,8 @@ Ver [`docs/app-recepcion.md`](app-recepcion.md) y [`docs/bots.md`](bots.md).
 
 | Cuenta | Para qué | Estado |
 |---|---|---|
-| WhatsApp Business (Twilio) | Confirmaciones y recordatorios. **Código listo y deployado**; falta cargar los Project Secrets (`TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_WHATSAPP_FROM`) y aprobar la plantilla de mensaje. | A gestionar (cuenta) |
-| AWS SES | Email transaccional (vía `medplum.sendEmail()`). **Código listo**; falta remitente verificado en SES. | A gestionar (cuenta) |
+| WhatsApp Business (Twilio) | ✅ **OPERATIVO** (2026-07-17): Project Secrets cargados, `whatsapp:test` recibido OK. Pendiente para producción: número WhatsApp aprobado (si hoy es sandbox, solo reciben los celulares que hicieron `join`) y plantillas aprobadas por Meta para mensajes iniciados por BW fuera de la ventana de 24 h. | Plantillas/número prod |
+| AWS SES | ✅ **OPERATIVO**: remitente `hola@medplum.com.ar` verificado (DKIM), emails llegan a bandeja principal. | Hecho |
 | MercadoPago | Cobro de membresías/sesiones (tokeniza tarjetas; no guardamos datos de tarjeta). | A gestionar |
 
 ## Infra
