@@ -107,6 +107,8 @@ export async function handler(
       template: `recordatorio-${tipo}`,
       identifier: { system: SYSTEM.communication, value: key },
       pacienteRef,
+      // Plantillas: {{1}} servicio · {{2}} hora (2h) / fecha y hora (48h).
+      variables: [descripcion, tipo === '2h' ? fmtHora.format(inicio) : fmtFechaHora.format(inicio)],
       body: cuerpo(tipo, descripcion, inicio),
     });
 
