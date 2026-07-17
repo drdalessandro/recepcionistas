@@ -21,6 +21,7 @@ import { calcularSenaARS, type ItemCobro, type LineaCobro, type TipoItemCobro } 
 import { lineaComercialDeItem } from '../lib/cobros.js';
 import { motivoNoDisponible, saldoPlan } from '../lib/planes.js';
 import type { ReservaRecurso } from '../lib/reglas-turno.js';
+import { SECRET_CONTENT_SID_GENERICO, contentVariables, nombreSecretContentSid } from '../lib/whatsapp.js';
 
 type Secrets = BotEvent['secrets'];
 
@@ -108,6 +109,12 @@ export async function enviarWhatsApp(
   params: {
     template: string;
     body: string;
+    /**
+     * Variables posicionales para la plantilla aprobada ({{1}}, {{2}}, …).
+     * Si la plantilla específica no tiene secret cargado, se usa la genérica
+     * con el body completo como única variable; sin plantillas, texto libre.
+     */
+    variables?: string[];
     pacienteRef?: string;
     to?: string;
     identifier?: { system: string; value: string };
@@ -129,6 +136,14 @@ export async function enviarWhatsApp(
 
   let status: Communication['status'] = 'preparation';
   if (to && sid && token && from) {
+    // Producción (fuera de la ventana de 24 h): plantilla aprobada por Meta.
+    // Prioridad: Content SID específico de esta plantilla → genérico ({{1}} =
+    // texto completo) → texto libre (sandbox / dentro de la ventana de 24 h).
+    const sidEspecifico = secrets[nombreSecretContentSid(params.template)]?.valueString;
+    const sidGenerico = secrets[SECRET_CONTENT_SID_GENERICO]?.valueString;
+    const contentSid = sidEspecifico ?? sidGenerico;
+    const vars = sidEspecifico && params.variables?.length ? params.variables : [params.body];
+
     const auth = Buffer.from(`${sid}:${token}`).toString('base64');
     const resp = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${sid}/Messages.json`, {
       method: 'POST',
@@ -136,7 +151,7 @@ export async function enviarWhatsApp(
       body: new URLSearchParams({
         From: from.startsWith('whatsapp:') ? from : `whatsapp:${from}`,
         To: `whatsapp:${to}`,
-        Body: params.body,
+        ...(contentSid ? { ContentSid: contentSid, ContentVariables: contentVariables(vars) } : { Body: params.body }),
       }),
     });
     status = resp.ok ? 'completed' : 'entered-in-error';
@@ -612,9 +627,13 @@ export async function confirmarReserva(
     }
   }
 
+  const saldoTexto =
+    saldoARS > 0 ? `$${saldoARS.toLocaleString('es-AR')} (se abona el día de la sesión)` : 'sin saldo pendiente';
   await enviarWhatsApp(medplum, secrets, {
     template: 'turno-confirmado',
     pacienteRef,
+    // Plantilla aprobada: {{1}} turno · {{2}} seña · {{3}} saldo (ver docs/whatsapp-plantillas.md).
+    variables: [appt.description ?? 'tu sesión', `$${senaARS.toLocaleString('es-AR')}`, saldoTexto],
     body: `BioWellness: ¡tu turno quedó confirmado! ${appt.description ?? ''}. Recibimos la seña de $${senaARS.toLocaleString('es-AR')}${
       saldoARS > 0 ? ` (saldo restante: $${saldoARS.toLocaleString('es-AR')}, se abona el día de la sesión)` : ''
     }. ¡Te esperamos! 💚`,

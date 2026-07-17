@@ -274,6 +274,9 @@ export async function handler(medplum: MedplumClient, event: BotEvent<EntradaCom
     await enviarWhatsApp(medplum, event.secrets, {
       template: consumo ? 'reserva-plan' : 'reserva-tentativa',
       pacienteRef: e.pacienteRef,
+      variables: consumo
+        ? [combo.nombre, fmtHora(inicio), String(consumo.restantes)]
+        : [combo.nombre, fmtHora(inicio)],
       body: consumo
         ? `BioWellness: ¡tu ${combo.nombre} quedó confirmado con tu membresía para las ${fmtHora(inicio)}! Te quedan ${consumo.restantes} sesiones este mes. ¡Te esperamos! 💚`
         : `BioWellness: reservamos tu ${combo.nombre} para las ${fmtHora(inicio)} (tentativo). Aboná la seña del 50% para confirmarlo. 💚`,

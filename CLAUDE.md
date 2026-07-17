@@ -73,7 +73,8 @@ está cerrado**: dashboard de saldo, pre-agenda de membresías y recordatorios
 (turnos + saldo en riesgo) implementados, testeados y deployados
 (ver [`docs/app-recepcion.md`](docs/app-recepcion.md) y [`docs/bots.md`](docs/bots.md)).
 
-Lo que queda hoy **no frena el desarrollo**: cargar los Project Secrets de
-Twilio/SES en Medplum (para que confirmaciones y recordatorios **envíen** de
-verdad; sin ellos las `Communication` quedan en `preparation`) y validar los
-pendientes clínicos/catálogo (contraindicaciones, precio del Dr. Conrado).
+Twilio y SES ya están **operativos** (Project Secrets cargados y verificados,
+2026-07: los WhatsApp y emails salen de verdad). Lo que queda hoy **no frena el
+desarrollo**: configurar los `cronTiming` de los bots (recordatorios/cobros/demo),
+aprobar la plantilla de WhatsApp para producción y validar los pendientes
+clínicos/catálogo (contraindicaciones, precio del Dr. Conrado).

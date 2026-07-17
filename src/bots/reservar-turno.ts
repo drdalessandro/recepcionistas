@@ -240,6 +240,11 @@ export async function handler(
   await enviarWhatsApp(medplum, event.secrets, {
     template: consumo ? 'reserva-plan' : 'reserva-tentativa',
     pacienteRef: e.pacienteRef,
+    // Plantillas: reserva-plan {{1}} servicio {{2}} fecha/hora {{3}} sesiones restantes ·
+    // reserva-tentativa {{1}} servicio {{2}} fecha/hora (docs/whatsapp-plantillas.md).
+    variables: consumo
+      ? [servicio.nombre, fmtFechaHora.format(inicio), String(consumo.restantes)]
+      : [servicio.nombre, fmtFechaHora.format(inicio)],
     body: consumo
       ? `BioWellness: ¡tu turno de ${servicio.nombre} quedó confirmado con tu plan para el ${fmtFechaHora.format(inicio)}! Te quedan ${consumo.restantes} sesiones. ¡Te esperamos! 💚`
       : `BioWellness: reservamos tu turno de ${servicio.nombre} para el ${fmtFechaHora.format(inicio)} (tentativo). Aboná la seña del 50% para confirmarlo. 💚`,
