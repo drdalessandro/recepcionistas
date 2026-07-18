@@ -31,4 +31,5 @@ export const BOTS: DefBot[] = [
   { name: 'bw-solicitar-turno', source: 'src/bots/solicitar-turno.ts', dist: 'dist/bots/solicitar-turno.js', description: 'Crea una solicitud de turno (Task) desde el portal del paciente y avisa a Recepción por WhatsApp.' },
   { name: 'bw-dedup-paciente', source: 'src/bots/dedup-paciente.ts', dist: 'dist/bots/dedup-paciente.js', description: 'Detecta fichas duplicadas (email/DNI/teléfono) y abre tarea de revisión.' },
   { name: 'bw-fusionar-paciente', source: 'src/bots/fusionar-paciente.ts', dist: 'dist/bots/fusionar-paciente.js', description: 'Fusiona un duplicado en la ficha canónica (login, datos, recursos). Requiere admin.' },
+  { name: 'bw-whatsapp-entrante', source: 'src/bots/whatsapp-entrante.ts', dist: 'dist/bots/whatsapp-entrante.js', description: 'Webhook de Twilio: WhatsApp del paciente → su hilo en Mensajes (por teléfono; desconocidos → alerta).' },
 ];

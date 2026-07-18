@@ -36,6 +36,7 @@ deployan al runtime **`awslambda`** de Medplum (configurable con la env
 | `bw-solicitar-turno` | **Portal:** crea una solicitud de turno (`Task` `code=solicitud-turno`) del paciente y avisa a Recepción por WhatsApp (`RECEPCION_WHATSAPP_TO`). No reserva: Recepción confirma. | `executeBot` desde el **portal** del paciente (único bot que puede ejecutar). |
 | `bw-dedup-paciente` | Subscription sobre `Patient` (create/update): detecta fichas duplicadas por email/DNI (variantes con/sin puntos)/teléfono y abre una Task `posible-duplicado`. El descarte es durable (candidatos ya revisados no se reabren). Nunca fusiona solo. | Subscription rest-hook (ver abajo). |
 | `bw-fusionar-paciente` | Fusiona un duplicado en la canónica: valida estados (no invierte fusiones viejas), inactiva+enlaza el duplicado PRIMERO (evita tareas espurias del propio dedup), completa datos sin pisar, reapunta el login, reasigna lo del interín paginando (incl. `recipient` de Communication y solicitudes de turno) y cierra la Task + cancela las espejo. **Requiere membership admin.** | `executeBot` (vista Duplicados). |
+| `bw-whatsapp-entrante` | Webhook de Twilio: un WhatsApp del paciente entra a su hilo activo de Mensajes (match por teléfono con variantes AR; número desconocido → alerta Task). Valida la firma X-Twilio-Signature. Idempotente por MessageSid. | nginx `/webhooks/twilio-whatsapp` (ver abajo). |
 | `bw-recordatorios` | **Cron horario:** recordatorios de turno (24h/1h) y de saldo en riesgo, por WhatsApp **y** email. | `cronTimer` del Bot (cada hora). |
 
 ## Deploy
@@ -326,3 +327,34 @@ portal con el DNI → el update re-dispara el bot y sigue habiendo UNA tarea
 la historia vieja, la ficha nueva queda `active=false` con `link replaced-by`, lo
 creado en el interín apunta a la canónica y la Task queda `completed`;
 (6) regresión: un email inédito NO genera tarea.
+
+
+## WhatsApp bidireccional en la bandeja de Mensajes
+
+La bandeja de Recepción y el WhatsApp del paciente son el MISMO hilo
+(patrones `externalNotifyOnMessage` + `inboundSmsActiveThreadLookup` del ejemplo
+oficial de Medplum):
+
+- **Saliente**: al responder (o abrir una conversación) en Mensajes, el texto se
+  espeja al WhatsApp del paciente vía `bw-enviar-whatsapp` (plantilla
+  `mensaje-recepcion` → secret `TWILIO_CONTENT_SID_MENSAJE_RECEPCION`, cae a la
+  genérica o a texto libre dentro de la ventana de 24 h). Fire-and-forget: si
+  Twilio falla, el mensaje igual queda en el hilo/portal.
+- **Entrante**: Twilio llama `https://api.medplum.com.ar/webhooks/twilio-whatsapp`
+  (nginx inyecta la auth, igual que MercadoPago) → `bw-whatsapp-entrante` resuelve
+  el Patient por teléfono y agrega el mensaje a su hilo activo (o abre uno
+  "WhatsApp"). Aparece al instante con el badge verde (WebSocket). Los mensajes
+  entrados por WhatsApp se marcan con 📱 en la burbuja.
+
+Configuración (una vez):
+1. `npm run deploy:bots` y completar en nginx el bloque `/webhooks/twilio-whatsapp`
+   (id de `bw-whatsapp-entrante` + el mismo BASIC_BASE64) → reload.
+2. Project Secret `TWILIO_WEBHOOK_URL` = `https://api.medplum.com.ar/webhooks/twilio-whatsapp`
+   (habilita la validación de firma; sin él, el bot no la exige).
+3. En Twilio: Messaging → Senders → WhatsApp senders → el número → **"When a
+   message comes in"** = esa URL (método POST). En sandbox: Try it out → Sandbox
+   settings, mismo campo.
+4. Prueba: mandale un WhatsApp al número desde el celular de un paciente cargado
+   → aparece en Mensajes con 📱; respondé desde la bandeja → llega el WhatsApp.
+   Un número que no está en ninguna ficha genera la alerta "WhatsApp de número
+   desconocido" (Task) en vez de perderse.

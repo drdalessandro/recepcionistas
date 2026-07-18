@@ -21,6 +21,8 @@ import { IconMessages, IconPlus, IconRefresh, IconSend } from '@tabler/icons-rea
 import { ResourceInput, useMedplum, useMedplumProfile, useSubscription } from '@medplum/react';
 import { createReference, getDisplayString, getReferenceString } from '@medplum/core';
 import type { Communication, Patient } from '@medplum/fhirtypes';
+import { EXT } from '@bw/fhir/identifiers';
+import { espejarWhatsApp } from '../lib/bots';
 
 /**
  * Bandeja de conversaciones con los pacientes del portal (recurso Communication).
@@ -218,6 +220,7 @@ export function Mensajes(): JSX.Element {
     }
     setEnviando(true);
     try {
+      const texto = respuesta.trim();
       const msg = await medplum.createResource<Communication>({
         resourceType: 'Communication',
         status: 'in-progress',
@@ -226,10 +229,15 @@ export function Mensajes(): JSX.Element {
         sender: createReference(profile) as Communication['sender'],
         ...(hilo.subject ? { recipient: [hilo.subject] as Communication['recipient'] } : {}),
         partOf: [{ reference: `Communication/${hilo.id}` }],
-        payload: [{ contentString: respuesta.trim() }],
+        payload: [{ contentString: texto }],
       });
       setMensajes((prev) => [...(prev ?? []), msg]);
       setRespuesta('');
+      // Espejo a WhatsApp: el paciente se entera aunque no entre al portal.
+      // Fire-and-forget: no bloquea el chat si Twilio falla.
+      if (hilo.subject?.reference?.startsWith('Patient/')) {
+        espejarWhatsApp(hilo.subject.reference, texto).catch(() => undefined);
+      }
     } catch (err) {
       notifications.show({ color: 'red', title: 'No se pudo enviar', message: String((err as Error)?.message ?? err) });
     } finally {
@@ -380,6 +388,7 @@ export function Mensajes(): JSX.Element {
                   <Stack gap="xs">
                     {mensajes.map((m) => {
                       const delPaciente = m.sender?.reference?.startsWith('Patient/');
+                      const viaWhatsApp = m.extension?.some((x) => x.url === EXT.canal && x.valueCode === 'whatsapp');
                       return (
                         <Paper
                           key={m.id}
@@ -394,6 +403,7 @@ export function Mensajes(): JSX.Element {
                             {texto(m)}
                           </Text>
                           <Text size="xs" c="dimmed" ta="right">
+                            {viaWhatsApp ? '📱 WhatsApp · ' : ''}
                             {m.sent ? fmtHora.format(new Date(m.sent)) : ''}
                           </Text>
                         </Paper>
@@ -487,6 +497,8 @@ function NuevaConversacion({
         partOf: [{ reference: getReferenceString(topic) }],
         payload: [{ contentString: mensaje.trim() }],
       });
+      // Espejo a WhatsApp de la primera línea de la conversación nueva.
+      espejarWhatsApp(getReferenceString(createReference(paciente)), mensaje.trim()).catch(() => undefined);
       setPaciente(undefined);
       setTema('');
       setMensaje('');
