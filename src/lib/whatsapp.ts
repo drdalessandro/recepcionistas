@@ -12,6 +12,8 @@
  * Ver docs/whatsapp-plantillas.md.
  */
 
+import { createHmac } from 'node:crypto';
+
 /** Secret de la plantilla genérica de una variable: "{{1}}" con marca. */
 export const SECRET_CONTENT_SID_GENERICO = 'TWILIO_CONTENT_SID_GENERICO';
 
@@ -26,4 +28,57 @@ export function nombreSecretContentSid(template: string): string {
  */
 export function contentVariables(vars: string[]): string {
   return JSON.stringify(Object.fromEntries(vars.map((v, i) => [String(i + 1), v])));
+}
+
+/**
+ * Variantes de un teléfono para buscar la ficha por igualdad exacta en telecom
+ * (la búsqueda FHIR no normaliza). Acepta el "From" de Twilio ("whatsapp:+549…").
+ * Para móviles argentinos (+54 9 …) genera las formas habituales de carga:
+ * con/sin "+", con/sin el 9, y el área+línea pelado (10 dígitos).
+ */
+export function variantesTelefono(valor?: string): string[] {
+  const crudo = (valor ?? '').replace(/^whatsapp:/i, '').trim();
+  const digitos = crudo.replace(/\D/g, '');
+  if (digitos.length < 8) {
+    return [];
+  }
+  const set = new Set<string>();
+  if (crudo) {
+    set.add(crudo);
+  }
+  set.add(`+${digitos}`);
+  set.add(digitos);
+  if (digitos.startsWith('549') && digitos.length === 13) {
+    const diez = digitos.slice(3); // área + línea (ej. 1169315830)
+    set.add(diez);
+    set.add(`9${diez}`);
+    set.add(`54${diez}`);
+    set.add(`+54${diez}`);
+  }
+  set.add(digitos.slice(-10));
+  return [...set].filter(Boolean);
+}
+
+/**
+ * Valida la firma `X-Twilio-Signature` de un webhook: HMAC-SHA1 en base64 del
+ * URL público + los parámetros del form ordenados alfabéticamente (clave+valor),
+ * con el Auth Token como clave. https://www.twilio.com/docs/usage/security
+ */
+export function validarFirmaTwilio(
+  urlPublica: string,
+  params: Record<string, unknown>,
+  firma: string | undefined,
+  authToken: string,
+): boolean {
+  if (!firma) {
+    return false;
+  }
+  const data =
+    urlPublica +
+    Object.keys(params)
+      .sort()
+      .map((k) => `${k}${String(params[k] ?? '')}`)
+      .join('');
+  const esperada = createHmac('sha1', authToken).update(data, 'utf8').digest('base64');
+  return esperada === firma;
 }

@@ -46,6 +46,12 @@ carga como secret se activa solo.
 | `recordatorio-48h` | `TWILIO_CONTENT_SID_RECORDATORIO_48H` | `BioWellness: te recordamos tu turno de {{1}} el {{2}}. ¡Te esperamos! 💚` | 1 servicio · 2 fecha/hora |
 | `recordatorio-2h` | `TWILIO_CONTENT_SID_RECORDATORIO_2H` | `BioWellness: ¡tu turno de {{1}} es hoy a las {{2}}! Te esperamos en un rato. 💚` | 1 servicio · 2 hora |
 
+**Espejo de la bandeja de Mensajes** (respuestas de Recepción por WhatsApp):
+
+| Plantilla (bot) | Secret | Cuerpo sugerido | Variables |
+|---|---|---|---|
+| `mensaje-recepcion` | `TWILIO_CONTENT_SID_MENSAJE_RECEPCION` | `BioWellness San Isidro: {{1}}` | 1 texto del mensaje |
+
 **El resto** (`invitacion-portal`, `plan-asignado`, `membresia-renovada`,
 `membresia-cobro-link`, `membresia-pago-rechazado`, `solicitud-turno`) usa la
 genérica con el texto completo. Si más adelante conviene estructurarlas, se crea

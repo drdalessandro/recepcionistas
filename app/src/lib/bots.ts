@@ -291,3 +291,13 @@ export async function fusionarPaciente(entrada: EntradaFusion): Promise<Resultad
   const id = await botIdPorNombre('bw-fusionar-paciente');
   return (await medplum.executeBot(id, entrada)) as ResultadoFusion;
 }
+
+/**
+ * Espeja un mensaje de la bandeja al WhatsApp del paciente (bw-enviar-whatsapp).
+ * Fire-and-forget: la respuesta ya quedó en el hilo; si el WhatsApp falla, la
+ * Communication del bot queda en preparation/entered-in-error para diagnóstico.
+ */
+export async function espejarWhatsApp(pacienteRef: string, body: string): Promise<void> {
+  const id = await botIdPorNombre('bw-enviar-whatsapp');
+  await medplum.executeBot(id, { pacienteRef, template: 'mensaje-recepcion', body });
+}
