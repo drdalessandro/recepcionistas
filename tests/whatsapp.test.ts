@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { createHmac } from 'node:crypto';
 import {
+  aE164Argentino,
   contentVariables,
   nombreSecretContentSid,
   SECRET_CONTENT_SID_GENERICO,
@@ -48,5 +49,23 @@ describe('WhatsApp — entrada (Twilio → bandeja de Mensajes)', () => {
     expect(validarFirmaTwilio(url, params, firma, 'token-secreto')).toBe(true);
     expect(validarFirmaTwilio(url, params, firma, 'otro-token')).toBe(false);
     expect(validarFirmaTwilio(url, params, undefined, 'token-secreto')).toBe(false);
+  });
+});
+
+describe('WhatsApp — salida: normalización a E.164 (Twilio exige +549…)', () => {
+  it('Cualquier forma argentina de la ficha termina en +549 + área + línea', () => {
+    expect(aE164Argentino('1169315830')).toBe('+5491169315830');
+    expect(aE164Argentino('11 6931-5830')).toBe('+5491169315830');
+    expect(aE164Argentino('01169315830')).toBe('+5491169315830');
+    expect(aE164Argentino('541169315830')).toBe('+5491169315830'); // sin el 9
+    expect(aE164Argentino('5491169315830')).toBe('+5491169315830');
+    expect(aE164Argentino('+5491169315830')).toBe('+5491169315830');
+    expect(aE164Argentino('whatsapp:+5491169315830')).toBe('+5491169315830');
+  });
+
+  it('Internacionales con + pasan tal cual; valores cortos devuelven undefined', () => {
+    expect(aE164Argentino('+14155238886')).toBe('+14155238886');
+    expect(aE164Argentino('12345')).toBeUndefined();
+    expect(aE164Argentino('')).toBeUndefined();
   });
 });
