@@ -60,9 +60,12 @@ async function probarPreferencia(): Promise<void> {
     console.log(`  ✗ MP rechazó el token (${me.status}). ¿Está vencido o mal copiado?`);
     return;
   }
-  const usuario = (await me.json()) as { nickname?: string; site_id?: string };
-  const esTest = token.startsWith('TEST-');
-  console.log(`  ✓ Token válido: ${usuario.nickname ?? '?'} (${usuario.site_id ?? '?'}) · ${esTest ? 'credenciales de PRUEBA' : '⚠️ credenciales PRODUCTIVAS (los pagos son reales)'}`);
+  const usuario = (await me.json()) as { nickname?: string; site_id?: string; tags?: string[] };
+  // MP moderno: las credenciales de prueba son las "productivas" de una CUENTA de
+  // prueba (usuario con tag test_user, nickname TESTUSER...). El prefijo TEST- es
+  // el modelo viejo. Ambos son dinero ficticio.
+  const esTest = token.startsWith('TEST-') || Boolean(usuario.tags?.includes('test_user')) || Boolean(usuario.nickname?.startsWith('TESTUSER'));
+  console.log(`  ✓ Token válido: ${usuario.nickname ?? '?'} (${usuario.site_id ?? '?'}) · ${esTest ? 'cuenta de PRUEBA (dinero ficticio)' : '⚠️ credenciales PRODUCTIVAS (los pagos son reales)'}`);
 
   const resp = await fetch('https://api.mercadopago.com/checkout/preferences', {
     method: 'POST',
