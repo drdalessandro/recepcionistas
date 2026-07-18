@@ -27,6 +27,7 @@
     "mp:ordenes": "tsx src/seed/mp-ordenes.ts",
     "whatsapp:test": "tsx src/seed/diagnostico-whatsapp.ts",
     "whatsapp:plantilla": "tsx src/seed/diagnostico-plantilla.ts",
+    "whatsapp:crear-plantillas": "tsx src/seed/crear-plantillas.ts",
     "agenda:check": "tsx src/seed/diagnostico-agenda.ts",
     "verify": "npm run typecheck && npm run test",
     "dev": "npm run dev --workspace @biowellness/recepcion-app",
