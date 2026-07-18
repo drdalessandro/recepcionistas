@@ -25,9 +25,14 @@ export function nombreSecretContentSid(template: string): string {
 /**
  * ContentVariables de Twilio: JSON con claves posicionales "1", "2", …
  * (los placeholders {{1}}, {{2}}… de la plantilla aprobada).
+ *
+ * WhatsApp NO acepta saltos de línea, tabs ni 4+ espacios seguidos dentro de una
+ * variable, ni valores vacíos (error 21656): se aplana todo a espacios simples y
+ * un valor vacío se reemplaza por un guion.
  */
 export function contentVariables(vars: string[]): string {
-  return JSON.stringify(Object.fromEntries(vars.map((v, i) => [String(i + 1), v])));
+  const limpiar = (v: string): string => v.replace(/\s+/g, ' ').trim() || '—';
+  return JSON.stringify(Object.fromEntries(vars.map((v, i) => [String(i + 1), limpiar(v)])));
 }
 
 /**

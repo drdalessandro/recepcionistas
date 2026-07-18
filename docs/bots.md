@@ -358,3 +358,8 @@ Configuración (una vez):
    → aparece en Mensajes con 📱; respondé desde la bandeja → llega el WhatsApp.
    Un número que no está en ninguna ficha genera la alerta "WhatsApp de número
    desconocido" (Task) en vez de perderse.
+
+> El bot responde a Twilio un TwiML vacío (`<Response/>`, text/xml vía Binary):
+> es lo que Twilio espera de un webhook de mensajería (JSON da error 12300).
+> El diagnóstico de cada ejecución queda en el log del bot (AuditEvent /
+> CloudWatch), no en la respuesta HTTP — un curl de prueba devuelve el XML.

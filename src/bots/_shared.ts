@@ -148,15 +148,29 @@ export async function enviarWhatsApp(
     // El destino de la ficha puede estar en cualquier formato ("11 6931-5830"):
     // Twilio exige E.164. Sin normalizar, el envío falla en silencio.
     const destino = aE164Argentino(to) ?? to;
-    const resp = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${sid}/Messages.json`, {
-      method: 'POST',
-      headers: { Authorization: `Basic ${auth}`, 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({
-        From: from.startsWith('whatsapp:') ? from : `whatsapp:${from}`,
-        To: `whatsapp:${destino}`,
-        ...(contentSid ? { ContentSid: contentSid, ContentVariables: contentVariables(vars) } : { Body: params.body }),
-      }),
-    });
+    const enviar = async (porPlantilla: boolean): Promise<Response> =>
+      fetch(`https://api.twilio.com/2010-04-01/Accounts/${sid}/Messages.json`, {
+        method: 'POST',
+        headers: { Authorization: `Basic ${auth}`, 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({
+          From: from.startsWith('whatsapp:') ? from : `whatsapp:${from}`,
+          To: `whatsapp:${destino}`,
+          ...(porPlantilla && contentSid
+            ? { ContentSid: contentSid, ContentVariables: contentVariables(vars) }
+            : { Body: params.body }),
+        }),
+      });
+
+    let resp = await enviar(Boolean(contentSid));
+    if (!resp.ok && contentSid) {
+      // Autocuración: si la plantilla falla (rechazada por Meta, sin ejemplos,
+      // variables que no matchean…), se reintenta como texto libre — que llega
+      // dentro de la ventana de 24 h. El motivo queda en el log (CloudWatch).
+      console.log(
+        `enviarWhatsApp: plantilla ${contentSid} rechazada (${resp.status}): ${(await resp.text().catch(() => '')).slice(0, 300)} — reintento como texto libre`,
+      );
+      resp = await enviar(false);
+    }
     status = resp.ok ? 'completed' : 'entered-in-error';
     if (!resp.ok) {
       // Visible en CloudWatch (Lambda): código y detalle del rechazo de Twilio.

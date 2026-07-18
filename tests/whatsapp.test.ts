@@ -24,6 +24,13 @@ describe('WhatsApp — plantillas de producción (Twilio Content API)', () => {
     expect(contentVariables([])).toBe('{}');
   });
 
+  it('contentVariables aplana saltos de línea/tabs y nunca manda vacío (error 21656 de Twilio)', () => {
+    expect(JSON.parse(contentVariables(['Buenos días!\n\nSoy Alejandro\tTest    de   espacios']))).toEqual({
+      '1': 'Buenos días! Soy Alejandro Test de espacios',
+    });
+    expect(JSON.parse(contentVariables(['', '  \n  ']))).toEqual({ '1': '—', '2': '—' });
+  });
+
   it('El secret genérico tiene el nombre esperado', () => {
     expect(SECRET_CONTENT_SID_GENERICO).toBe('TWILIO_CONTENT_SID_GENERICO');
   });

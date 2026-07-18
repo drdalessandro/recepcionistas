@@ -38,7 +38,25 @@ export interface ResultadoWhatsAppEntrante {
   mensajeId?: string;
 }
 
-export async function handler(medplum: MedplumClient, event: BotEvent): Promise<ResultadoWhatsAppEntrante> {
+/**
+ * Twilio espera TwiML (XML) como respuesta del webhook — responderle JSON genera
+ * el error 12300 en su Debugger. Medplum responde crudo con el contentType del
+ * Binary devuelto (forceRawBinaryResponse), así que el bot contesta un TwiML
+ * vacío (= "no responder nada al remitente") y el diagnóstico va al log
+ * (AuditEvent del bot / CloudWatch).
+ */
+const TWIML_VACIO = '<?xml version="1.0" encoding="UTF-8"?><Response/>';
+
+function respuestaTwiml(resultado: ResultadoWhatsAppEntrante): unknown {
+  console.log(`whatsapp-entrante: ${JSON.stringify(resultado)}`);
+  return {
+    resourceType: 'Binary',
+    contentType: 'text/xml',
+    data: Buffer.from(TWIML_VACIO, 'utf8').toString('base64'),
+  };
+}
+
+export async function handler(medplum: MedplumClient, event: BotEvent): Promise<unknown> {
   try {
     // Twilio manda application/x-www-form-urlencoded; si el server lo entregara
     // como string crudo, se parsea igual.
@@ -53,24 +71,24 @@ export async function handler(medplum: MedplumClient, event: BotEvent): Promise<
     if (authToken && urlPublica) {
       const firma = event.headers?.['x-twilio-signature'];
       if (!validarFirmaTwilio(urlPublica, e as Record<string, unknown>, typeof firma === 'string' ? firma : undefined, authToken)) {
-        return { ok: false, motivo: 'firma de Twilio inválida' };
+        return respuestaTwiml({ ok: false, motivo: 'firma de Twilio inválida' });
       }
     }
 
     if (!e.MessageSid || !e.From) {
-      return { ok: true, motivo: 'sin MessageSid/From: ignorado' };
+      return respuestaTwiml({ ok: true, motivo: 'sin MessageSid/From: ignorado' });
     }
     const texto = (e.Body ?? '').trim();
     const conAdjunto = Number(e.NumMedia ?? '0') > 0;
     if (!texto && !conAdjunto) {
-      return { ok: true, motivo: 'mensaje vacío: ignorado' };
+      return respuestaTwiml({ ok: true, motivo: 'mensaje vacío: ignorado' });
     }
 
     // Idempotencia: Twilio reintenta si no respondemos a tiempo.
     const clave = `twilio-${e.MessageSid}`;
     const yaProcesado = await medplum.searchOne('Communication', `identifier=${SYSTEM.communication}|${clave}`);
     if (yaProcesado) {
-      return { ok: true, motivo: 'ya procesado', mensajeId: yaProcesado.id };
+      return respuestaTwiml({ ok: true, motivo: 'ya procesado', mensajeId: yaProcesado.id });
     }
 
     // Paciente por teléfono: variantes exactas (la búsqueda FHIR no normaliza).
@@ -90,7 +108,7 @@ export async function handler(medplum: MedplumClient, event: BotEvent): Promise<
           conAdjunto ? ' [con adjunto]' : ''
         }. El número no coincide con ninguna ficha: crear el paciente o responder desde Twilio.`,
       });
-      return { ok: true, motivo: 'número desconocido: alerta a Recepción creada' };
+      return respuestaTwiml({ ok: true, motivo: 'número desconocido: alerta a Recepción creada' });
     }
     const pacienteRef = `Patient/${paciente.id}`;
     const ahora = new Date().toISOString();
@@ -127,8 +145,8 @@ export async function handler(medplum: MedplumClient, event: BotEvent): Promise<
       extension: [{ url: EXT.canal, valueCode: 'whatsapp' }],
     });
 
-    return { ok: true, pacienteRef, hiloId: topic.id, mensajeId: mensaje.id };
+    return respuestaTwiml({ ok: true, pacienteRef, hiloId: topic.id, mensajeId: mensaje.id });
   } catch (err) {
-    return { ok: false, motivo: err instanceof Error ? err.message : 'whatsapp-entrante falló' };
+    return respuestaTwiml({ ok: false, motivo: err instanceof Error ? err.message : 'whatsapp-entrante falló' });
   }
 }
