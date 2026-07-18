@@ -7,9 +7,14 @@
  *   npm run whatsapp:crear-plantillas
  *
  * Idempotente: si ya existe una plantilla con el mismo nombre, no la recrea
- * (solo reintenta la aprobación si nunca se pidió). Las 5 rechazadas viejas se
- * reemplazan por versiones `_v2` (el contenido en Twilio es inmutable y el
+ * (solo reintenta la aprobación si nunca se pidió). Las rechazadas viejas se
+ * reemplazan por versiones nuevas (el contenido en Twilio es inmutable y el
  * nombre rechazado queda tomado en Meta).
+ *
+ * Reglas de Meta que ya nos rechazaron plantillas (validadas acá antes de crear):
+ *  - `2388043`: cada variable necesita un valor de EJEMPLO (`variables`).
+ *  - `2388299`: el cuerpo no puede EMPEZAR ni TERMINAR con una variable —
+ *    por eso las genéricas llevan un cierre de texto fijo después de {{1}}.
  *
  * Al final imprime la tabla SID → Project Secret para cargar en Medplum.
  * Usa TWILIO_ACCOUNT_SID / TWILIO_AUTH_TOKEN del .env.
@@ -26,15 +31,15 @@ interface DefPlantilla {
 
 const PLANTILLAS: DefPlantilla[] = [
   {
-    nombre: 'biowellness_generico',
+    nombre: 'biowellness_generico_v2',
     secret: 'TWILIO_CONTENT_SID_GENERICO',
-    body: 'BioWellness San Isidro: {{1}}',
+    body: 'BioWellness San Isidro: {{1}} Cualquier duda, escribinos por acá. 💚',
     ejemplos: { '1': 'Te esperamos mañana a las 16:00 para tu sesión de HBOT.' },
   },
   {
-    nombre: 'biowellness_mensaje_recepcion',
+    nombre: 'biowellness_mensaje_recepcion_v2',
     secret: 'TWILIO_CONTENT_SID_MENSAJE_RECEPCION',
-    body: 'BioWellness San Isidro: {{1}}',
+    body: 'BioWellness San Isidro: {{1}} Podés responder por acá. 💚',
     ejemplos: { '1': 'Sí, tu turno de mañana sigue confirmado a las 16:00.' },
   },
   {
@@ -69,6 +74,25 @@ const PLANTILLAS: DefPlantilla[] = [
   },
 ];
 
+/**
+ * Reglas de Meta que rechazan la plantilla recién en la aprobación (tarde y
+ * quemando el nombre): se validan acá y la plantilla inválida NI se crea.
+ */
+function erroresDeMeta(p: DefPlantilla): string[] {
+  const errores: string[] = [];
+  const cuerpo = p.body.trim();
+  if (/^\{\{\d+\}\}/.test(cuerpo) || /\{\{\d+\}\}$/.test(cuerpo)) {
+    errores.push('el cuerpo no puede empezar ni terminar con una variable (Meta 2388299) — agregar texto fijo');
+  }
+  const usadas = new Set((cuerpo.match(/\{\{(\d+)\}\}/g) ?? []).map((m) => m.slice(2, -2)));
+  for (const v of usadas) {
+    if (!p.ejemplos[v]?.trim()) {
+      errores.push(`falta el ejemplo de la variable {{${v}}} (Meta 2388043)`);
+    }
+  }
+  return errores;
+}
+
 async function main(): Promise<void> {
   const sid = process.env.TWILIO_ACCOUNT_SID;
   const token = process.env.TWILIO_AUTH_TOKEN;
@@ -90,6 +114,13 @@ async function main(): Promise<void> {
 
   const resumen: Array<{ secret: string; sid: string; nombre: string; estado: string }> = [];
   for (const p of PLANTILLAS) {
+    const invalida = erroresDeMeta(p);
+    if (invalida.length > 0) {
+      for (const e of invalida) {
+        console.log(`✗ ${p.nombre}: ${e}`);
+      }
+      continue;
+    }
     let contentSid = existentes.get(p.nombre);
     if (contentSid) {
       console.log(`= ${p.nombre}: ya existe (${contentSid})`);

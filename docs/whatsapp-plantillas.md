@@ -34,7 +34,7 @@ carga como secret se activa solo.
 
 | Secret | Cuerpo sugerido |
 |---|---|
-| `TWILIO_CONTENT_SID_GENERICO` | `BioWellness San Isidro: {{1}}` |
+| `TWILIO_CONTENT_SID_GENERICO` | `BioWellness San Isidro: {{1}} Cualquier duda, escribinos por acá. 💚` |
 
 **Específicas con variables estructuradas** (los bots ya mandan estas variables):
 
@@ -50,7 +50,7 @@ carga como secret se activa solo.
 
 | Plantilla (bot) | Secret | Cuerpo sugerido | Variables |
 |---|---|---|---|
-| `mensaje-recepcion` | `TWILIO_CONTENT_SID_MENSAJE_RECEPCION` | `BioWellness San Isidro: {{1}}` | 1 texto del mensaje |
+| `mensaje-recepcion` | `TWILIO_CONTENT_SID_MENSAJE_RECEPCION` | `BioWellness San Isidro: {{1}} Podés responder por acá. 💚` | 1 texto del mensaje |
 
 **El resto** (`invitacion-portal`, `plan-asignado`, `membresia-renovada`,
 `membresia-cobro-link`, `membresia-pago-rechazado`, `solicitud-turno`) usa la
@@ -62,3 +62,12 @@ las plantillas sin variables estructuradas en el código se crean con un único
 > Nota Meta: los cuerpos enviados a aprobación deben coincidir con estos textos
 > (los mismos que hoy van por texto libre). Si Meta rechaza la genérica por ser
 > "demasiado variable", priorizar la aprobación de las 5 específicas.
+>
+> **Reglas de Meta que ya nos rechazaron plantillas** (por eso las plantillas se
+> crean con `npm run whatsapp:crear-plantillas`, que las valida antes de crear):
+> cada variable necesita un valor de **ejemplo** (`2388043`), y el cuerpo **no
+> puede empezar ni terminar con una variable** (`2388299`) — por eso las
+> genéricas llevan un cierre de texto fijo después de `{{1}}`. El contenido en
+> Twilio es inmutable y el nombre rechazado queda tomado en Meta: cada
+> corrección es una versión nueva (`_v2`, `_v3`, …) con su SID nuevo, y hay que
+> **actualizar el secret** para apuntar al SID de la versión aprobada.

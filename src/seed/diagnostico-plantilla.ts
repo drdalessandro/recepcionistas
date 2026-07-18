@@ -39,6 +39,10 @@ function analizarCuerpo(body: string): string[] {
   if (/\{[^{]|[^}]\}/.test(body.replace(/\{\{[^}]*\}\}/g, ''))) {
     problemas.push('hay llaves sueltas ({ o }) fuera de los placeholders — revisar llaves incompletas');
   }
+  const cuerpo = body.trim();
+  if (/^\{\{[^}]*\}\}/.test(cuerpo) || /\{\{[^}]*\}\}$/.test(cuerpo)) {
+    problemas.push('el cuerpo empieza o termina con una variable — Meta la rechaza (2388299): agregar texto fijo');
+  }
   return problemas;
 }
 
