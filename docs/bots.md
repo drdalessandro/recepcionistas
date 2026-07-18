@@ -1,5 +1,12 @@
 # Bots de Medplum
 
+> ⚠️ **Deploy SOLO con `npm run deploy:bots`.** El editor de bots del admin de
+> Medplum (botón Deploy) y el CLI `medplum bot deploy` NO bundlean los imports
+> relativos (`./_shared.js`): el bot deployado así rompe en runtime con
+> `Cannot find module '/var/task/_shared.js' imported from /var/task/user.mjs`.
+> Si aparece ese error, re-deployar con `npm run deploy:bots` lo arregla.
+
+
 Los Bots concentran la inteligencia: el front solo orquesta. Son funciones
 TypeScript que se bundlean a un único módulo CJS (`exports.handler`) y se
 deployan al runtime **`awslambda`** de Medplum (configurable con la env
