@@ -54,7 +54,10 @@ export function CampanitaNovedades({
     medplum
       .searchResources(
         'Communication',
-        'part-of:missing=false&status=in-progress&received:missing=true&_count=100',
+        // _elements=sender: solo necesitamos saber QUIÉN mandó cada mensaje sin
+        // leer (el filtro "es del paciente" se decide acá); el payload completo
+        // de cada Communication no viaja (patrón del ejemplo oficial de Medplum).
+        'part-of:missing=false&status=in-progress&received:missing=true&_elements=sender&_count=100',
         { cache: 'no-cache' },
       )
       .then((ms) => {

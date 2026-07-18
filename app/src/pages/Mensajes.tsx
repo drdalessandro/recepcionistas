@@ -18,7 +18,7 @@ import {
 } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { IconMessages, IconPlus, IconRefresh, IconSend } from '@tabler/icons-react';
-import { ResourceInput, useMedplum, useMedplumProfile } from '@medplum/react';
+import { ResourceInput, useMedplum, useMedplumProfile, useSubscription } from '@medplum/react';
 import { createReference, getDisplayString, getReferenceString } from '@medplum/core';
 import type { Communication, Patient } from '@medplum/fhirtypes';
 
@@ -28,11 +28,11 @@ import type { Communication, Patient } from '@medplum/fhirtypes';
  *   hilo = Communication topic (sin partOf, payload = asunto);
  *   mensaje = Communication hija (partOf = topic, sent obligatorio);
  *   subject SIEMPRE el Patient (la AccessPolicy del portal filtra por subject).
- * Refresco por polling (20 s); con @medplum/react 5.x y un router se puede
- * reemplazar por ThreadInbox + useSubscription (tiempo real).
+ * Tiempo real por WebSocket (useSubscription sobre Communication) con polling
+ * de respaldo cada 60 s, el mismo patrón que la campanita y Solicitudes.
  */
 
-const POLL_MS = 20_000;
+const POLL_MS = 60_000;
 
 const fmtHora = new Intl.DateTimeFormat('es-AR', {
   day: '2-digit',
@@ -172,18 +172,27 @@ export function Mensajes(): JSX.Element {
     [medplum],
   );
 
-  // Carga inicial + polling (bandeja e hilo abierto).
+  const refrescarTodo = useCallback((): void => {
+    cargarHilos();
+    if (hiloId) {
+      cargarMensajes(hiloId);
+    }
+  }, [cargarHilos, cargarMensajes, hiloId]);
+
+  // Carga inicial + polling de RESPALDO (el camino principal es el WebSocket).
   useEffect(() => {
     setHilos(undefined);
     cargarHilos();
-    const t = window.setInterval(() => {
-      cargarHilos();
-      if (hiloId) {
-        cargarMensajes(hiloId);
-      }
-    }, POLL_MS);
+    const t = window.setInterval(refrescarTodo, POLL_MS);
     return () => window.clearInterval(t);
-  }, [cargarHilos, cargarMensajes, hiloId]);
+  }, [cargarHilos, refrescarTodo]);
+
+  // Tiempo real: cualquier mensaje nuevo (del portal o de otra terminal de
+  // Recepción) refresca la bandeja y el hilo abierto al instante.
+  useSubscription('Communication?sent:missing=false', refrescarTodo, {
+    onError: () => undefined,
+    onWebSocketClose: () => undefined,
+  });
 
   useEffect(() => {
     setMensajes(undefined);
