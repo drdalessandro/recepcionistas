@@ -82,3 +82,43 @@ export function validarFirmaTwilio(
   const esperada = createHmac('sha1', authToken).update(data, 'utf8').digest('base64');
   return esperada === firma;
 }
+
+/**
+ * Normaliza un teléfono de la ficha al E.164 que exige Twilio para ENVIAR
+ * ("whatsapp:+549..."). Es el espejo de `variantesTelefono`: para entrar
+ * probamos todas las formas; para salir hay que mandar UNA, la canónica.
+ * Heurística para móviles argentinos; los internacionales con "+" pasan tal cual.
+ * Devuelve undefined si el valor no alcanza para armar un número válido.
+ */
+export function aE164Argentino(valor?: string): string | undefined {
+  const crudo = (valor ?? '').replace(/^whatsapp:/i, '').trim();
+  if (!crudo) {
+    return undefined;
+  }
+  let d = crudo.replace(/\D/g, '');
+  if (d.startsWith('00')) {
+    d = d.slice(2);
+  }
+  if (d.length < 8) {
+    return undefined;
+  }
+  if (d.startsWith('549') && d.length === 13) {
+    return `+${d}`;
+  }
+  if (d.startsWith('54') && d.length === 12) {
+    return `+549${d.slice(2)}`; // móvil cargado sin el 9
+  }
+  if (d.startsWith('9') && d.length === 11) {
+    return `+54${d}`;
+  }
+  if (d.startsWith('0') && d.length === 11) {
+    return `+549${d.slice(1)}`; // "011 6931-5830"
+  }
+  if (d.length === 10) {
+    return `+549${d}`; // área + línea pelado ("1169315830")
+  }
+  if (crudo.startsWith('+') || d.length >= 11) {
+    return `+${d}`; // internacional
+  }
+  return undefined;
+}

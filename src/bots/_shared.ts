@@ -21,7 +21,7 @@ import { calcularSenaARS, type ItemCobro, type LineaCobro, type TipoItemCobro } 
 import { lineaComercialDeItem } from '../lib/cobros.js';
 import { motivoNoDisponible, saldoPlan } from '../lib/planes.js';
 import type { ReservaRecurso } from '../lib/reglas-turno.js';
-import { SECRET_CONTENT_SID_GENERICO, contentVariables, nombreSecretContentSid } from '../lib/whatsapp.js';
+import { SECRET_CONTENT_SID_GENERICO, aE164Argentino, contentVariables, nombreSecretContentSid } from '../lib/whatsapp.js';
 
 type Secrets = BotEvent['secrets'];
 
@@ -145,16 +145,23 @@ export async function enviarWhatsApp(
     const vars = sidEspecifico && params.variables?.length ? params.variables : [params.body];
 
     const auth = Buffer.from(`${sid}:${token}`).toString('base64');
+    // El destino de la ficha puede estar en cualquier formato ("11 6931-5830"):
+    // Twilio exige E.164. Sin normalizar, el envío falla en silencio.
+    const destino = aE164Argentino(to) ?? to;
     const resp = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${sid}/Messages.json`, {
       method: 'POST',
       headers: { Authorization: `Basic ${auth}`, 'Content-Type': 'application/x-www-form-urlencoded' },
       body: new URLSearchParams({
         From: from.startsWith('whatsapp:') ? from : `whatsapp:${from}`,
-        To: `whatsapp:${to}`,
+        To: `whatsapp:${destino}`,
         ...(contentSid ? { ContentSid: contentSid, ContentVariables: contentVariables(vars) } : { Body: params.body }),
       }),
     });
     status = resp.ok ? 'completed' : 'entered-in-error';
+    if (!resp.ok) {
+      // Visible en CloudWatch (Lambda): código y detalle del rechazo de Twilio.
+      console.log(`enviarWhatsApp: Twilio respondió ${resp.status} para ${destino}: ${(await resp.text().catch(() => '')).slice(0, 300)}`);
+    }
   }
 
   return medplum.createResource<Communication>({
