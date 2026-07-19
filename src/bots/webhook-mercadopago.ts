@@ -64,7 +64,9 @@ export async function handler(medplum: MedplumClient, event: BotEvent): Promise<
   // Cuotas de membresía / paquete (Invoice pendiente con clave `plan-…`).
   if (ref.startsWith('plan-')) {
     if (pago.status === 'approved') {
-      const r = await resolverInvoicePlan(medplum, { clave: ref, resultado: 'pagado' });
+      // `secrets`: si el plan estaba pendiente (alta inicial con MP), la
+      // activación manda la bienvenida por WhatsApp.
+      const r = await resolverInvoicePlan(medplum, { clave: ref, resultado: 'pagado', secrets: event.secrets });
       return { ok: r.ok, confirmado: true, status: 'approved', motivo: r.mensaje ?? 'cuota acreditada' };
     }
     if (pago.status === 'rejected' || pago.status === 'cancelled') {
@@ -72,6 +74,7 @@ export async function handler(medplum: MedplumClient, event: BotEvent): Promise<
         clave: ref,
         resultado: 'rechazado',
         detalle: `MP: ${pago.status}${pago.status_detail ? ` (${pago.status_detail})` : ''}.`,
+        secrets: event.secrets,
       });
       return { ok: r.ok, confirmado: false, status: pago.status, motivo: r.mensaje ?? 'cuota rechazada: bloqueo R-11 aplicado' };
     }

@@ -39,7 +39,9 @@ export async function handler(
     if (!clave?.startsWith('plan-') && !clave?.startsWith('saldo-')) {
       return { ok: false, mensaje: 'Este Invoice no es un pendiente cobrable (cuota de plan o saldo de turno).' };
     }
-    const r = await resolverInvoicePlan(medplum, { clave, resultado: 'pagado', medio: e.medio });
+    // `secrets`: si era un plan pendiente de pago (alta inicial), al cobrarlo
+    // en mostrador también se activa y sale la bienvenida.
+    const r = await resolverInvoicePlan(medplum, { clave, resultado: 'pagado', medio: e.medio, secrets: event.secrets });
     return { ok: r.ok, invoiceId: r.invoiceId, mensaje: r.mensaje };
   } catch (err) {
     return { ok: false, mensaje: err instanceof Error ? err.message : 'No se pudo cobrar el pendiente.' };

@@ -179,6 +179,10 @@ export interface ResultadoAsignarPlan {
   invoiceId?: string;
   totalARS?: number;
   sesiones?: number;
+  /** true: quedó PENDIENTE de pago (MercadoPago); se activa al acreditarse. */
+  pendiente?: boolean;
+  /** Link de pago de MercadoPago (flujo pendiente). */
+  url?: string;
 }
 
 /** Asigna una membresía/paquete al paciente (crea Coverage + cobro inicial + WhatsApp). */

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { saldoPlan, motivoNoDisponible, cicloMes, debeRenovarMembresia } from '../src/lib/planes.js';
+import { saldoPlan, motivoNoDisponible, cicloMes, debeRenovarMembresia, parseClavePlan } from '../src/lib/planes.js';
 
 const AHORA = new Date('2026-06-22T10:00:00-03:00');
 
@@ -63,5 +63,29 @@ describe('cicloMes / debeRenovarMembresia (R-11)', () => {
 
   it('membresía nueva sin ciclo registrado en día 1 => renueva', () => {
     expect(debeRenovarMembresia(undefined, new Date('2026-06-01T09:00:00-03:00'))).toBe(true);
+  });
+});
+
+describe('parseClavePlan — clave del Invoice de plan (enruta la plata del webhook)', () => {
+  const UUID = '6c2d6f5c-e143-4364-b0ce-558ec413c0f2';
+
+  it('Alta inicial / paquete: plan-{coverageId}', () => {
+    expect(parseClavePlan(`plan-${UUID}`)).toEqual({ coverageId: UUID, ciclo: undefined });
+  });
+
+  it('Cuota mensual: plan-{coverageId}-{YYYY-MM}', () => {
+    expect(parseClavePlan(`plan-${UUID}-2026-07`)).toEqual({ coverageId: UUID, ciclo: '2026-07' });
+  });
+
+  it('El sufijo de ciclo no se come pedazos del UUID (termina en 12 hex, nunca -dddd-dd)', () => {
+    const conHexNumerico = '11111111-2222-3333-4444-555566667777';
+    expect(parseClavePlan(`plan-${conHexNumerico}`)).toEqual({ coverageId: conHexNumerico, ciclo: undefined });
+  });
+
+  it('Claves que no son de plan devuelven undefined (señas, saldos, basura)', () => {
+    expect(parseClavePlan(`sena-${UUID}`)).toBeUndefined();
+    expect(parseClavePlan(`saldo-${UUID}`)).toBeUndefined();
+    expect(parseClavePlan('plan-')).toBeUndefined();
+    expect(parseClavePlan('')).toBeUndefined();
   });
 });

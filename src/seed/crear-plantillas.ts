@@ -71,6 +71,16 @@ const PLANTILLAS: DefPlantilla[] = [
     },
   },
   {
+    nombre: 'biowellness_plan_link_pago',
+    secret: 'TWILIO_CONTENT_SID_PLAN_LINK_PAGO',
+    body: 'BioWellness: ¡reservamos tu {{1}}! Para activarla aboná {{2}} en este enlace: {{3}} — cuando se acredite el pago te confirmamos por acá. 💚',
+    ejemplos: {
+      '1': 'Membresía HEALTHSPAN Intensivo Individual',
+      '2': '$5.652.100',
+      '3': 'https://mpago.la/2ab3Cd4',
+    },
+  },
+  {
     nombre: 'biowellness_tentativa_vencida',
     secret: 'TWILIO_CONTENT_SID_TENTATIVA_VENCIDA',
     body: 'BioWellness: tu reserva de {{1}} del {{2}} se liberó porque no llegó la seña a tiempo. Si todavía querés venir, escribinos por acá y buscamos otro horario. 💚',

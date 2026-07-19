@@ -27,6 +27,33 @@ export interface SaldoPlan {
   disponible: boolean;
 }
 
+/** Componentes de una clave de Invoice de plan (`plan-{coverageId}[-{YYYY-MM}]`). */
+export interface ClavePlan {
+  coverageId: string;
+  /** Ciclo YYYY-MM (solo cuotas de membresía). */
+  ciclo?: string;
+}
+
+/**
+ * Parsea la clave de un Invoice de plan: `plan-{coverageId}` (alta inicial /
+ * paquete) o `plan-{coverageId}-{YYYY-MM}` (cuota mensual de membresía).
+ * Los UUID de Medplum terminan en un grupo de 12 hex, así que el sufijo
+ * `-YYYY-MM` nunca es ambiguo. Devuelve undefined si no es clave de plan.
+ */
+export function parseClavePlan(clave: string): ClavePlan | undefined {
+  if (!clave.startsWith('plan-')) {
+    return undefined;
+  }
+  let resto = clave.slice('plan-'.length);
+  let ciclo: string | undefined;
+  const m = resto.match(/-(\d{4}-\d{2})$/);
+  if (m) {
+    ciclo = m[1];
+    resto = resto.slice(0, -m[0].length);
+  }
+  return resto ? { coverageId: resto, ciclo } : undefined;
+}
+
 export function saldoPlan(plan: EstadoPlan, ahora: Date = new Date()): SaldoPlan {
   const restantes = Math.max(plan.total - plan.usadas, 0);
   const vencido = plan.vencimiento ? new Date(plan.vencimiento).getTime() < ahora.getTime() : false;

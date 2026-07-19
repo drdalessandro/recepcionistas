@@ -1,12 +1,20 @@
 /**
  * Bot · Asignar plan (membresía o paquete) a un paciente.
  *
- * Crea el Coverage del plan (sesiones del ciclo/totales, usadas=0), emite el cobro
- * inicial (membresía: mes en curso; paquete: total, con FM si aplica) y envía el
- * WhatsApp de bienvenida. El saldo se descuenta al reservar (R-10) y, en membresías,
- * se renueva los días 1-5 (bot bw-cobro-membresias).
+ * Dos flujos según el medio de pago del cobro inicial:
  *
- * Toda la decisión vive acá: el front solo elige paciente + plan + medio de pago.
+ * - **Presencial** (efectivo / tarjeta / transferencia): la plata ya cambió de
+ *   manos en el mostrador → Coverage `active`, Invoice `balanced` + ChargeItem,
+ *   bienvenida y constancia. (Como siempre.)
+ * - **MercadoPago** (pago remoto asincrónico): acá NO hay plata todavía →
+ *   Coverage `draft` (plan PENDIENTE, sin sesiones utilizables por R-10),
+ *   Invoice `issued` (sin ChargeItem: nada se informa a Administración),
+ *   link de pago de MP con external_reference `plan-{coverageId}[-{ciclo}]`
+ *   y WhatsApp con el link. La ACTIVACIÓN la hace `resolverInvoicePlan` cuando
+ *   el webhook verifica el pago (o cobrar-pendiente si paga en mostrador).
+ *
+ * El saldo se descuenta al reservar (R-10) y, en membresías, se renueva los
+ * días 1-5 (bot bw-cobro-membresias; solo toca coverages `active`).
  */
 import type { BotEvent, MedplumClient } from '@medplum/core';
 import type { Coverage } from '@medplum/fhirtypes';
@@ -15,7 +23,7 @@ import { getPaquete } from '../config/paquetes.js';
 import { calcularCobro } from '../lib/pricing.js';
 import { cicloMes } from '../lib/planes.js';
 import { EXT, SYSTEM, esMedioPago } from '../fhir/identifiers.js';
-import { emitirInvoicePlan, enviarWhatsApp, leerTcVigente, notificarPortal } from './_shared.js';
+import { crearPreferenciaMP, emitirInvoicePlan, enviarWhatsApp, leerTcVigente, notificarPortal } from './_shared.js';
 
 export interface EntradaAsignarPlan {
   pacienteRef: string; // "Patient/123"
@@ -40,6 +48,10 @@ export interface ResultadoAsignarPlan {
   totalARS?: number;
   /** Sesiones del ciclo (membresía) o totales (paquete). */
   sesiones?: number;
+  /** true: el plan quedó PENDIENTE de pago (MP); se activa al acreditarse. */
+  pendiente?: boolean;
+  /** Link de pago de MercadoPago (flujo pendiente). */
+  url?: string;
 }
 
 export async function handler(
@@ -48,6 +60,14 @@ export async function handler(
 ): Promise<ResultadoAsignarPlan> {
   const e = event.input;
   try {
+    // Validaciones ANTES de crear nada (un medio inválido no debe dejar un
+    // Coverage huérfano).
+    const cobrar = e.cobrar !== false;
+    if (cobrar && e.medioPago && !esMedioPago(e.medioPago)) {
+      return { ok: false, mensaje: `Medio de pago inválido: "${e.medioPago}".` };
+    }
+    const esRemoto = cobrar && e.medioPago === 'mercadopago';
+
     const desde = e.desde ? new Date(e.desde) : new Date();
     const tc = e.tc ?? (await leerTcVigente(medplum));
 
@@ -79,10 +99,47 @@ export async function handler(
       extension.push({ url: EXT.sesionesTotal, valueInteger: sesiones });
     }
 
-    // 2) Crear el Coverage (plan del paciente).
+    const { totalARS } = calcularCobro([{ tipo: e.tipo, codigo: e.planCodigo, fm: e.fm }], { tc });
+
+    // Anti-duplicado (flujo pendiente): si el paciente YA tiene este mismo plan
+    // esperando el pago, se reutiliza (regenera el link, no crea otro Coverage).
+    if (esRemoto) {
+      const pendientes = await medplum.searchResources(
+        'Coverage',
+        `beneficiary=${e.pacienteRef}&status=draft&_count=20`,
+      );
+      const existente = pendientes.find(
+        (c) => c.extension?.find((x) => x.url === EXT.planCodigo)?.valueString === e.planCodigo,
+      );
+      if (existente?.id) {
+        const clave = existente.extension?.find((x) => x.url === EXT.cicloMes)?.valueString
+          ? `plan-${existente.id}-${existente.extension?.find((x) => x.url === EXT.cicloMes)?.valueString}`
+          : `plan-${existente.id}`;
+        const inv = await medplum.searchOne('Invoice', `identifier=${SYSTEM.invoice}|${clave}`);
+        const pref = await crearPreferenciaMP(event.secrets, {
+          titulo: `${descripcion} · cobro inicial`,
+          montoARS: inv?.totalGross?.value ?? totalARS,
+          referencia: clave,
+          idempotencia: clave,
+        });
+        return {
+          ok: true,
+          pendiente: true,
+          coverageId: existente.id,
+          invoiceId: inv?.id,
+          totalARS: inv?.totalGross?.value ?? totalARS,
+          sesiones,
+          url: pref.url,
+          mensaje: 'Este plan ya estaba pendiente de pago: se reutilizó (link regenerado).',
+        };
+      }
+    }
+
+    // 2) Crear el Coverage. Presencial: activo. MercadoPago: DRAFT (pendiente
+    // de pago; R-10 impide usar sesiones hasta que el webhook lo active).
     const coverage = await medplum.createResource<Coverage>({
       resourceType: 'Coverage',
-      status: 'active',
+      status: esRemoto ? 'draft' : 'active',
       beneficiary: { reference: e.pacienteRef },
       subscriber: { reference: e.pacienteRef },
       payor: [{ reference: e.pacienteRef }],
@@ -90,13 +147,10 @@ export async function handler(
       extension,
     });
 
-    // 3) Cobro inicial (membresía: mes en curso; paquete: total).
-    const { totalARS } = calcularCobro([{ tipo: e.tipo, codigo: e.planCodigo, fm: e.fm }], { tc });
+    // 3) Cobro inicial.
     let invoiceId: string | undefined;
-    if (e.cobrar !== false && coverage.id) {
-      if (e.medioPago && !esMedioPago(e.medioPago)) {
-        return { ok: false, mensaje: `Medio de pago inválido: "${e.medioPago}".` };
-      }
+    let claveInvoice: string | undefined;
+    if (cobrar && coverage.id) {
       const cobro = await emitirInvoicePlan(medplum, {
         coverageId: coverage.id,
         pacienteRef: e.pacienteRef,
@@ -106,12 +160,54 @@ export async function handler(
         totalARS,
         tc,
         ciclo: cicloExt,
-        medioPago: e.medioPago && esMedioPago(e.medioPago) ? e.medioPago : undefined,
+        // Pendiente (MP): `issued`, sin medio (se estampa al acreditarse).
+        // Presencial: `balanced` + ChargeItem con el medio real.
+        status: esRemoto ? 'issued' : 'balanced',
+        medioPago: !esRemoto && e.medioPago && esMedioPago(e.medioPago) ? e.medioPago : undefined,
       });
       invoiceId = cobro.invoiceId;
+      claveInvoice = cobro.clave;
     }
 
-    // 4) WhatsApp de bienvenida.
+    // 4) Flujo PENDIENTE (MercadoPago): link + WhatsApp con link + campanita.
+    // La bienvenida y el "recibimos tu pago" salen recién al acreditarse.
+    if (esRemoto && claveInvoice) {
+      const pref = await crearPreferenciaMP(event.secrets, {
+        titulo: `${descripcion} · cobro inicial`,
+        montoARS: totalARS,
+        referencia: claveInvoice,
+        idempotencia: claveInvoice,
+      });
+      const monto = `$${totalARS.toLocaleString('es-AR')}`;
+      await enviarWhatsApp(medplum, event.secrets, {
+        template: 'plan-link-pago',
+        pacienteRef: e.pacienteRef,
+        // Plantilla: {{1}} plan · {{2}} monto · {{3}} link (docs/whatsapp-plantillas.md).
+        variables: [descripcion, monto, pref.url ?? 'coordinándolo con recepción'],
+        body: `BioWellness: ¡reservamos tu ${descripcion}! Para activarla aboná ${monto}${
+          pref.url ? ` en este enlace: ${pref.url}` : ' (recepción te pasa el medio de pago)'
+        } — cuando se acredite te confirmamos por acá y quedan tus ${sesiones} sesiones disponibles. 💚`,
+      });
+      await notificarPortal(medplum, {
+        tipo: 'general',
+        pacienteRef: e.pacienteRef,
+        about: invoiceId ? `Invoice/${invoiceId}` : undefined,
+        identifier: { system: SYSTEM.communication, value: `portal-plan-link-${claveInvoice}` },
+        texto: `Te enviamos el link de pago de tu ${descripcion} (${monto}). Al acreditarse, el plan se activa solo.`,
+      });
+      return {
+        ok: true,
+        pendiente: true,
+        coverageId: coverage.id,
+        invoiceId,
+        totalARS,
+        sesiones,
+        url: pref.url,
+        ...(pref.ok ? {} : { mensaje: pref.mensaje }),
+      };
+    }
+
+    // 5) Flujo PRESENCIAL: bienvenida + constancia (la plata ya está).
     await enviarWhatsApp(medplum, event.secrets, {
       template: 'plan-asignado',
       pacienteRef: e.pacienteRef,
@@ -120,14 +216,12 @@ export async function handler(
       }. ¡Te esperamos! 💚`,
     });
 
-    // 5) Campanita del portal: constancia del pago del plan (misma clave que el Invoice).
-    if (invoiceId) {
-      const invoiceKey = cicloExt ? `plan-${coverage.id}-${cicloExt}` : `plan-${coverage.id}`;
+    if (invoiceId && claveInvoice) {
       await notificarPortal(medplum, {
         tipo: 'pago-recibido',
         pacienteRef: e.pacienteRef,
         about: `Invoice/${invoiceId}`,
-        identifier: { system: SYSTEM.communication, value: `portal-pago-${invoiceKey}` },
+        identifier: { system: SYSTEM.communication, value: `portal-pago-${claveInvoice}` },
         texto: `¡Activamos tu ${descripcion}! Recibimos el pago de $${totalARS.toLocaleString('es-AR')}. Tenés ${sesiones} sesiones disponibles. 💚`,
       });
     }
