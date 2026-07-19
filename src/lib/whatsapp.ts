@@ -102,7 +102,7 @@ export function extensionDeMime(contentType?: string): string {
     'video/mp4': 'mp4',
     'text/vcard': 'vcf',
   };
-  return mapa[(contentType ?? '').split(';')[0].trim().toLowerCase()] ?? 'bin';
+  return mapa[(contentType ?? '').split(';')[0]?.trim().toLowerCase() ?? ''] ?? 'bin';
 }
 
 /**
