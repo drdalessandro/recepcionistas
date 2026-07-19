@@ -39,6 +39,58 @@ export interface CanalQR {
  * El texto arranca igual ("Hola") y termina con la marca entre paréntesis:
  * corto, natural y fácil de detectar a ojo en la bandeja.
  */
+/** Sin origen cargado (fichas anteriores a la regla o altas incompletas). */
+export const SIN_ORIGEN = '(sin datos)';
+
+export interface PacienteCanal {
+  id: string;
+  /** Código de origen-lead de la ficha (undefined si no está cargado). */
+  origen?: string;
+}
+
+export interface FilaCanal {
+  origen: string;
+  clientes: number;
+  /** Clientes del canal con al menos un turno confirmado/realizado. */
+  conTurno: number;
+  /** Clientes del canal con al menos un pago registrado. */
+  conPago: number;
+}
+
+/**
+ * Resumen del CRM: clientes por canal con conversión a turno y a pago.
+ * Ordena por volumen (desc) y deja "(sin datos)" siempre al final.
+ * Es la misma agregación que puede hacer el kpis-crm de Administración.
+ */
+export function resumenPorCanal(
+  pacientes: PacienteCanal[],
+  conTurno: ReadonlySet<string>,
+  conPago: ReadonlySet<string>,
+): FilaCanal[] {
+  const filas = new Map<string, FilaCanal>();
+  for (const p of pacientes) {
+    const origen = p.origen?.trim() || SIN_ORIGEN;
+    const fila = filas.get(origen) ?? { origen, clientes: 0, conTurno: 0, conPago: 0 };
+    fila.clientes++;
+    if (conTurno.has(p.id)) {
+      fila.conTurno++;
+    }
+    if (conPago.has(p.id)) {
+      fila.conPago++;
+    }
+    filas.set(origen, fila);
+  }
+  return [...filas.values()].sort((a, b) => {
+    if (a.origen === SIN_ORIGEN) {
+      return 1;
+    }
+    if (b.origen === SIN_ORIGEN) {
+      return -1;
+    }
+    return b.clientes - a.clientes || a.origen.localeCompare(b.origen);
+  });
+}
+
 export const CANALES_QR: CanalQR[] = [
   { origen: 'instagram', nombre: 'Instagram (bio y stories)', texto: '¡Hola BioWellness! Quiero más info 🌿 (vengo de Instagram)' },
   { origen: 'linkedin', nombre: 'LinkedIn (posts)', texto: '¡Hola BioWellness! Quiero más info (los vi en LinkedIn)' },

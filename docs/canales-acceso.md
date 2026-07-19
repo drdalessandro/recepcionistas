@@ -159,3 +159,34 @@ Paquetes para equipos (p. ej. vía LinkedIn). Requiere definición comercial
 En preparación (marketing): videos explicativos de los servicios para la web
 e Instagram — se integran a este esquema como respuestas rápidas de la bandeja
 (link al video correspondiente) y QRs por cabina en el local.
+
+## Contrato CRM con Administración (AdminDashboard / kpis-crm)
+
+Mismo espíritu que el contrato de pagos: **códigos estables que Administración
+lee tal cual** (no se renombran; ampliar la lista es compatible, renombrar no).
+
+**Dónde vive el dato**: `Patient.extension` con
+`url = https://biowellness.ar/fhir/StructureDefinition/origen-lead` y
+`valueString` ∈ lista cerrada `ORIGENES_LEAD`
+(`instagram · linkedin · google · qr-local · qr-evento · web · telefono ·
+walk-in · referido · derivacion · otro`). Semántica: **atribución al primer
+canal** (Recepción no lo pisa en updates); ausencia de la extensión =
+"sin datos" (ficha anterior a la regla o alta incompleta).
+
+**Cómo consultar por canal** (el seed crea el SearchParameter
+`origen-lead` sobre Patient):
+
+```
+GET [base]/Patient?origen-lead=instagram&_summary=count
+```
+
+> ⚠️ Una vez, tras el primer seed: reindexar `Patient` (Super Admin →
+> Rebuild/Reindex) para que el parámetro alcance a las fichas existentes.
+> Las creadas después se indexan solas.
+
+**Conversión sugerida para el dashboard** (misma agregación que
+`npm run crm:canales`, que sirve de verificación cruzada):
+- *Con turno*: pacientes con algún `Appointment` en
+  `booked/arrived/checked-in/fulfilled` (por `participant`).
+- *Con pago*: pacientes con algún `Invoice` `balanced` (por `subject`).
+- Excluir fichas `active=false` o con `link` (duplicados ya fusionados).

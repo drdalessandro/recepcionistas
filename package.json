@@ -29,6 +29,7 @@
     "whatsapp:plantilla": "tsx src/seed/diagnostico-plantilla.ts",
     "whatsapp:crear-plantillas": "tsx src/seed/crear-plantillas.ts",
     "qr:canales": "tsx src/seed/generar-qrs.ts",
+    "crm:canales": "tsx src/seed/reporte-canales.ts",
     "agenda:check": "tsx src/seed/diagnostico-agenda.ts",
     "verify": "npm run typecheck && npm run test",
     "dev": "npm run dev --workspace @biowellness/recepcion-app",

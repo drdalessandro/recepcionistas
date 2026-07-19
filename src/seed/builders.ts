@@ -14,6 +14,7 @@ import type {
   PlanDefinitionAction,
   Practitioner,
   Schedule,
+  SearchParameter,
   Slot,
   StructureDefinition,
 } from '@medplum/fhirtypes';
@@ -28,6 +29,7 @@ import { RECURSOS } from '../config/recursos.js';
 import { TC_DEFAULT } from '../config/tipo-cambio.js';
 import type { SlotDescriptor } from '../lib/slots.js';
 import { EXTENSIONES } from '../fhir/extensions.js';
+import { SEARCH_PARAMETERS } from '../fhir/search-parameters.js';
 import { ACCESS_POLICIES } from '../fhir/access-policies.js';
 import { CONFIG_TC_ID, EXT, SYSTEM } from '../fhir/identifiers.js';
 
@@ -223,6 +225,7 @@ export function buildPractitioner(codigo: string): Practitioner {
 
 export interface RecursosSeed {
   structureDefinitions: StructureDefinition[];
+  searchParameters: SearchParameter[];
   accessPolicies: typeof ACCESS_POLICIES;
   tcConfig: Basic;
   activityDefinitions: ActivityDefinition[];
@@ -239,6 +242,7 @@ export interface RecursosSeed {
 export function buildSeed(): RecursosSeed {
   return {
     structureDefinitions: EXTENSIONES,
+    searchParameters: SEARCH_PARAMETERS,
     accessPolicies: ACCESS_POLICIES,
     tcConfig: buildTcConfig(),
     activityDefinitions: SERVICIOS.map(buildActivityDefinition),
