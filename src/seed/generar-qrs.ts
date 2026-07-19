@@ -20,7 +20,7 @@ async function qrPng(contenido: string): Promise<Buffer> {
     errorCorrectionLevel: 'M',
     margin: 2,
     width: 640,
-    color: { dark: '#0b3d2e', light: '#ffffff' }, // verde BioWellness sobre blanco
+    color: { dark: '#2a1b10', light: '#ffffff' }, // marrón habano oscuro (marca) sobre blanco
   });
 }
 
