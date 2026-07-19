@@ -17,9 +17,9 @@
  * responde ok:false y Twilio reintenta después.
  */
 import type { BotEvent, MedplumClient } from '@medplum/core';
-import type { Communication, Patient } from '@medplum/fhirtypes';
+import type { Attachment, Communication, Patient } from '@medplum/fhirtypes';
 import { EXT, SYSTEM } from '../fhir/identifiers.js';
-import { validarFirmaTwilio, variantesTelefono } from '../lib/whatsapp.js';
+import { extensionDeMime, mediosTwilio, validarFirmaTwilio, variantesTelefono } from '../lib/whatsapp.js';
 import { crearAlertaRecepcion } from './_shared.js';
 
 interface EntradaTwilio {
@@ -36,6 +36,54 @@ export interface ResultadoWhatsAppEntrante {
   pacienteRef?: string;
   hiloId?: string;
   mensajeId?: string;
+  adjuntos?: number;
+}
+
+/**
+ * Descarga los adjuntos del mensaje (fotos, PDFs, audios) desde Twilio —sus
+ * URLs requieren la autenticación Basic de la cuenta— y los guarda como Binary
+ * en Medplum. Devuelve los Attachment listos para el payload (contentAttachment
+ * con `url` canónica de Binary, que Medplum presigna en cada lectura).
+ * Best-effort: el adjunto que falla se anota en el texto y no rompe el mensaje.
+ */
+async function ingresarAdjuntos(
+  medplum: MedplumClient,
+  params: Record<string, unknown>,
+  messageSid: string,
+  secrets: BotEvent['secrets'],
+): Promise<{ adjuntos: Attachment[]; fallidos: number }> {
+  const medios = mediosTwilio(params);
+  const adjuntos: Attachment[] = [];
+  let fallidos = 0;
+  if (medios.length === 0) {
+    return { adjuntos, fallidos };
+  }
+  const sid = secrets['TWILIO_ACCOUNT_SID']?.valueString;
+  const token = secrets['TWILIO_AUTH_TOKEN']?.valueString;
+  if (!sid || !token) {
+    return { adjuntos, fallidos: medios.length };
+  }
+  const auth = Buffer.from(`${sid}:${token}`).toString('base64');
+  for (const [i, medio] of medios.entries()) {
+    try {
+      const resp = await fetch(medio.url, { headers: { Authorization: `Basic ${auth}` } });
+      if (!resp.ok) {
+        throw new Error(`Twilio media respondió ${resp.status}`);
+      }
+      const filename = `whatsapp-${messageSid.slice(-8)}-${i + 1}.${extensionDeMime(medio.contentType)}`;
+      adjuntos.push(
+        await medplum.createAttachment({
+          data: new Uint8Array(await resp.arrayBuffer()),
+          contentType: medio.contentType,
+          filename,
+        }),
+      );
+    } catch (err) {
+      fallidos++;
+      console.log(`whatsapp-entrante: adjunto ${i + 1} no se pudo guardar: ${err instanceof Error ? err.message : err}`);
+    }
+  }
+  return { adjuntos, fallidos };
 }
 
 /**
@@ -130,7 +178,15 @@ export async function handler(medplum: MedplumClient, event: BotEvent): Promise<
       });
     }
 
-    const cuerpo = [texto, conAdjunto ? '📎 [Adjunto recibido por WhatsApp — verlo en la consola de Twilio]' : '']
+    // Adjuntos reales en el hilo (foto del estudio, PDF, audio): quedan como
+    // Binary y el chat los muestra; el que falla se anota y no rompe el mensaje.
+    const { adjuntos, fallidos } = conAdjunto
+      ? await ingresarAdjuntos(medplum, e as Record<string, unknown>, e.MessageSid, event.secrets)
+      : { adjuntos: [], fallidos: 0 };
+    const cuerpo = [
+      texto,
+      fallidos > 0 ? `📎 [${fallidos} adjunto(s) no se pudieron guardar — verlos en la consola de Twilio]` : '',
+    ]
       .filter(Boolean)
       .join('\n');
     const mensaje = await medplum.createResource<Communication>({
@@ -141,11 +197,11 @@ export async function handler(medplum: MedplumClient, event: BotEvent): Promise<
       subject: { reference: pacienteRef },
       sender: { reference: pacienteRef },
       partOf: [{ reference: `Communication/${topic.id}` }],
-      payload: [{ contentString: cuerpo }],
+      payload: [...(cuerpo ? [{ contentString: cuerpo }] : []), ...adjuntos.map((a) => ({ contentAttachment: a }))],
       extension: [{ url: EXT.canal, valueCode: 'whatsapp' }],
     });
 
-    return respuestaTwiml({ ok: true, pacienteRef, hiloId: topic.id, mensajeId: mensaje.id });
+    return respuestaTwiml({ ok: true, pacienteRef, hiloId: topic.id, mensajeId: mensaje.id, adjuntos: adjuntos.length });
   } catch (err) {
     return respuestaTwiml({ ok: false, motivo: err instanceof Error ? err.message : 'whatsapp-entrante falló' });
   }

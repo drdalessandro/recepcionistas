@@ -3,6 +3,8 @@ import { createHmac } from 'node:crypto';
 import {
   aE164Argentino,
   contentVariables,
+  extensionDeMime,
+  mediosTwilio,
   nombreSecretContentSid,
   SECRET_CONTENT_SID_GENERICO,
   validarFirmaTwilio,
@@ -46,6 +48,46 @@ describe('WhatsApp — entrada (Twilio → bandeja de Mensajes)', () => {
   it('variantesTelefono descarta valores que no parecen teléfono', () => {
     expect(variantesTelefono('123')).toEqual([]);
     expect(variantesTelefono(undefined)).toEqual([]);
+  });
+
+  it('mediosTwilio extrae los adjuntos MediaUrl0/MediaContentType0… según NumMedia', () => {
+    expect(
+      mediosTwilio({
+        NumMedia: '2',
+        MediaUrl0: 'https://api.twilio.com/2010-04-01/Accounts/AC1/Messages/MM1/Media/ME1',
+        MediaContentType0: 'image/jpeg',
+        MediaUrl1: 'https://api.twilio.com/2010-04-01/Accounts/AC1/Messages/MM1/Media/ME2',
+        MediaContentType1: 'application/pdf',
+        Body: 'hola',
+      }),
+    ).toEqual([
+      { url: 'https://api.twilio.com/2010-04-01/Accounts/AC1/Messages/MM1/Media/ME1', contentType: 'image/jpeg' },
+      { url: 'https://api.twilio.com/2010-04-01/Accounts/AC1/Messages/MM1/Media/ME2', contentType: 'application/pdf' },
+    ]);
+  });
+
+  it('mediosTwilio ignora URLs inválidas, respeta el máximo y tolera NumMedia ausente', () => {
+    expect(mediosTwilio({ Body: 'sin media' })).toEqual([]);
+    expect(mediosTwilio({ NumMedia: '1', MediaUrl0: 'javascript:alert(1)' })).toEqual([]);
+    // NumMedia mayor al máximo: solo se procesan los primeros.
+    const muchos: Record<string, string> = { NumMedia: '9' };
+    for (let i = 0; i < 9; i++) {
+      muchos[`MediaUrl${i}`] = `https://api.twilio.com/media/${i}`;
+      muchos[`MediaContentType${i}`] = 'image/png';
+    }
+    expect(mediosTwilio(muchos, 5)).toHaveLength(5);
+    // Sin content-type: cae al genérico binario.
+    expect(mediosTwilio({ NumMedia: '1', MediaUrl0: 'https://x.com/a' })[0]?.contentType).toBe(
+      'application/octet-stream',
+    );
+  });
+
+  it('extensionDeMime mapea los tipos habituales de WhatsApp (y cae a bin)', () => {
+    expect(extensionDeMime('image/jpeg')).toBe('jpg');
+    expect(extensionDeMime('application/pdf')).toBe('pdf');
+    expect(extensionDeMime('audio/ogg; codecs=opus')).toBe('ogg');
+    expect(extensionDeMime('application/x-rareza')).toBe('bin');
+    expect(extensionDeMime(undefined)).toBe('bin');
   });
 
   it('validarFirmaTwilio acepta la firma correcta y rechaza token/firma inválidos', () => {

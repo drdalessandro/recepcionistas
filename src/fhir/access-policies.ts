@@ -31,6 +31,11 @@ export const POLICY_RECEPCIONISTA: AccessPolicy = {
     { resourceType: 'Contract', readonly: true },
     // Comunicación (WhatsApp / email)
     { resourceType: 'Communication' },
+    // Adjuntos del chat (indicaciones PDF, foto del estudio que manda el
+    // paciente). Un Binary solo se alcanza desde un recurso que lo referencia
+    // (acá, Communication): lo clínico sigue oculto porque DocumentReference
+    // y demás recursos clínicos están denegados.
+    { resourceType: 'Binary' },
     // CRM / leads
     { resourceType: 'Task' },
     // Banner de seguridad (señal binaria; sin detalle clínico)

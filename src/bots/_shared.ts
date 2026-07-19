@@ -119,6 +119,12 @@ export async function enviarWhatsApp(
     to?: string;
     identifier?: { system: string; value: string };
     about?: string;
+    /**
+     * URLs públicas (presignadas) de adjuntos: cada una sale como mensaje
+     * aparte con `MediaUrl` en texto libre (ventana de 24 h). Twilio la
+     * descarga en el momento, así que puede ser una URL firmada con expiración.
+     */
+    mediaUrls?: string[];
   },
 ): Promise<Communication> {
   let to = params.to;
@@ -161,20 +167,44 @@ export async function enviarWhatsApp(
         }),
       });
 
-    let resp = await enviar(Boolean(contentSid));
-    if (!resp.ok && contentSid) {
-      // Autocuración: si la plantilla falla (rechazada por Meta, sin ejemplos,
-      // variables que no matchean…), se reintenta como texto libre — que llega
-      // dentro de la ventana de 24 h. El motivo queda en el log (CloudWatch).
-      console.log(
-        `enviarWhatsApp: plantilla ${contentSid} rechazada (${resp.status}): ${(await resp.text().catch(() => '')).slice(0, 300)} — reintento como texto libre`,
-      );
-      resp = await enviar(false);
+    // Texto principal (solo si hay cuerpo: un mensaje puede ser solo adjuntos).
+    if (params.body) {
+      let resp = await enviar(Boolean(contentSid));
+      if (!resp.ok && contentSid) {
+        // Autocuración: si la plantilla falla (rechazada por Meta, sin ejemplos,
+        // variables que no matchean…), se reintenta como texto libre — que llega
+        // dentro de la ventana de 24 h. El motivo queda en el log (CloudWatch).
+        console.log(
+          `enviarWhatsApp: plantilla ${contentSid} rechazada (${resp.status}): ${(await resp.text().catch(() => '')).slice(0, 300)} — reintento como texto libre`,
+        );
+        resp = await enviar(false);
+      }
+      status = resp.ok ? 'completed' : 'entered-in-error';
+      if (!resp.ok) {
+        // Visible en CloudWatch (Lambda): código y detalle del rechazo de Twilio.
+        console.log(`enviarWhatsApp: Twilio respondió ${resp.status} para ${destino}: ${(await resp.text().catch(() => '')).slice(0, 300)}`);
+      }
     }
-    status = resp.ok ? 'completed' : 'entered-in-error';
-    if (!resp.ok) {
-      // Visible en CloudWatch (Lambda): código y detalle del rechazo de Twilio.
-      console.log(`enviarWhatsApp: Twilio respondió ${resp.status} para ${destino}: ${(await resp.text().catch(() => '')).slice(0, 300)}`);
+
+    // Adjuntos: uno por mensaje, en texto libre con MediaUrl (fuera de la
+    // ventana de 24 h Meta los rechaza; queda logueado y el texto ya salió).
+    for (const mediaUrl of (params.mediaUrls ?? []).filter((u) => /^https?:\/\//i.test(u)).slice(0, 5)) {
+      const respMedia = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${sid}/Messages.json`, {
+        method: 'POST',
+        headers: { Authorization: `Basic ${auth}`, 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({
+          From: from.startsWith('whatsapp:') ? from : `whatsapp:${from}`,
+          To: `whatsapp:${destino}`,
+          MediaUrl: mediaUrl,
+        }),
+      });
+      if (!respMedia.ok) {
+        console.log(
+          `enviarWhatsApp: adjunto no salió (${respMedia.status}): ${(await respMedia.text().catch(() => '')).slice(0, 300)}`,
+        );
+      } else if (!params.body) {
+        status = 'completed';
+      }
     }
   }
 

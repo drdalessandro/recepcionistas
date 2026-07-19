@@ -294,10 +294,12 @@ export async function fusionarPaciente(entrada: EntradaFusion): Promise<Resultad
 
 /**
  * Espeja un mensaje de la bandeja al WhatsApp del paciente (bw-enviar-whatsapp).
+ * Con `mensajeId`, el bot lee esa Communication y espeja también sus adjuntos
+ * (las URLs Binary salen presignadas y Twilio las descarga como MediaUrl).
  * Fire-and-forget: la respuesta ya quedó en el hilo; si el WhatsApp falla, la
  * Communication del bot queda en preparation/entered-in-error para diagnóstico.
  */
-export async function espejarWhatsApp(pacienteRef: string, body: string): Promise<void> {
+export async function espejarWhatsApp(pacienteRef: string, body: string, mensajeId?: string): Promise<void> {
   const id = await botIdPorNombre('bw-enviar-whatsapp');
-  await medplum.executeBot(id, { pacienteRef, template: 'mensaje-recepcion', body });
+  await medplum.executeBot(id, { pacienteRef, template: 'mensaje-recepcion', body, mensajeId });
 }

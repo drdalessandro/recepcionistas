@@ -36,7 +36,7 @@ deployan al runtime **`awslambda`** de Medplum (configurable con la env
 | `bw-solicitar-turno` | **Portal:** crea una solicitud de turno (`Task` `code=solicitud-turno`) del paciente y avisa a Recepción por WhatsApp (`RECEPCION_WHATSAPP_TO`). No reserva: Recepción confirma. | `executeBot` desde el **portal** del paciente (único bot que puede ejecutar). |
 | `bw-dedup-paciente` | Subscription sobre `Patient` (create/update): detecta fichas duplicadas por email/DNI (variantes con/sin puntos)/teléfono y abre una Task `posible-duplicado`. El descarte es durable (candidatos ya revisados no se reabren). Nunca fusiona solo. | Subscription rest-hook (ver abajo). |
 | `bw-fusionar-paciente` | Fusiona un duplicado en la canónica: valida estados (no invierte fusiones viejas), inactiva+enlaza el duplicado PRIMERO (evita tareas espurias del propio dedup), completa datos sin pisar, reapunta el login, reasigna lo del interín paginando (incl. `recipient` de Communication y solicitudes de turno) y cierra la Task + cancela las espejo. **Requiere membership admin.** | `executeBot` (vista Duplicados). |
-| `bw-whatsapp-entrante` | Webhook de Twilio: un WhatsApp del paciente entra a su hilo activo de Mensajes (match por teléfono con variantes AR; número desconocido → alerta Task). Valida la firma X-Twilio-Signature. Idempotente por MessageSid. | nginx `/webhooks/twilio-whatsapp` (ver abajo). |
+| `bw-whatsapp-entrante` | Webhook de Twilio: un WhatsApp del paciente entra a su hilo activo de Mensajes (match por teléfono con variantes AR; número desconocido → alerta Task). Los adjuntos (fotos, PDFs, audios) se descargan de Twilio y quedan como Binary en el hilo. Valida la firma X-Twilio-Signature. Idempotente por MessageSid. | nginx `/webhooks/twilio-whatsapp` (ver abajo). |
 | `bw-recordatorios` | **Cron horario:** recordatorios de turno (24h/1h) y de saldo en riesgo, por WhatsApp **y** email. | `cronTimer` del Bot (cada hora). |
 
 ## Deploy
@@ -345,6 +345,15 @@ oficial de Medplum):
   el Patient por teléfono y agrega el mensaje a su hilo activo (o abre uno
   "WhatsApp"). Aparece al instante con el badge verde (WebSocket). Los mensajes
   entrados por WhatsApp se marcan con 📱 en la burbuja.
+- **Adjuntos (ambos sentidos)**: el clip 📎 de la bandeja sube el archivo como
+  `Binary` y lo agrega al mensaje como `payload.contentAttachment` (el server
+  presigna la URL en cada lectura: la burbuja y el portal siempre lo ven).
+  El espejo saliente manda cada adjunto como mensaje aparte con `MediaUrl`
+  (texto libre: fuera de la ventana de 24 h Meta lo rechaza y queda logueado).
+  Un adjunto entrante (foto del estudio, PDF, audio) se descarga de Twilio con
+  la auth de la cuenta y queda como `Binary` en el hilo; si la descarga falla,
+  el mensaje lo anota y sigue. Requiere `Binary` en la AccessPolicy de
+  Recepción (la aplica `npm run seed`).
 
 Configuración (una vez):
 1. `npm run deploy:bots` y completar en nginx el bloque `/webhooks/twilio-whatsapp`
