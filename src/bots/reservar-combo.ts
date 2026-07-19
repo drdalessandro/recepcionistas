@@ -27,7 +27,8 @@ import {
   type ReservaRecurso,
   type ResultadoValidacion,
 } from '../lib/reglas-turno.js';
-import { cargarReservasDelDia, consumirSesionDePlan, enviarWhatsApp, extraerCodigos, resolverSolicitudTurno, scheduleIdDeRecurso, tieneBloqueoPago, type ConsumoPlan } from './_shared.js';
+import { cargarReservasDelDia, consumirSesionDePlan, enviarWhatsApp, extraerCodigos, linkSena, resolverSolicitudTurno, scheduleIdDeRecurso, tieneBloqueoPago, type ConsumoPlan } from './_shared.js';
+import { vencimientoSena } from '../lib/sena.js';
 
 export interface EntradaCombo {
   pacienteRef: string;
@@ -217,8 +218,11 @@ export async function handler(medplum: MedplumClient, event: BotEvent<EntradaCom
   }
 
   // Crear todos los componentes (vinculados por un identifier de combo).
+  // Sin plan: todos tentativos con el MISMO vencimiento de seña (R-19).
   const comboInstanceId = randomUUID();
+  const vence = vencimientoSena(ahora, inicio);
   const appointmentIds: string[] = [];
+  let primerAppt: Appointment | undefined;
   let orden = 1;
   for (const item of planRes.plan) {
     const scheduleId = await scheduleIdDeRecurso(medplum, item.recursoCodigo);
@@ -252,11 +256,14 @@ export async function handler(medplum: MedplumClient, event: BotEvent<EntradaCom
         { url: EXT.ocupantes, valueInteger: item.ocupantes },
         { url: EXT.itemTipo, valueCode: 'combo' },
         { url: EXT.itemCodigo, valueString: e.comboCodigo },
-        ...(consumo ? [{ url: EXT.coberturaUsada, valueString: `Coverage/${e.coverageId}` }] : []),
+        ...(consumo
+          ? [{ url: EXT.coberturaUsada, valueString: `Coverage/${e.coverageId}` }]
+          : [{ url: EXT.venceSena, valueDateTime: vence.toISOString() }]),
       ],
     });
     if (appt.id) {
       appointmentIds.push(appt.id);
+      primerAppt ??= appt;
     }
     orden++;
   }
@@ -271,16 +278,28 @@ export async function handler(medplum: MedplumClient, event: BotEvent<EntradaCom
   }
 
   if (e.notificar !== false) {
-    await enviarWhatsApp(medplum, event.secrets, {
-      template: consumo ? 'reserva-plan' : 'reserva-tentativa',
-      pacienteRef: e.pacienteRef,
-      variables: consumo
-        ? [combo.nombre, fmtHora(inicio), String(consumo.restantes)]
-        : [combo.nombre, fmtHora(inicio)],
-      body: consumo
-        ? `BioWellness: ¡tu ${combo.nombre} quedó confirmado con tu membresía para las ${fmtHora(inicio)}! Te quedan ${consumo.restantes} sesiones este mes. ¡Te esperamos! 💚`
-        : `BioWellness: reservamos tu ${combo.nombre} para las ${fmtHora(inicio)} (tentativo). Aboná la seña del 50% para confirmarlo. 💚`,
-    });
+    if (consumo) {
+      await enviarWhatsApp(medplum, event.secrets, {
+        template: 'reserva-plan',
+        pacienteRef: e.pacienteRef,
+        variables: [combo.nombre, fmtHora(inicio), String(consumo.restantes)],
+        body: `BioWellness: ¡tu ${combo.nombre} quedó confirmado con tu membresía para las ${fmtHora(inicio)}! Te quedan ${consumo.restantes} sesiones este mes. ¡Te esperamos! 💚`,
+      });
+    } else {
+      // Seña autoservicio (R-19): la seña del combo se paga con UN link (el
+      // webhook confirma todos los componentes juntos por el identifier de combo).
+      const link = primerAppt ? await linkSena(medplum, event.secrets, primerAppt).catch(() => undefined) : undefined;
+      const monto = link ? `$${link.senaARS.toLocaleString('es-AR')}` : 'del 50%';
+      await enviarWhatsApp(medplum, event.secrets, {
+        template: 'reserva-tentativa',
+        pacienteRef: e.pacienteRef,
+        // Plantilla v3: {{1}} servicio · {{2}} fecha/hora · {{3}} monto · {{4}} link · {{5}} hora límite.
+        variables: [combo.nombre, fmtHora(inicio), monto, link?.url ?? 'coordinándolo con recepción', fmtHora(vence)],
+        body: `BioWellness: reservamos tu ${combo.nombre} para las ${fmtHora(inicio)}. Para confirmarlo aboná la seña de ${monto}${
+          link?.url ? ` acá: ${link.url}` : ' (recepción te pasa el medio de pago)'
+        } — tenés tiempo hasta las ${fmtHora(vence)}, después el lugar se libera. 💚`,
+      });
+    }
   }
 
   return {

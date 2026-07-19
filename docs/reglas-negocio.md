@@ -14,6 +14,7 @@ implementada y su caso de aceptación (AC) cuando aplica. Fuente de precios: Man
 | **R-10** | Bloquear reserva al agotar el saldo mensual de la membresía (no acumulable). | `validarSaldoMembresia` | AC-09 |
 | **R-13** | Ventana de reserva: 48 h público · 72 h Standard · 96 h Intensivo · 7 días FM. | `validarVentanaReserva` | — |
 | **R-14** | Cancelación: < 24 h = sesión consumida (salvo fuerza mayor médica); ≥ 24 h devuelve saldo. | `evaluarCancelacion` | — |
+| **R-19** | Seña autoservicio: la tentativa nace con link de pago automático (monto + vencimiento en el WhatsApp). La seña vence a las **2 h** de reservar (nunca después del inicio del turno); 60 min antes de vencer, si no pagó, sale un último recordatorio con el mismo link; al vencer, el lugar **se libera solo** (turnos cancelados, salas libres, aviso al paciente). Un pago que llega tarde NO confirma: alerta a Recepción para devolver o reagendar. | `vencimientoSena`, `estadoSenaPendiente`; bots `bw-reservar-turno`/`bw-reservar-combo` (link + vencimiento), `bw-vencer-tentativas` (cron), `confirmarReserva` (guard de pago tardío) | — |
 
 ## Pricing / cobros
 

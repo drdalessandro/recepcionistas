@@ -43,9 +43,34 @@ const PLANTILLAS: DefPlantilla[] = [
     ejemplos: { '1': 'Sí, tu turno de mañana sigue confirmado a las 16:00.' },
   },
   {
-    nombre: 'biowellness_reserva_tentativa_v2',
+    // v3 (seña autoservicio, R-19): monto + link de pago + vencimiento.
+    nombre: 'biowellness_reserva_tentativa_v3',
     secret: 'TWILIO_CONTENT_SID_RESERVA_TENTATIVA',
-    body: 'BioWellness: reservamos tu turno de {{1}} para el {{2}} (tentativo). Aboná la seña del 50% para confirmarlo. 💚',
+    body: 'BioWellness: reservamos tu turno de {{1}} para el {{2}}. Para confirmarlo aboná la seña de {{3}} acá: {{4}} — tenés tiempo hasta las {{5}}, después el lugar se libera. 💚',
+    ejemplos: {
+      '1': 'HBOT Monoplaza',
+      '2': '21/07 16:00',
+      '3': '$119.708',
+      '4': 'https://mpago.la/2ab3Cd4',
+      '5': '14:30',
+    },
+  },
+  {
+    nombre: 'biowellness_sena_recordatorio',
+    secret: 'TWILIO_CONTENT_SID_SENA_RECORDATORIO',
+    body: 'BioWellness: ¡último aviso! Tu reserva de {{1}} ({{2}}) se libera a las {{3}} si no abonás la seña de {{4}}. Pagala acá: {{5}} y quedás confirmado. 💚',
+    ejemplos: {
+      '1': 'HBOT Monoplaza',
+      '2': '21/07 16:00',
+      '3': '14:30',
+      '4': '$119.708',
+      '5': 'https://mpago.la/2ab3Cd4',
+    },
+  },
+  {
+    nombre: 'biowellness_tentativa_vencida',
+    secret: 'TWILIO_CONTENT_SID_TENTATIVA_VENCIDA',
+    body: 'BioWellness: tu reserva de {{1}} del {{2}} se liberó porque no llegó la seña a tiempo. Si todavía querés venir, escribinos por acá y buscamos otro horario. 💚',
     ejemplos: { '1': 'HBOT Monoplaza', '2': '21/07 16:00' },
   },
   {

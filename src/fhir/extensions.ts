@@ -7,7 +7,7 @@ import type { StructureDefinition, ElementDefinition } from '@medplum/fhirtypes'
 import { EXT } from './identifiers.js';
 
 /** Tipo de valor permitido en value[x] de la extensión. */
-type TipoValor = 'string' | 'boolean' | 'decimal' | 'integer' | 'code' | 'Money';
+type TipoValor = 'string' | 'boolean' | 'decimal' | 'integer' | 'code' | 'dateTime' | 'Money';
 
 interface SpecExtension {
   url: string;
@@ -35,6 +35,7 @@ const SPECS: SpecExtension[] = [
   { url: EXT.ordenProtocolo, nombre: 'orden-protocolo', contexto: ['Appointment'], tipoValor: 'integer', descripcion: 'Orden de ejecución dentro de un combo (HBOT primero).' },
   { url: EXT.requiereHbotPrevio, nombre: 'requiere-hbot-previo', contexto: ['Appointment'], tipoValor: 'boolean', descripcion: 'El turno se beneficia de HBOT previo.' },
   { url: EXT.ocupantes, nombre: 'ocupantes', contexto: ['Appointment', 'Slot'], tipoValor: 'integer', descripcion: 'Cantidad de ocupantes de la reserva (multiplaza / biplaza).' },
+  { url: EXT.venceSena, nombre: 'vence-sena', contexto: ['Appointment'], tipoValor: 'dateTime', descripcion: 'Vencimiento de la tentativa: si la seña no se paga antes, el lugar se libera (R-19).' },
   // ActivityDefinition (catálogo)
   { url: EXT.precioUsd, nombre: 'precio-usd', contexto: ['ActivityDefinition'], tipoValor: 'decimal', descripcion: 'Precio de lista en USD.' },
   { url: EXT.reglaPricingRecurso, nombre: 'regla-pricing-recurso', contexto: ['ActivityDefinition'], tipoValor: 'code', descripcion: 'Regla de pricing del recurso.' },

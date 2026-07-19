@@ -32,6 +32,8 @@ export const EXT = {
   itemCodigo: `${BASE}/StructureDefinition/item-codigo`,
   /** Coverage (plan) que cubre el turno: si está, no requiere seña. */
   coberturaUsada: `${BASE}/StructureDefinition/cobertura-usada`,
+  /** Vencimiento de la tentativa (R-19): si la seña no llega antes, se libera. */
+  venceSena: `${BASE}/StructureDefinition/vence-sena`,
   // ActivityDefinition (catálogo)
   precioUsd: `${BASE}/StructureDefinition/precio-usd`,
   precioArs: `${BASE}/StructureDefinition/precio-ars`,
@@ -101,6 +103,8 @@ export const SYSTEM = {
   config: `${BASE}/Identifier/config`,
   /** Tipo de Task (p. ej. solicitud de turno desde el portal). */
   taskTipo: `${BASE}/CodeSystem/task-tipo`,
+  /** Identifier de Task (para deduplicar alertas automáticas a Recepción). */
+  task: `${BASE}/Identifier/task`,
 } as const;
 
 /** Códigos de negocio puntuales. */
