@@ -1,7 +1,11 @@
 import { useState } from 'react';
-import { Alert, Button, Group, Modal, Stack, TextInput } from '@mantine/core';
+import { Alert, Button, Group, Modal, Select, Stack, TextInput } from '@mantine/core';
 import { IconInfoCircle, IconUserPlus } from '@tabler/icons-react';
+import { ORIGENES_LEAD, ORIGENES_LEAD_LABELS } from '@bw/fhir/identifiers';
 import { altaPaciente, mensajeError } from '../lib/bots';
+
+/** Lista cerrada de canales (docs/canales-acceso.md): el CRM compara por código. */
+const ORIGENES_SELECT = ORIGENES_LEAD.map((o) => ({ value: o, label: ORIGENES_LEAD_LABELS[o] }));
 
 /**
  * Alta rápida de paciente (registrar cliente). Crea/actualiza el Patient vía el bot
@@ -21,6 +25,7 @@ export function NuevoPacienteModal({
   const [dni, setDni] = useState('');
   const [telefono, setTelefono] = useState('');
   const [email, setEmail] = useState('');
+  const [origen, setOrigen] = useState<string | null>(null);
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -29,6 +34,7 @@ export function NuevoPacienteModal({
     setDni('');
     setTelefono('');
     setEmail('');
+    setOrigen(null);
     setError(null);
   }
 
@@ -45,6 +51,7 @@ export function NuevoPacienteModal({
         dni: dni.trim() || undefined,
         telefono: telefono.trim() || undefined,
         email: email.trim() || undefined,
+        origenLead: origen ?? undefined,
       });
       if (r.ok && r.patientId) {
         limpiar();
@@ -86,6 +93,14 @@ export function NuevoPacienteModal({
           type="email"
           value={email}
           onChange={(e) => setEmail(e.currentTarget.value)}
+        />
+        <Select
+          label="¿Cómo nos conoció?"
+          placeholder="Canal de origen (para el CRM)"
+          data={ORIGENES_SELECT}
+          value={origen}
+          onChange={setOrigen}
+          clearable
         />
 
         {error && (

@@ -137,15 +137,25 @@ Paquetes para equipos (p. ej. vía LinkedIn). Requiere definición comercial
 4. **Siempre**: cargar `origen-lead` al crear la ficha — es lo único que pide
    el CRM para saber qué canal funciona.
 
-## Definiciones pendientes (para Andrés / marketing)
+## Decisiones tomadas (2026-07)
 
-1. **Destino canónico del enlace público**: ¿`wa.me` del +54 9 11 6247-0002,
-   el portal, o una mini-landing con los dos botones? (Afecta bio de IG, QRs,
-   posts y ficha de Google — conviene UN criterio.)
-2. **Instagram DM**: ¿quién lo atiende hoy y vale la pena integrarlo a la
-   bandeja en un sprint futuro?
-3. **Códigos de `origen-lead`**: proponemos lista cerrada
-   `instagram · linkedin · qr-local · qr-evento · web · telefono · walk-in ·
-   referido · derivacion · otro` (hoy es texto libre; cerrar la lista hace
-   comparables los reportes del CRM).
-4. **QRs**: ¿generamos un QR por canal (con UTM) para medir cuál trae gente?
+1. **Destino canónico del enlace público: WhatsApp para todo; el portal para
+   autogestión.** Toda pieza pública (bio de IG, posts, QRs, ficha de Google)
+   apunta al `wa.me` del +54 9 11 6247-0002; el portal queda como segundo
+   botón para quien prefiere autogestionarse.
+2. **Instagram DM: se deriva a WhatsApp** (respuesta corta en el DM + link
+   `wa.me`). La integración del DM a la bandeja queda como mejora futura.
+3. **`origen-lead` es lista CERRADA**: `instagram · linkedin · google ·
+   qr-local · qr-evento · web · telefono · walk-in · referido · derivacion ·
+   otro` (`ORIGENES_LEAD` en `src/fhir/identifiers.ts`). El alta lo pide con
+   el select "¿Cómo nos conoció?" y la atribución es al PRIMER canal (no se
+   pisa en updates).
+4. **QRs con medición: `npm run qr:canales`** genera en `qrs/` un PNG por
+   canal. Cada QR/link abre WhatsApp con un texto prefijado que trae la marca
+   del canal ("…vengo de Instagram"), así el primer mensaje ya dice de dónde
+   vino; el QR del portal mide con UTM. Los links exactos los imprime el
+   script.
+
+En preparación (marketing): videos explicativos de los servicios para la web
+e Instagram — se integran a este esquema como respuestas rápidas de la bandeja
+(link al video correspondiente) y QRs por cabina en el local.

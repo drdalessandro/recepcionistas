@@ -28,6 +28,7 @@
     "whatsapp:test": "tsx src/seed/diagnostico-whatsapp.ts",
     "whatsapp:plantilla": "tsx src/seed/diagnostico-plantilla.ts",
     "whatsapp:crear-plantillas": "tsx src/seed/crear-plantillas.ts",
+    "qr:canales": "tsx src/seed/generar-qrs.ts",
     "agenda:check": "tsx src/seed/diagnostico-agenda.ts",
     "verify": "npm run typecheck && npm run test",
     "dev": "npm run dev --workspace @biowellness/recepcion-app",
@@ -41,8 +42,10 @@
   "devDependencies": {
     "@medplum/cli": "5.1.24",
     "@types/node": "^20.14.0",
+    "@types/qrcode": "^1.5.6",
     "dotenv": "^16.4.5",
     "esbuild": "^0.28.1",
+    "qrcode": "^1.5.4",
     "tsx": "^4.16.0",
     "typescript": "^5.5.0",
     "vitest": "^2.0.0"

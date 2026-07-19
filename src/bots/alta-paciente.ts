@@ -10,7 +10,7 @@
  */
 import type { BotEvent, MedplumClient } from '@medplum/core';
 import type { ContactPoint, Patient } from '@medplum/fhirtypes';
-import { EXT, SYSTEM } from '../fhir/identifiers.js';
+import { EXT, SYSTEM, esOrigenLead } from '../fhir/identifiers.js';
 import { partirNombre, validarEmail } from '../lib/onboarding.js';
 
 export interface EntradaAltaPaciente {
@@ -23,6 +23,8 @@ export interface EntradaAltaPaciente {
   telefono?: string;
   /** Etiqueta comercial (p. ej. 'PUBLICO' | 'FM'). */
   tipoCliente?: string;
+  /** Canal por el que llegó (lista cerrada ORIGENES_LEAD; otro valor → 'otro'). */
+  origenLead?: string;
 }
 
 export interface ResultadoAltaPaciente {
@@ -31,6 +33,14 @@ export interface ResultadoAltaPaciente {
   patientId?: string;
   /** true si se creó; false si se actualizó uno existente. */
   creado?: boolean;
+}
+
+function extensionAlta(tipoCliente?: string, origen?: string): Patient['extension'] {
+  const ext = [
+    ...(tipoCliente ? [{ url: EXT.tipoCliente, valueCode: tipoCliente }] : []),
+    ...(origen ? [{ url: EXT.origenLead, valueString: origen }] : []),
+  ];
+  return ext.length ? ext : undefined;
 }
 
 function telecom(telefono?: string, email?: string): ContactPoint[] {
@@ -91,11 +101,18 @@ export async function handler(
     const nombreText = [firstName, lastName].filter(Boolean).join(' ');
     const existente = await buscarExistente(medplum, e);
 
+    // Código canónico del canal (lista cerrada); un valor desconocido cae a 'otro'.
+    const origen = e.origenLead ? (esOrigenLead(e.origenLead) ? e.origenLead : 'otro') : undefined;
+
     if (existente) {
       // Merge no destructivo: completa datos que falten, no pisa identifiers previos.
       const extension = [...(existente.extension ?? [])].filter((x) => x.url !== EXT.tipoCliente);
       if (e.tipoCliente) {
         extension.push({ url: EXT.tipoCliente, valueCode: e.tipoCliente });
+      }
+      // Atribución al PRIMER canal: si la ficha ya tiene origen, no se pisa.
+      if (origen && !extension.some((x) => x.url === EXT.origenLead)) {
+        extension.push({ url: EXT.origenLead, valueString: origen });
       }
       const identifier = [...(existente.identifier ?? [])];
       if (e.dni && !identifier.some((i) => i.system === SYSTEM.dni)) {
@@ -120,7 +137,7 @@ export async function handler(
       name: [{ text: nombreText, given: [firstName], family: lastName }],
       identifier: e.dni ? [{ system: SYSTEM.dni, value: e.dni.trim() }] : undefined,
       telecom: telecom(e.telefono, e.email),
-      extension: e.tipoCliente ? [{ url: EXT.tipoCliente, valueCode: e.tipoCliente }] : undefined,
+      extension: extensionAlta(e.tipoCliente, origen),
     });
     return { ok: true, patientId: creado.id, creado: true };
   } catch (err) {
