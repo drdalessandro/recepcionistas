@@ -29,6 +29,7 @@ async function main(): Promise<void> {
 
   const grupos: Array<[string, Resource[]]> = [
     ['StructureDefinition (extensiones)', seed.structureDefinitions],
+    ['SearchParameter (origen-lead, CRM)', seed.searchParameters],
     ['AccessPolicy (roles)', seed.accessPolicies],
     ['Basic (config TC)', [seed.tcConfig]],
     ['ActivityDefinition (servicios)', seed.activityDefinitions],
