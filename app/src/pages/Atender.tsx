@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Alert,
+  Anchor,
   Badge,
   Button,
   Card,
+  CopyButton,
   Group,
   List,
   Loader,
@@ -212,6 +214,7 @@ function PanelPlanes({
   const [asignando, setAsignando] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [ok, setOk] = useState<string | null>(null);
+  const [pendienteMP, setPendienteMP] = useState<{ monto: number; url?: string; nota?: string } | null>(null);
   const [preAgenda, setPreAgenda] = useState<PlanPaciente | null>(null);
 
   const opciones =
@@ -226,6 +229,7 @@ function PanelPlanes({
     setAsignando(true);
     setError(null);
     setOk(null);
+    setPendienteMP(null);
     try {
       const r = await asignarPlan({
         pacienteRef: `Patient/${paciente.id}`,
@@ -234,7 +238,13 @@ function PanelPlanes({
         fm: tipo === 'paquete' ? fm : undefined,
         medioPago,
       });
-      if (r.ok) {
+      if (r.ok && r.pendiente) {
+        // MercadoPago: el plan queda PENDIENTE hasta que el pago se acredite
+        // (webhook). Nada de "activado" ni sesiones disponibles todavía.
+        setPendienteMP({ monto: r.totalARS ?? 0, url: r.url, nota: r.mensaje });
+        setPlanCodigo(null);
+        await onCambio();
+      } else if (r.ok) {
         setOk(`Plan activado: ${r.sesiones} sesiones. Cobro inicial $${(r.totalARS ?? 0).toLocaleString('es-AR')}.`);
         setPlanCodigo(null);
         await onCambio();
@@ -263,24 +273,39 @@ function PanelPlanes({
         <Stack gap="xs" mb="md">
           {planes.map((p) => (
             <Group key={p.coverageId} justify="space-between">
-              <Text size="sm" fw={500}>
+              <Text size="sm" fw={500} c={p.pendientePago ? 'dimmed' : undefined}>
                 {p.nombre}
               </Text>
               <Group gap="xs">
-                <Badge color={p.saldo.disponible ? 'bio' : 'gray'} variant="light">
-                  {p.saldo.restantes}/{p.estado.total} sesiones
-                </Badge>
-                {p.saldo.vencido && <Badge color="red">vencido</Badge>}
-                {p.saldo.agotado && !p.saldo.vencido && <Badge color="orange">agotado (R-10)</Badge>}
-                {p.estado.tipo === 'membresia' && p.saldo.disponible && p.saldo.restantes > 0 && (
-                  <Button
-                    size="compact-sm"
-                    variant="light"
-                    leftSection={<IconCalendarPlus size={14} />}
-                    onClick={() => setPreAgenda(p)}
-                  >
-                    Pre-agendar mes
-                  </Button>
+                {p.pendientePago ? (
+                  // Asignado con MercadoPago, esperando la acreditación: las
+                  // sesiones NO están disponibles hasta que el pago entre.
+                  <>
+                    <Badge color="gray" variant="light">
+                      {p.estado.total} sesiones
+                    </Badge>
+                    <Badge color="yellow" variant="filled">
+                      ⏳ pendiente de pago
+                    </Badge>
+                  </>
+                ) : (
+                  <>
+                    <Badge color={p.saldo.disponible ? 'bio' : 'gray'} variant="light">
+                      {p.saldo.restantes}/{p.estado.total} sesiones
+                    </Badge>
+                    {p.saldo.vencido && <Badge color="red">vencido</Badge>}
+                    {p.saldo.agotado && !p.saldo.vencido && <Badge color="orange">agotado (R-10)</Badge>}
+                    {p.estado.tipo === 'membresia' && p.saldo.disponible && p.saldo.restantes > 0 && (
+                      <Button
+                        size="compact-sm"
+                        variant="light"
+                        leftSection={<IconCalendarPlus size={14} />}
+                        onClick={() => setPreAgenda(p)}
+                      >
+                        Pre-agendar mes
+                      </Button>
+                    )}
+                  </>
                 )}
               </Group>
             </Group>
@@ -335,6 +360,42 @@ function PanelPlanes({
       {ok && (
         <Alert color="bio" mt="md" title="Plan asignado ✓">
           {ok}
+        </Alert>
+      )}
+      {pendienteMP && (
+        <Alert color="yellow" mt="md" title="Plan PENDIENTE de pago (MercadoPago)">
+          <Stack gap={6}>
+            <Text size="sm">
+              Se reservó el plan y le enviamos al paciente el link de pago por{' '}
+              <NumberFormatter prefix="$" value={pendienteMP.monto} thousandSeparator="." decimalSeparator="," />. Las
+              sesiones se habilitan solas cuando el pago se acredite (también se puede cobrar en mostrador desde
+              “Pagos pendientes”).
+            </Text>
+            {pendienteMP.url ? (
+              <Group gap="xs">
+                <Anchor href={pendienteMP.url} target="_blank" rel="noreferrer" size="sm" style={{ wordBreak: 'break-all' }}>
+                  {pendienteMP.url}
+                </Anchor>
+                <CopyButton value={pendienteMP.url}>
+                  {({ copied, copy }) => (
+                    <Button size="compact-xs" variant="light" onClick={copy}>
+                      {copied ? 'Copiado ✓' : 'Copiar link'}
+                    </Button>
+                  )}
+                </CopyButton>
+              </Group>
+            ) : (
+              <Text size="sm" c="dimmed">
+                No se pudo generar el link de MercadoPago{pendienteMP.nota ? ` (${pendienteMP.nota})` : ''}: cobrarlo en
+                mostrador desde “Pagos pendientes”.
+              </Text>
+            )}
+            {pendienteMP.url && pendienteMP.nota && (
+              <Text size="xs" c="dimmed">
+                {pendienteMP.nota}
+              </Text>
+            )}
+          </Stack>
         </Alert>
       )}
 

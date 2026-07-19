@@ -15,6 +15,8 @@ export interface PlanPaciente {
   nombre: string;
   /** Código base que cubre el plan: combo (membresía) o servicio (paquete). */
   baseCodigo: string;
+  /** Coverage `draft`: asignado con MercadoPago, esperando que el pago se acredite. */
+  pendientePago: boolean;
 }
 
 export function nombreYBase(tipo: EstadoPlan['tipo'], planCodigo: string): { nombre: string; base: string } {
@@ -29,11 +31,16 @@ export function nombreYBase(tipo: EstadoPlan['tipo'], planCodigo: string): { nom
   return { nombre: p ? `Paquete ${p.nombre}` : planCodigo, base: p?.servicioBaseCodigo ?? '' };
 }
 
-/** Planes activos (Coverage status=active) del paciente, con saldo resuelto. */
+/**
+ * Planes del paciente con saldo resuelto: los activos + los PENDIENTES de pago
+ * (Coverage `draft`, alta con MercadoPago sin acreditar). Los pendientes se
+ * muestran pero nunca son usables (R-10: `saldo.disponible` es false porque el
+ * Coverage no está activo).
+ */
 export async function cargarPlanesActivos(pacienteId: string, ahora: Date = new Date()): Promise<PlanPaciente[]> {
   const coberturas = await medplum.searchResources('Coverage', {
     beneficiary: `Patient/${pacienteId}`,
-    status: 'active',
+    status: 'active,draft',
     _count: 20,
   });
   const planes: PlanPaciente[] = [];
@@ -52,9 +59,11 @@ export async function cargarPlanesActivos(pacienteId: string, ahora: Date = new 
       saldo: saldoPlan(estado, ahora),
       nombre,
       baseCodigo: base,
+      pendientePago: c.status === 'draft',
     });
   }
-  return planes;
+  // Activos primero; pendientes de pago al final.
+  return planes.sort((a, b) => Number(a.pendientePago) - Number(b.pendientePago));
 }
 
 /**

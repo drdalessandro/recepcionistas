@@ -19,7 +19,7 @@ import { getMembresia } from '../config/membresias.js';
 import { getPaquete } from '../config/paquetes.js';
 import { calcularSenaARS, type ItemCobro, type LineaCobro, type TipoItemCobro } from '../lib/pricing.js';
 import { lineaComercialDeItem } from '../lib/cobros.js';
-import { motivoNoDisponible, saldoPlan } from '../lib/planes.js';
+import { cicloMes, motivoNoDisponible, parseClavePlan, saldoPlan } from '../lib/planes.js';
 import type { ReservaRecurso } from '../lib/reglas-turno.js';
 import { isoArgentina } from '../lib/sena.js';
 import { SECRET_CONTENT_SID_GENERICO, aE164Argentino, contentVariables, nombreSecretContentSid } from '../lib/whatsapp.js';
@@ -928,15 +928,91 @@ export async function emitirInvoicePlan(
 }
 
 /**
+ * Activa un plan que estaba PENDIENTE DE PAGO (Coverage `draft`, alta inicial
+ * con MercadoPago) cuando su Invoice `plan-…` se acredita. La vigencia arranca
+ * en el PAGO, no en la asignación: recalcula ciclo (membresía) o período de
+ * vigencia (paquete). Si el Coverage no existe o ya no está `draft`, no hace
+ * nada (las cuotas de renovación pasan por acá y son no-op). La bienvenida al
+ * paciente sale SOLO acá para el flujo pendiente (nunca antes de la plata).
+ */
+async function activarPlanPendiente(
+  medplum: MedplumClient,
+  clave: string,
+  invoice: Invoice,
+  secrets?: Secrets,
+): Promise<void> {
+  const parsed = parseClavePlan(clave);
+  if (!parsed) {
+    return;
+  }
+  const coverage = await medplum.readResource('Coverage', parsed.coverageId).catch(() => undefined);
+  if (!coverage?.id || coverage.status !== 'draft') {
+    return;
+  }
+
+  const ahora = new Date();
+  const tipoCob = coverage.extension?.find((x) => x.url === EXT.tipoCobertura)?.valueCode ?? 'membresia';
+  const planCodigo = planCodigoDeCoverage(coverage);
+  const extension = (coverage.extension ?? []).filter((x) => x.url !== EXT.cicloMes);
+  let periodEnd: string | undefined;
+  if (tipoCob === 'membresia') {
+    extension.push({ url: EXT.cicloMes, valueString: cicloMes(ahora) });
+  } else if (planCodigo) {
+    try {
+      const p = getPaquete(planCodigo);
+      periodEnd = new Date(ahora.getTime() + p.vigenciaDias * 24 * 60 * 60 * 1000).toISOString();
+    } catch {
+      periodEnd = coverage.period?.end; // plan fuera de catálogo: conserva lo asignado
+    }
+  }
+  await medplum.updateResource<Coverage>({
+    ...coverage,
+    status: 'active',
+    period: { start: ahora.toISOString(), ...(periodEnd ? { end: periodEnd } : {}) },
+    extension,
+  });
+
+  // Bienvenida + constancia, RECIÉN con el pago acreditado.
+  const pacienteRef = coverage.beneficiary?.reference;
+  const descripcion = invoice.lineItem?.[0]?.chargeItemCodeableConcept?.text?.split(' · ')[0] ?? 'tu plan';
+  const totalARS = invoice.totalGross?.value ?? 0;
+  const sesiones =
+    coverage.extension?.find((x) => x.url === (tipoCob === 'membresia' ? EXT.sesionesMes : EXT.sesionesTotal))
+      ?.valueInteger ?? 0;
+  if (secrets) {
+    await enviarWhatsApp(medplum, secrets, {
+      template: 'plan-asignado',
+      identifier: { system: SYSTEM.communication, value: `plan-activado-${clave}` },
+      pacienteRef,
+      body: `BioWellness: ¡pago acreditado y ${descripcion} activada! Tenés ${sesiones} sesiones${
+        tipoCob === 'membresia' ? ' este mes' : ''
+      } disponibles. ¡Te esperamos! 💚`,
+    });
+  }
+  await notificarPortal(medplum, {
+    tipo: 'pago-recibido',
+    pacienteRef,
+    about: `Invoice/${invoice.id}`,
+    identifier: { system: SYSTEM.communication, value: `portal-pago-${clave}` },
+    texto: `¡Activamos ${descripcion}! Recibimos el pago de $${totalARS.toLocaleString('es-AR')}. Tenés ${sesiones} sesiones disponibles. 💚`,
+  });
+}
+
+/**
  * Desenlace del cobro de un plan pendiente (webhook de MP):
  * - `pagado`: Invoice → balanced + medio mercadopago + ChargeItem del plan +
- *   levanta el bloqueo R-11 si lo había.
- * - `rechazado`: Invoice → cancelled + bloqueo de reservas (R-11) + alerta (Task).
- * Idempotente: si el Invoice ya no está `issued`, no repite efectos.
+ *   levanta el bloqueo R-11 si lo había. Si el plan estaba pendiente de pago
+ *   (alta inicial con MP, Coverage `draft`), lo ACTIVA recién acá.
+ * - `rechazado`: cuota de socio → Invoice `cancelled` + bloqueo R-11 + alerta.
+ *   Alta inicial NO concretada (Coverage `draft`) → sin bloqueo y el Invoice
+ *   queda `issued` (el link sigue vigente y también se puede cobrar en
+ *   mostrador); solo alerta idempotente.
+ * Idempotente: si el Invoice ya no está `issued`, no repite efectos (pero sí
+ * termina una activación pendiente si un reintento anterior quedó a medias).
  */
 export async function resolverInvoicePlan(
   medplum: MedplumClient,
-  opts: { clave: string; resultado: 'pagado' | 'rechazado'; detalle?: string; medio?: MedioPago },
+  opts: { clave: string; resultado: 'pagado' | 'rechazado'; detalle?: string; medio?: MedioPago; secrets?: Secrets },
 ): Promise<{ ok: boolean; invoiceId?: string; mensaje?: string }> {
   const invoice = await medplum.searchOne('Invoice', `identifier=${SYSTEM.invoice}|${opts.clave}`);
   if (!invoice?.id) {
@@ -947,7 +1023,32 @@ export async function resolverInvoicePlan(
   const puedeResolver =
     opts.resultado === 'pagado' ? invoice.status === 'issued' || invoice.status === 'cancelled' : invoice.status === 'issued';
   if (!puedeResolver) {
+    // Autocuración: si el Invoice quedó balanced pero el Coverage siguió en
+    // draft (corte entre pasos de una corrida anterior), completar la activación.
+    if (opts.resultado === 'pagado' && invoice.status === 'balanced') {
+      await activarPlanPendiente(medplum, opts.clave, invoice, opts.secrets);
+    }
     return { ok: true, invoiceId: invoice.id, mensaje: `Invoice ya resuelto (${invoice.status}).` };
+  }
+
+  // Rechazo de un ALTA INICIAL nunca concretada (plan pendiente de pago): no
+  // es una cuota impaga de un socio — sin bloqueo R-11 y el pendiente sigue
+  // cobrable (link vigente / mostrador).
+  if (opts.resultado === 'rechazado') {
+    const parsed = parseClavePlan(opts.clave);
+    if (parsed) {
+      const cov = await medplum.readResource('Coverage', parsed.coverageId).catch(() => undefined);
+      if (cov?.status === 'draft') {
+        await crearAlertaRecepcion(medplum, {
+          titulo: 'Pago inicial de plan rechazado',
+          detalle: `MercadoPago rechazó el pago inicial de un plan pendiente ($${(invoice.totalGross?.value ?? 0).toLocaleString('es-AR')}). ${opts.detalle ?? ''} El plan sigue pendiente: el link continúa vigente y también puede cobrarse en mostrador.`,
+          pacienteRef: invoice.subject?.reference,
+          focusRef: `Invoice/${invoice.id}`,
+          clave: `plan-rechazo-inicial-${opts.clave}`,
+        });
+        return { ok: true, invoiceId: invoice.id, mensaje: 'Pago inicial rechazado: el plan sigue pendiente (sin bloqueo R-11).' };
+      }
+    }
   }
 
   const pacienteRef = invoice.subject?.reference;
@@ -983,6 +1084,8 @@ export async function resolverInvoicePlan(
     if (pacienteRef) {
       await quitarBloqueoPago(medplum, pacienteRef);
     }
+    // Plan pendiente de pago (alta inicial): la plata ya está → activarlo.
+    await activarPlanPendiente(medplum, opts.clave, invoice, opts.secrets);
     return { ok: true, invoiceId: invoice.id };
   }
 
