@@ -13,8 +13,17 @@ import {
 } from '../lib/bots';
 import { colorEstado, labelEstado } from '../lib/estados';
 import { MEDIOS_SELECT } from '../lib/medios';
-import { SYSTEM } from '@bw/fhir/identifiers';
+import { EXT, SYSTEM } from '@bw/fhir/identifiers';
 import type { TurnoTimeline } from '../lib/timeline';
+
+const fmtVence = new Intl.DateTimeFormat('es-AR', {
+  day: '2-digit',
+  month: '2-digit',
+  hour: '2-digit',
+  minute: '2-digit',
+  hour12: false,
+  timeZone: 'America/Argentina/Buenos_Aires',
+});
 
 const ACCIONES: Array<{ estado: EstadoTurno; label: string; color: string }> = [
   { estado: 'arrived', label: 'Llegó', color: 'orange' },
@@ -44,30 +53,45 @@ export function TurnoModal({
   const [mp, setMp] = useState<ResultadoLinkMP | null>(null);
   const [saldo, setSaldo] = useState<Invoice | null>(null);
   const [confirmarCompletar, setConfirmarCompletar] = useState(false);
+  const [venceSena, setVenceSena] = useState<Date | null>(null);
 
   const tentativo = turno?.estado === 'pending' || turno?.estado === 'proposed';
   const saldoPendiente = saldo?.status === 'issued';
   const saldoARS = saldo?.totalGross?.value ?? 0;
 
   // Saldo restante del turno (Invoice `saldo-{appointmentId}` emitido al cobrar
-  // la seña). Si no existe (plan, turno viejo), no se muestra nada.
+  // la seña). Si no existe (plan, turno viejo), no se muestra nada. Para los
+  // tentativos, en cambio, se lee el vencimiento de la seña (R-19).
   useEffect(() => {
     setSaldo(null);
     setMp(null);
     setError(null);
     setConfirmarCompletar(false);
-    if (!turno || turno.estado === 'pending' || turno.estado === 'proposed') {
+    setVenceSena(null);
+    if (!turno) {
       return;
     }
     let vivo = true;
-    medplum
-      .searchOne('Invoice', `identifier=${SYSTEM.invoice}|saldo-${turno.appointmentId}`)
-      .then((inv) => {
-        if (vivo) {
-          setSaldo(inv ?? null);
-        }
-      })
-      .catch(() => undefined);
+    if (turno.estado === 'pending' || turno.estado === 'proposed') {
+      medplum
+        .readResource('Appointment', turno.appointmentId)
+        .then((a) => {
+          const v = a.extension?.find((x) => x.url === EXT.venceSena)?.valueDateTime;
+          if (vivo) {
+            setVenceSena(v ? new Date(v) : null);
+          }
+        })
+        .catch(() => undefined);
+    } else {
+      medplum
+        .searchOne('Invoice', `identifier=${SYSTEM.invoice}|saldo-${turno.appointmentId}`)
+        .then((inv) => {
+          if (vivo) {
+            setSaldo(inv ?? null);
+          }
+        })
+        .catch(() => undefined);
+    }
     return () => {
       vivo = false;
     };
@@ -184,6 +208,13 @@ export function TurnoModal({
           {tentativo && (
             <>
               <Divider label="Seña 50% para confirmar" labelPosition="center" />
+              {venceSena && (
+                <Text size="sm" c={venceSena.getTime() <= Date.now() ? 'red' : 'orange'}>
+                  {venceSena.getTime() <= Date.now()
+                    ? `⏰ La seña venció (${fmtVence.format(venceSena)}): el lugar se libera solo en la próxima corrida.`
+                    : `⏰ El paciente ya tiene el link de pago por WhatsApp. Vence ${fmtVence.format(venceSena)}; después el lugar se libera solo.`}
+                </Text>
+              )}
               <Group align="flex-end">
                 <Select label="Medio de pago" data={MEDIOS_SELECT} value={medioPago} onChange={setMedioPago} w={180} />
                 <Button color="bio" loading={cargando === 'sena'} onClick={() => void registrarSena()}>

@@ -31,6 +31,17 @@ export const CANCELACION = {
 } as const;
 
 /**
+ * Seña autoservicio (R-19): la reserva tentativa nace con un link de pago y un
+ * vencimiento; si la seña no se acredita a tiempo, el lugar se libera solo.
+ */
+export const SENA = {
+  /** Horas desde la reserva para pagar la seña; después el lugar se libera. */
+  vencimientoHoras: 2,
+  /** Minutos antes del vencimiento para el recordatorio si todavía no pagó. */
+  recordatorioMinutosAntes: 60,
+} as const;
+
+/**
  * Recordatorios automáticos de turnos confirmados (cron + WhatsApp).
  * Se avisa a las 48 h y a las 2 h del turno. El orden importa: de mayor a menor
  * antelación (el motor elige el más urgente que aún no se envió).

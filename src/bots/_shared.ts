@@ -21,6 +21,7 @@ import { calcularSenaARS, type ItemCobro, type LineaCobro, type TipoItemCobro } 
 import { lineaComercialDeItem } from '../lib/cobros.js';
 import { motivoNoDisponible, saldoPlan } from '../lib/planes.js';
 import type { ReservaRecurso } from '../lib/reglas-turno.js';
+import { isoArgentina } from '../lib/sena.js';
 import { SECRET_CONTENT_SID_GENERICO, aE164Argentino, contentVariables, nombreSecretContentSid } from '../lib/whatsapp.js';
 
 type Secrets = BotEvent['secrets'];
@@ -499,11 +500,21 @@ export async function quitarBloqueoPago(medplum: MedplumClient, pacienteRef: str
   }
 }
 
-/** Alerta operativa para recepción (aparece como Task / Solicitudes). */
+/**
+ * Alerta operativa para recepción (aparece como Task / Solicitudes).
+ * Con `clave` es idempotente: si ya existe la alerta con ese identifier no se
+ * duplica (p. ej. reintentos del webhook de MercadoPago).
+ */
 export async function crearAlertaRecepcion(
   medplum: MedplumClient,
-  opts: { titulo: string; detalle: string; pacienteRef?: string; focusRef?: string },
+  opts: { titulo: string; detalle: string; pacienteRef?: string; focusRef?: string; clave?: string },
 ): Promise<Task> {
+  if (opts.clave) {
+    const existente = await medplum.searchOne('Task', `identifier=${SYSTEM.task}|${opts.clave}`);
+    if (existente) {
+      return existente;
+    }
+  }
   return medplum.createResource<Task>({
     resourceType: 'Task',
     status: 'requested',
@@ -512,9 +523,104 @@ export async function crearAlertaRecepcion(
     code: { text: opts.titulo },
     description: opts.detalle,
     authoredOn: new Date().toISOString(),
+    ...(opts.clave ? { identifier: [{ system: SYSTEM.task, value: opts.clave }] } : {}),
     ...(opts.pacienteRef ? { for: { reference: opts.pacienteRef } } : {}),
     ...(opts.focusRef ? { focus: { reference: opts.focusRef } } : {}),
   });
+}
+
+export interface PreferenciaMP {
+  ok: boolean;
+  url?: string;
+  mensaje?: string;
+}
+
+/**
+ * Crea una preferencia de checkout de MercadoPago y devuelve el link de pago.
+ * Compartida por el link manual (bw-link-mercadopago) y el link automático de
+ * la reserva tentativa (R-19). Con `expira`, el link deja de aceptar pagos en
+ * ese momento (el mismo vencimiento de la seña).
+ */
+export async function crearPreferenciaMP(
+  secrets: Secrets,
+  opts: {
+    titulo: string;
+    montoARS: number;
+    /** external_reference del pago (lo enruta el webhook). */
+    referencia: string;
+    /** Clave de idempotencia del checkout (p. ej. `sena-{appointmentId}`). */
+    idempotencia: string;
+    appointmentId?: string;
+    expira?: Date;
+  },
+): Promise<PreferenciaMP> {
+  const token = secrets['MERCADOPAGO_ACCESS_TOKEN']?.valueString;
+  if (!token) {
+    return { ok: false, mensaje: 'MercadoPago no está configurado (falta MERCADOPAGO_ACCESS_TOKEN en Project Secrets).' };
+  }
+  const appUrl = secrets['APP_BASE_URL']?.valueString ?? 'https://recepcion.medplum.com.ar';
+  const notifUrl = secrets['MP_WEBHOOK_URL']?.valueString;
+
+  const resp = await fetch('https://api.mercadopago.com/checkout/preferences', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
+      'X-Idempotency-Key': opts.idempotencia,
+    },
+    body: JSON.stringify({
+      items: [{ title: opts.titulo, quantity: 1, unit_price: opts.montoARS, currency_id: 'ARS' }],
+      external_reference: opts.referencia,
+      ...(opts.appointmentId ? { metadata: { appointmentId: opts.appointmentId } } : {}),
+      back_urls: { success: appUrl, pending: appUrl, failure: appUrl },
+      auto_return: 'approved',
+      ...(notifUrl ? { notification_url: notifUrl } : {}),
+      ...(opts.expira ? { expires: true, expiration_date_to: isoArgentina(opts.expira) } : {}),
+    }),
+  });
+  if (!resp.ok) {
+    const detalle = await resp.text().catch(() => '');
+    return { ok: false, mensaje: `MercadoPago respondió ${resp.status}: ${detalle.slice(0, 400)}` };
+  }
+  const pref = (await resp.json()) as { init_point?: string; sandbox_init_point?: string };
+  const url = pref.init_point ?? pref.sandbox_init_point;
+  if (!url) {
+    return { ok: false, mensaje: 'MercadoPago no devolvió un link de pago (init_point).' };
+  }
+  return { ok: true, url };
+}
+
+/**
+ * Link de pago de la SEÑA de un turno tentativo (R-19): calcula el 50% del ítem
+ * del turno y crea la preferencia con el vencimiento de la tentativa (si el
+ * Appointment tiene `vence-sena`, el link expira ahí mismo). Devuelve el monto
+ * aunque MercadoPago no esté configurado (url queda undefined y el mensaje
+ * explica por qué); si el turno no tiene ítem, lanza.
+ */
+export async function linkSena(
+  medplum: MedplumClient,
+  secrets: Secrets,
+  appt: Appointment,
+  opts?: { tc?: number },
+): Promise<{ senaARS: number; url?: string; mensaje?: string }> {
+  const itemTipo = appt.extension?.find((e) => e.url === EXT.itemTipo)?.valueCode;
+  const itemCodigo = appt.extension?.find((e) => e.url === EXT.itemCodigo)?.valueString;
+  if (!itemTipo || !itemCodigo || !appt.id) {
+    throw new Error('El turno no tiene ítem asociado para calcular la seña.');
+  }
+  const tc = opts?.tc ?? (await leerTcVigente(medplum));
+  const { senaARS } = calcularSenaARS([{ tipo: itemTipo as ItemCobro['tipo'], codigo: itemCodigo }], { tc });
+  const venceIso = appt.extension?.find((e) => e.url === EXT.venceSena)?.valueDateTime;
+  const pref = await crearPreferenciaMP(secrets, {
+    titulo: `Seña 50% · ${appt.description ?? itemCodigo}`,
+    montoARS: senaARS,
+    // Compat con el webhook: las señas viajan con el appointmentId pelado.
+    referencia: appt.id,
+    idempotencia: `sena-${appt.id}`,
+    appointmentId: appt.id,
+    ...(venceIso ? { expira: new Date(venceIso) } : {}),
+  });
+  return { senaARS, url: pref.url, mensaje: pref.mensaje };
 }
 
 export interface ResultadoConfirmacion {
@@ -526,6 +632,8 @@ export interface ResultadoConfirmacion {
   saldoInvoiceId?: string;
   confirmados: number;
   yaConfirmado: boolean;
+  /** Si está: NO se confirmó (p. ej. pago tardío de una tentativa ya vencida). */
+  rechazado?: string;
 }
 
 /**
@@ -573,6 +681,32 @@ export async function confirmarReserva(
       saldoInvoiceId: saldoExistente?.id,
       confirmados: 0,
       yaConfirmado: true,
+    };
+  }
+
+  // Pago tardío (R-19): si la tentativa ya venció y se liberó (o el turno se
+  // canceló por cualquier motivo), NO se confirma sobre un lugar que quizá ya
+  // ocupó otro. Queda la alerta para que Recepción devuelva o reagende.
+  // (Después de la idempotencia: un reintento del webhook sobre una seña ya
+  // registrada no debe generar la alerta.)
+  if (appt.status === 'cancelled' || appt.status === 'noshow' || appt.status === 'entered-in-error') {
+    const pacienteRefTarde = appt.participant?.find((p) => p.actor?.reference?.startsWith('Patient/'))?.actor?.reference;
+    await crearAlertaRecepcion(medplum, {
+      titulo: 'Seña recibida para una reserva vencida/cancelada',
+      detalle: `Se acreditó la seña de $${senaARS.toLocaleString('es-AR')}${
+        opts.mpPaymentId ? ` (MercadoPago, pago ${opts.mpPaymentId})` : ''
+      } de "${appt.description ?? itemCodigo}", pero el turno está ${appt.status}. Reagendar con el paciente o devolver el pago.`,
+      pacienteRef: pacienteRefTarde,
+      focusRef: `Appointment/${appt.id}`,
+      clave: `sena-tardia-${opts.appointmentId}`,
+    });
+    return {
+      totalARS,
+      senaARS,
+      saldoARS,
+      confirmados: 0,
+      yaConfirmado: false,
+      rechazado: `El turno está ${appt.status}: la seña llegó tarde. Se avisó a Recepción para reagendar o devolver.`,
     };
   }
 
@@ -942,7 +1076,7 @@ export async function consumirSesionDePlan(
 /** CodeSystem compartido con el portal. NO cambiar sin tocar el portal. */
 export const NOTIFICACION_SYSTEM = 'https://biowellness.ar/fhir/CodeSystem/notificacion';
 
-export type TipoNotificacionPortal = 'reserva-confirmada' | 'pago-recibido' | 'recordatorio' | 'general';
+export type TipoNotificacionPortal = 'reserva-confirmada' | 'reserva-vencida' | 'pago-recibido' | 'recordatorio' | 'general';
 
 const fmtTurnoNotif = new Intl.DateTimeFormat('es-AR', {
   weekday: 'long',

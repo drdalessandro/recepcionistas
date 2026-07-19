@@ -28,6 +28,9 @@ export async function handler(medplum: MedplumClient, event: BotEvent<EntradaSen
   const { appointmentId, medioPago, tc } = event.input;
   try {
     const r = await confirmarReserva(medplum, event.secrets, { appointmentId, medioPago, tc });
+    if (r.rechazado) {
+      return { ok: false, mensaje: r.rechazado, totalARS: r.totalARS, senaARS: r.senaARS };
+    }
     return { ok: true, totalARS: r.totalARS, senaARS: r.senaARS, invoiceId: r.invoiceId, confirmados: r.confirmados };
   } catch (e) {
     return { ok: false, mensaje: e instanceof Error ? e.message : 'No se pudo registrar la seña.' };

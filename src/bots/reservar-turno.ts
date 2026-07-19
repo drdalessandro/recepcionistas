@@ -15,11 +15,18 @@ import type { Servicio } from '../domain/types.js';
 import { getServicio } from '../config/catalogo.js';
 import type { PerfilReserva } from '../config/reglas.js';
 import { EXT, SYSTEM } from '../fhir/identifiers.js';
-import { cargarReservasDelDia, consumirSesionDePlan, enviarWhatsApp, extraerCodigos, resolverSolicitudTurno, scheduleIdDeRecurso, tieneBloqueoPago, type ConsumoPlan } from './_shared.js';
+import { cargarReservasDelDia, consumirSesionDePlan, enviarWhatsApp, extraerCodigos, linkSena, resolverSolicitudTurno, scheduleIdDeRecurso, tieneBloqueoPago, type ConsumoPlan } from './_shared.js';
+import { vencimientoSena } from '../lib/sena.js';
 
 const fmtFechaHora = new Intl.DateTimeFormat('es-AR', {
   day: '2-digit',
   month: '2-digit',
+  hour: '2-digit',
+  minute: '2-digit',
+  hour12: false,
+  timeZone: 'America/Argentina/Buenos_Aires',
+});
+const fmtHoraCorta = new Intl.DateTimeFormat('es-AR', {
   hour: '2-digit',
   minute: '2-digit',
   hour12: false,
@@ -216,7 +223,9 @@ export async function handler(
   }
 
   // Con plan: turno CONFIRMADO (la sesión ya está paga). Sin plan: TENTATIVO
-  // hasta cobrar la seña del 50% (pasa a 'booked' al pagar).
+  // hasta cobrar la seña del 50%, con vencimiento (R-19): si la seña no llega
+  // a tiempo, bw-vencer-tentativas libera el lugar.
+  const vence = vencimientoSena(ahora, inicio);
   const appointment: Appointment = await medplum.createResource<Appointment>({
     resourceType: 'Appointment',
     status: consumo ? 'booked' : 'pending',
@@ -230,25 +239,45 @@ export async function handler(
       { url: EXT.ocupantes, valueInteger: e.ocupantes ?? 1 },
       { url: EXT.itemTipo, valueCode: 'servicio' },
       { url: EXT.itemCodigo, valueString: e.servicioCodigo },
-      ...(consumo ? [{ url: EXT.coberturaUsada, valueString: `Coverage/${e.coverageId}` }] : []),
+      ...(consumo
+        ? [{ url: EXT.coberturaUsada, valueString: `Coverage/${e.coverageId}` }]
+        : [{ url: EXT.venceSena, valueDateTime: vence.toISOString() }]),
     ],
   });
 
   // La solicitud de turno pendiente del paciente (si la hay) queda resuelta sola.
   await resolverSolicitudTurno(medplum, e.pacienteRef, [e.servicioCodigo, servicio.categoria], `Appointment/${appointment.id}`);
 
-  await enviarWhatsApp(medplum, event.secrets, {
-    template: consumo ? 'reserva-plan' : 'reserva-tentativa',
-    pacienteRef: e.pacienteRef,
-    // Plantillas: reserva-plan {{1}} servicio {{2}} fecha/hora {{3}} sesiones restantes ·
-    // reserva-tentativa {{1}} servicio {{2}} fecha/hora (docs/whatsapp-plantillas.md).
-    variables: consumo
-      ? [servicio.nombre, fmtFechaHora.format(inicio), String(consumo.restantes)]
-      : [servicio.nombre, fmtFechaHora.format(inicio)],
-    body: consumo
-      ? `BioWellness: ¡tu turno de ${servicio.nombre} quedó confirmado con tu plan para el ${fmtFechaHora.format(inicio)}! Te quedan ${consumo.restantes} sesiones. ¡Te esperamos! 💚`
-      : `BioWellness: reservamos tu turno de ${servicio.nombre} para el ${fmtFechaHora.format(inicio)} (tentativo). Aboná la seña del 50% para confirmarlo. 💚`,
-  });
+  if (consumo) {
+    await enviarWhatsApp(medplum, event.secrets, {
+      template: 'reserva-plan',
+      pacienteRef: e.pacienteRef,
+      // Plantilla: {{1}} servicio · {{2}} fecha/hora · {{3}} sesiones restantes.
+      variables: [servicio.nombre, fmtFechaHora.format(inicio), String(consumo.restantes)],
+      body: `BioWellness: ¡tu turno de ${servicio.nombre} quedó confirmado con tu plan para el ${fmtFechaHora.format(inicio)}! Te quedan ${consumo.restantes} sesiones. ¡Te esperamos! 💚`,
+    });
+  } else {
+    // Seña autoservicio (R-19): monto + link de pago + vencimiento en el mismo
+    // mensaje. Si MP no está configurado, el mensaje sale igual sin link.
+    const link = await linkSena(medplum, event.secrets, appointment).catch(() => undefined);
+    const monto = link ? `$${link.senaARS.toLocaleString('es-AR')}` : 'del 50%';
+    await enviarWhatsApp(medplum, event.secrets, {
+      template: 'reserva-tentativa',
+      pacienteRef: e.pacienteRef,
+      // Plantilla v3: {{1}} servicio · {{2}} fecha/hora · {{3}} monto seña ·
+      // {{4}} link de pago · {{5}} hora límite (docs/whatsapp-plantillas.md).
+      variables: [
+        servicio.nombre,
+        fmtFechaHora.format(inicio),
+        monto,
+        link?.url ?? 'coordinándolo con recepción',
+        fmtHoraCorta.format(vence),
+      ],
+      body: `BioWellness: reservamos tu turno de ${servicio.nombre} para el ${fmtFechaHora.format(inicio)}. Para confirmarlo aboná la seña de ${monto}${
+        link?.url ? ` acá: ${link.url}` : ' (recepción te pasa el medio de pago)'
+      } — tenés tiempo hasta las ${fmtHoraCorta.format(vence)}, después el lugar se libera. 💚`,
+    });
+  }
 
   return {
     ...resultado,

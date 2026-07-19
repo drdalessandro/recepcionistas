@@ -98,5 +98,10 @@ export async function handler(medplum: MedplumClient, event: BotEvent): Promise<
     medioPago: 'mercadopago',
     mpPaymentId: String(paymentId),
   });
+  if (r.rechazado) {
+    // Pago tardío (R-19): el turno ya se liberó. La alerta a Recepción ya quedó
+    // creada (idempotente); se responde ok para que MP no reintente.
+    return { ok: true, confirmado: false, appointmentId: ref, status: 'approved', motivo: r.rechazado };
+  }
   return { ok: true, confirmado: true, appointmentId: ref, status: 'approved', motivo: r.yaConfirmado ? 'ya confirmado' : 'confirmado' };
 }
