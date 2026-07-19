@@ -64,6 +64,47 @@ export function variantesTelefono(valor?: string): string[] {
   return [...set].filter(Boolean);
 }
 
+/** Un adjunto entrante de Twilio (foto, PDF, audio) tal como llega en el form. */
+export interface MedioTwilio {
+  url: string;
+  contentType: string;
+}
+
+/**
+ * Extrae los adjuntos del form de un webhook de Twilio: `NumMedia` indica la
+ * cantidad y cada uno viene como `MediaUrl0`/`MediaContentType0`, `MediaUrl1`/…
+ * Las URLs requieren la autenticación Basic de la cuenta para descargarse.
+ */
+export function mediosTwilio(params: Record<string, unknown>, maximo = 5): MedioTwilio[] {
+  const n = Math.min(Number(params['NumMedia'] ?? '0') || 0, maximo);
+  const medios: MedioTwilio[] = [];
+  for (let i = 0; i < n; i++) {
+    const url = params[`MediaUrl${i}`];
+    if (typeof url === 'string' && /^https?:\/\//i.test(url)) {
+      const tipo = params[`MediaContentType${i}`];
+      medios.push({ url, contentType: typeof tipo === 'string' && tipo ? tipo : 'application/octet-stream' });
+    }
+  }
+  return medios;
+}
+
+/** Extensión de archivo para un content-type de WhatsApp (para nombrar el adjunto). */
+export function extensionDeMime(contentType?: string): string {
+  const mapa: Record<string, string> = {
+    'image/jpeg': 'jpg',
+    'image/png': 'png',
+    'image/webp': 'webp',
+    'image/gif': 'gif',
+    'application/pdf': 'pdf',
+    'audio/ogg': 'ogg',
+    'audio/mpeg': 'mp3',
+    'audio/amr': 'amr',
+    'video/mp4': 'mp4',
+    'text/vcard': 'vcf',
+  };
+  return mapa[(contentType ?? '').split(';')[0].trim().toLowerCase()] ?? 'bin';
+}
+
 /**
  * Valida la firma `X-Twilio-Signature` de un webhook: HMAC-SHA1 en base64 del
  * URL público + los parámetros del form ordenados alfabéticamente (clave+valor),

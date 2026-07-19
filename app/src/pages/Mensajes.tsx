@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
+  ActionIcon,
   Badge,
   Box,
   Button,
   Card,
+  FileButton,
   Group,
   Loader,
   Modal,
@@ -17,10 +19,10 @@ import {
   Title,
 } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
-import { IconMessages, IconPlus, IconRefresh, IconSend } from '@tabler/icons-react';
+import { IconMessages, IconPaperclip, IconPlus, IconRefresh, IconSend } from '@tabler/icons-react';
 import { ResourceInput, useMedplum, useMedplumProfile, useSubscription } from '@medplum/react';
 import { createReference, getDisplayString, getReferenceString } from '@medplum/core';
-import type { Communication, Patient } from '@medplum/fhirtypes';
+import type { Attachment, Communication, Patient } from '@medplum/fhirtypes';
 import { EXT } from '@bw/fhir/identifiers';
 import { espejarWhatsApp } from '../lib/bots';
 
@@ -54,6 +56,15 @@ function texto(c: Communication): string {
   return c.payload?.find((p) => p.contentString)?.contentString ?? '';
 }
 
+function adjuntosDe(c: Communication): Attachment[] {
+  return (c.payload ?? [])
+    .map((p) => p.contentAttachment)
+    .filter((a): a is Attachment => Boolean(a?.url));
+}
+
+/** Límite de WhatsApp por archivo (Twilio rechaza medios más grandes). */
+const MAX_ADJUNTO_BYTES = 15 * 1024 * 1024;
+
 /** Resumen estilo WhatsApp de un hilo: último mensaje + cantidad sin leer. */
 interface ResumenHilo {
   ultimoTexto: string;
@@ -72,6 +83,7 @@ export function Mensajes(): JSX.Element {
   const [hiloId, setHiloId] = useState<string>();
   const [mensajes, setMensajes] = useState<Communication[]>();
   const [respuesta, setRespuesta] = useState('');
+  const [archivos, setArchivos] = useState<File[]>([]);
   const [enviando, setEnviando] = useState(false);
   const [nuevoAbierto, setNuevoAbierto] = useState(false);
   const viewportRef = useRef<HTMLDivElement>(null);
@@ -109,7 +121,7 @@ export function Mensajes(): JSX.Element {
               const r = m.get(padre) ?? { ultimoTexto: '', ultimoSent: '', sinLeer: 0 };
               if (!r.ultimoSent) {
                 // Vienen ordenados de más nuevo a más viejo: el primero es el último mensaje.
-                r.ultimoTexto = texto(c);
+                r.ultimoTexto = texto(c) || (adjuntosDe(c).length > 0 ? '📎 Adjunto' : '');
                 r.ultimoSent = c.sent ?? c.meta?.lastUpdated ?? '';
               }
               if (c.sender?.reference?.startsWith('Patient/') && !c.received) {
@@ -215,12 +227,24 @@ export function Mensajes(): JSX.Element {
   };
 
   const responder = async (): Promise<void> => {
-    if (!hilo || !profile || !respuesta.trim()) {
+    if (!hilo || !profile || (!respuesta.trim() && archivos.length === 0)) {
       return;
     }
     setEnviando(true);
     try {
       const texto = respuesta.trim();
+      // Adjuntos: cada archivo sube como Binary; el server presigna la URL en
+      // cada lectura (la burbuja y el portal los ven sin vencimiento).
+      const adjuntos: Attachment[] = [];
+      for (const f of archivos) {
+        adjuntos.push(
+          await medplum.createAttachment({
+            data: f,
+            contentType: f.type || 'application/octet-stream',
+            filename: f.name,
+          }),
+        );
+      }
       const msg = await medplum.createResource<Communication>({
         resourceType: 'Communication',
         status: 'in-progress',
@@ -229,14 +253,15 @@ export function Mensajes(): JSX.Element {
         sender: createReference(profile) as Communication['sender'],
         ...(hilo.subject ? { recipient: [hilo.subject] as Communication['recipient'] } : {}),
         partOf: [{ reference: `Communication/${hilo.id}` }],
-        payload: [{ contentString: texto }],
+        payload: [...(texto ? [{ contentString: texto }] : []), ...adjuntos.map((a) => ({ contentAttachment: a }))],
       });
       setMensajes((prev) => [...(prev ?? []), msg]);
       setRespuesta('');
-      // Espejo a WhatsApp: el paciente se entera aunque no entre al portal.
-      // Fire-and-forget: no bloquea el chat si Twilio falla.
+      setArchivos([]);
+      // Espejo a WhatsApp (texto + adjuntos): el paciente se entera aunque no
+      // entre al portal. Fire-and-forget: no bloquea el chat si Twilio falla.
       if (hilo.subject?.reference?.startsWith('Patient/')) {
-        espejarWhatsApp(hilo.subject.reference, texto).catch(() => undefined);
+        espejarWhatsApp(hilo.subject.reference, texto, msg.id).catch(() => undefined);
       }
     } catch (err) {
       notifications.show({ color: 'red', title: 'No se pudo enviar', message: String((err as Error)?.message ?? err) });
@@ -389,6 +414,7 @@ export function Mensajes(): JSX.Element {
                     {mensajes.map((m) => {
                       const delPaciente = m.sender?.reference?.startsWith('Patient/');
                       const viaWhatsApp = m.extension?.some((x) => x.url === EXT.canal && x.valueCode === 'whatsapp');
+                      const cuerpo = texto(m);
                       return (
                         <Paper
                           key={m.id}
@@ -399,9 +425,28 @@ export function Mensajes(): JSX.Element {
                           maw="80%"
                           style={{ alignSelf: delPaciente ? 'flex-start' : 'flex-end' }}
                         >
-                          <Text size="sm" style={{ whiteSpace: 'pre-line' }}>
-                            {texto(m)}
-                          </Text>
+                          {cuerpo && (
+                            <Text size="sm" style={{ whiteSpace: 'pre-line' }}>
+                              {cuerpo}
+                            </Text>
+                          )}
+                          {adjuntosDe(m).map((a, i) =>
+                            a.contentType?.startsWith('image/') ? (
+                              <a key={`${m.id}-adj-${i}`} href={a.url} target="_blank" rel="noreferrer">
+                                <img
+                                  src={a.url}
+                                  alt={a.title ?? 'Imagen adjunta'}
+                                  style={{ maxWidth: '100%', maxHeight: 260, borderRadius: 8, display: 'block', marginTop: 6 }}
+                                />
+                              </a>
+                            ) : (
+                              <Text key={`${m.id}-adj-${i}`} size="sm" mt={6}>
+                                <a href={a.url} target="_blank" rel="noreferrer">
+                                  📎 {a.title ?? 'Adjunto'}
+                                </a>
+                              </Text>
+                            ),
+                          )}
                           <Text size="xs" c="dimmed" ta="right">
                             {viaWhatsApp ? '📱 WhatsApp · ' : ''}
                             {m.sent ? fmtHora.format(new Date(m.sent)) : ''}
@@ -413,26 +458,67 @@ export function Mensajes(): JSX.Element {
                 )}
               </ScrollArea>
 
-              <Group p="sm" gap="xs" style={{ borderTop: '1px solid var(--mantine-color-default-border)' }} wrap="nowrap">
-                <Textarea
-                  style={{ flex: 1 }}
-                  autosize
-                  minRows={1}
-                  maxRows={4}
-                  placeholder="Escribí tu respuesta…"
-                  value={respuesta}
-                  onChange={(e) => setRespuesta(e.currentTarget.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' && !e.shiftKey) {
-                      e.preventDefault();
-                      void responder();
-                    }
-                  }}
-                />
-                <Button leftSection={<IconSend size={16} />} loading={enviando} onClick={responder}>
-                  Enviar
-                </Button>
-              </Group>
+              <Box style={{ borderTop: '1px solid var(--mantine-color-default-border)' }}>
+                {archivos.length > 0 && (
+                  <Group gap={6} px="sm" pt="xs">
+                    {archivos.map((f, i) => (
+                      <Badge
+                        key={`${f.name}-${i}`}
+                        variant="light"
+                        style={{ cursor: 'pointer', textTransform: 'none' }}
+                        title="Quitar adjunto"
+                        onClick={() => setArchivos((prev) => prev.filter((_, j) => j !== i))}
+                      >
+                        📎 {f.name} ✕
+                      </Badge>
+                    ))}
+                  </Group>
+                )}
+                <Group p="sm" gap="xs" wrap="nowrap">
+                  <FileButton
+                    multiple
+                    onChange={(fs) => {
+                      if (fs.some((f) => f.size > MAX_ADJUNTO_BYTES)) {
+                        notifications.show({
+                          color: 'red',
+                          title: 'Archivo muy grande',
+                          message: 'WhatsApp acepta hasta 15 MB por archivo.',
+                        });
+                      }
+                      setArchivos((prev) => [...prev, ...fs.filter((f) => f.size <= MAX_ADJUNTO_BYTES)]);
+                    }}
+                  >
+                    {(props) => (
+                      <ActionIcon {...props} variant="default" size="lg" title="Adjuntar archivo (PDF, imagen…)">
+                        <IconPaperclip size={18} />
+                      </ActionIcon>
+                    )}
+                  </FileButton>
+                  <Textarea
+                    style={{ flex: 1 }}
+                    autosize
+                    minRows={1}
+                    maxRows={4}
+                    placeholder="Escribí tu respuesta…"
+                    value={respuesta}
+                    onChange={(e) => setRespuesta(e.currentTarget.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && !e.shiftKey) {
+                        e.preventDefault();
+                        void responder();
+                      }
+                    }}
+                  />
+                  <Button
+                    leftSection={<IconSend size={16} />}
+                    loading={enviando}
+                    disabled={!respuesta.trim() && archivos.length === 0}
+                    onClick={responder}
+                  >
+                    Enviar
+                  </Button>
+                </Group>
+              </Box>
             </>
           )}
         </Card>
