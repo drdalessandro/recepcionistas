@@ -115,6 +115,46 @@ export const COD = {
   posibleDuplicado: 'posible-duplicado',
 } as const;
 
+/**
+ * Canales de origen del lead (lista CERRADA, docs/canales-acceso.md): se guarda
+ * en `Patient.extension` origen-lead como uno de estos códigos, nunca texto
+ * libre — así el CRM puede comparar canales.
+ */
+export const ORIGENES_LEAD = [
+  'instagram',
+  'linkedin',
+  'google',
+  'qr-local',
+  'qr-evento',
+  'web',
+  'telefono',
+  'walk-in',
+  'referido',
+  'derivacion',
+  'otro',
+] as const;
+
+export type OrigenLead = (typeof ORIGENES_LEAD)[number];
+
+export function esOrigenLead(v: string | undefined | null): v is OrigenLead {
+  return Boolean(v) && (ORIGENES_LEAD as readonly string[]).includes(v as string);
+}
+
+/** Etiquetas para la UI (el valor persistido es SIEMPRE el código canónico). */
+export const ORIGENES_LEAD_LABELS: Record<OrigenLead, string> = {
+  instagram: 'Instagram',
+  linkedin: 'LinkedIn',
+  google: 'Google (Maps / búsqueda)',
+  'qr-local': 'QR en el local',
+  'qr-evento': 'QR en evento',
+  web: 'Sitio web / portal',
+  telefono: 'Teléfono',
+  'walk-in': 'Mostrador (walk-in)',
+  referido: 'Referido',
+  derivacion: 'Derivación médica',
+  otro: 'Otro',
+};
+
 /** Clave del recurso de configuración de Tipo de Cambio (Basic). */
 export const CONFIG_TC_ID = 'config-tipo-cambio';
 

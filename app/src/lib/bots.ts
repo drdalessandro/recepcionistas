@@ -195,6 +195,8 @@ export interface AltaPacienteInput {
   email?: string;
   telefono?: string;
   tipoCliente?: string;
+  /** Canal de origen (lista cerrada ORIGENES_LEAD). */
+  origenLead?: string;
 }
 
 export interface ResultadoAltaPaciente {
