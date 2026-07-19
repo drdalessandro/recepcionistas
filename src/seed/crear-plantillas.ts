@@ -43,8 +43,11 @@ const PLANTILLAS: DefPlantilla[] = [
     ejemplos: { '1': 'Sí, tu turno de mañana sigue confirmado a las 16:00.' },
   },
   {
-    // v3 (seña autoservicio, R-19): monto + link de pago + vencimiento.
-    nombre: 'biowellness_reserva_tentativa_v3',
+    // v4 (seña autoservicio, R-19): monto + link de pago + vencimiento.
+    // (La v3 con el MISMO cuerpo fue rechazada por Meta con INCORRECT_CATEGORY:
+    // desde entonces la aprobación se pide con allow_category_change y Meta la
+    // recategoriza en vez de rechazarla. El nombre v3 quedó quemado.)
+    nombre: 'biowellness_reserva_tentativa_v4',
     secret: 'TWILIO_CONTENT_SID_RESERVA_TENTATIVA',
     body: 'BioWellness: reservamos tu turno de {{1}} para el {{2}}. Para confirmarlo aboná la seña de {{3}} acá: {{4}} — tenés tiempo hasta las {{5}}, después el lugar se libera. 💚',
     ejemplos: {
@@ -178,10 +181,13 @@ async function main(): Promise<void> {
       estado = ((await ar.json()) as { whatsapp?: { status?: string } }).whatsapp?.status ?? 'unsubmitted';
     }
     if (estado === 'unsubmitted' || estado === 'draft') {
+      // allow_category_change: si Meta considera que la categoría no es UTILITY
+      // (p. ej. por el link de pago), la recategoriza en vez de rechazar con
+      // INCORRECT_CATEGORY (que quema el nombre de la plantilla).
       const envio = await fetch(`https://content.twilio.com/v1/Content/${contentSid}/ApprovalRequests/whatsapp`, {
         method: 'POST',
         headers,
-        body: JSON.stringify({ name: p.nombre, category: 'UTILITY' }),
+        body: JSON.stringify({ name: p.nombre, category: 'UTILITY', allow_category_change: true }),
       });
       estado = envio.ok
         ? 'enviada a aprobación de Meta'
