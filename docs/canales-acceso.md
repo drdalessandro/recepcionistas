@@ -184,9 +184,21 @@ GET [base]/Patient?origen-lead=instagram&_summary=count
 > Rebuild/Reindex) para que el parámetro alcance a las fichas existentes.
 > Las creadas después se indexan solas.
 
-**Conversión sugerida para el dashboard** (misma agregación que
+**Fecha de alta (cohortes mensuales)**: `Patient.extension` con
+`url = https://biowellness.ar/fhir/StructureDefinition/fecha-alta` y
+`valueDate` (YYYY-MM-DD), estampada automáticamente al crear la ficha.
+Las fichas anteriores quedan **sin fecha y sin canal** (decisión 2026-07: no
+se retro-etiqueta). Referencia: lanzamiento del local **10/08/2026** — la
+primera cohorte mensual completa es agosto 2026.
+
+**Conversión para el dashboard** (misma agregación que
 `npm run crm:canales`, que sirve de verificación cruzada):
 - *Con turno*: pacientes con algún `Appointment` en
   `booked/arrived/checked-in/fulfilled` (por `participant`).
 - *Con pago*: pacientes con algún `Invoice` `balanced` (por `subject`).
+- *Socio*: pacientes con `Coverage` `active` cuyo `tipo-cobertura` es
+  `membresia` (por `beneficiary`; la extensión ausente cuenta como membresía).
 - Excluir fichas `active=false` o con `link` (duplicados ya fusionados).
+
+Handoff completo para implementar el panel en el AdminDashboard:
+[`docs/handoff-crm-canales.md`](handoff-crm-canales.md).

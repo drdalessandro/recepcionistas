@@ -16,6 +16,8 @@ export const EXT = {
   tcBloqueoFm: `${BASE}/StructureDefinition/tc-bloqueo-fm`,
   perfilClinico: `${BASE}/StructureDefinition/perfil-clinico`,
   origenLead: `${BASE}/StructureDefinition/origen-lead`,
+  /** Fecha de alta de la ficha (valueDate): cohortes mensuales del CRM. */
+  fechaAlta: `${BASE}/StructureDefinition/fecha-alta`,
   // Practitioner
   splitPorcentaje: `${BASE}/StructureDefinition/split-porcentaje`,
   tipoContrato: `${BASE}/StructureDefinition/tipo-contrato`,

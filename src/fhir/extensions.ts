@@ -7,7 +7,7 @@ import type { StructureDefinition, ElementDefinition } from '@medplum/fhirtypes'
 import { EXT } from './identifiers.js';
 
 /** Tipo de valor permitido en value[x] de la extensión. */
-type TipoValor = 'string' | 'boolean' | 'decimal' | 'integer' | 'code' | 'dateTime' | 'Money';
+type TipoValor = 'string' | 'boolean' | 'decimal' | 'integer' | 'code' | 'date' | 'dateTime' | 'Money';
 
 interface SpecExtension {
   url: string;
@@ -25,6 +25,7 @@ const SPECS: SpecExtension[] = [
   { url: EXT.tcBloqueoFm, nombre: 'tc-bloqueo-fm', contexto: ['Patient'], tipoValor: 'decimal', descripcion: 'TC bloqueado para FM (precio de membresía en USD bloqueado).' },
   { url: EXT.perfilClinico, nombre: 'perfil-clinico', contexto: ['Patient', 'CarePlan'], tipoValor: 'code', descripcion: 'Perfil clínico (fatiga crónica, atleta, longevidad, estrés).' },
   { url: EXT.origenLead, nombre: 'origen-lead', contexto: ['Patient'], tipoValor: 'string', descripcion: 'Origen del lead (UTM / fuente).' },
+  { url: EXT.fechaAlta, nombre: 'fecha-alta', contexto: ['Patient'], tipoValor: 'date', descripcion: 'Fecha de alta de la ficha (cohortes mensuales del CRM de Administración).' },
   // Practitioner
   { url: EXT.splitPorcentaje, nombre: 'split-porcentaje', contexto: ['Practitioner'], tipoValor: 'decimal', descripcion: 'Porcentaje de split del profesional.' },
   { url: EXT.tipoContrato, nombre: 'tipo-contrato', contexto: ['Practitioner'], tipoValor: 'code', descripcion: 'Tipo de contrato del profesional.' },

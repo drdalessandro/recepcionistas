@@ -35,10 +35,11 @@ export interface ResultadoAltaPaciente {
   creado?: boolean;
 }
 
-function extensionAlta(tipoCliente?: string, origen?: string): Patient['extension'] {
+function extensionAlta(tipoCliente?: string, origen?: string, fechaAlta?: string): Patient['extension'] {
   const ext = [
     ...(tipoCliente ? [{ url: EXT.tipoCliente, valueCode: tipoCliente }] : []),
     ...(origen ? [{ url: EXT.origenLead, valueString: origen }] : []),
+    ...(fechaAlta ? [{ url: EXT.fechaAlta, valueDate: fechaAlta }] : []),
   ];
   return ext.length ? ext : undefined;
 }
@@ -137,7 +138,9 @@ export async function handler(
       name: [{ text: nombreText, given: [firstName], family: lastName }],
       identifier: e.dni ? [{ system: SYSTEM.dni, value: e.dni.trim() }] : undefined,
       telecom: telecom(e.telefono, e.email),
-      extension: extensionAlta(e.tipoCliente, origen),
+      // fecha-alta: cohortes mensuales del CRM. Solo al CREAR (las fichas
+      // viejas quedan sin fecha, decisión 2026-07: no se retro-etiqueta).
+      extension: extensionAlta(e.tipoCliente, origen, new Date().toISOString().slice(0, 10)),
     });
     return { ok: true, patientId: creado.id, creado: true };
   } catch (err) {
