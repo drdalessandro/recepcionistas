@@ -950,6 +950,18 @@ async function activarPlanPendiente(
     return;
   }
 
+  // Candado atómico (webhooks de MP concurrentes / mostrador + webhook a la
+  // vez): el `test` falla en el server si otra invocación ya activó → solo UNA
+  // gana la transición y manda la bienvenida (nunca doble WhatsApp).
+  try {
+    await medplum.patchResource('Coverage', coverage.id, [
+      { op: 'test', path: '/status', value: 'draft' },
+      { op: 'replace', path: '/status', value: 'active' },
+    ]);
+  } catch {
+    return; // otra invocación está activando este mismo plan
+  }
+
   const ahora = new Date();
   const tipoCob = coverage.extension?.find((x) => x.url === EXT.tipoCobertura)?.valueCode ?? 'membresia';
   const planCodigo = planCodigoDeCoverage(coverage);
@@ -999,6 +1011,84 @@ async function activarPlanPendiente(
 }
 
 /**
+ * Un Invoice de plan/saldo YA saldado recibió otra notificación de pago o una
+ * invocación llegó tarde a la carrera. Deja el sistema consistente sin duplicar:
+ *  1. `mp-{paymentId}` NUEVO sobre un Invoice saldado = PAGO DOBLE real →
+ *     alerta idempotente a Recepción para devolver. (Excepción: el primer
+ *     webhook de un pago con tarjeta guardada —la renovación se resuelve antes
+ *     de que llegue la notificación— solo registra el id, sin alertar.)
+ *  2. ChargeItem faltante (crash entre el candado y el registro): lo repara,
+ *     solo si el Invoice lleva quieto más de 2 minutos (si es reciente, el
+ *     dueño del candado sigue trabajando y crearlo acá lo duplicaría).
+ *  3. Completa la activación pendiente del alta inicial (Coverage draft).
+ */
+async function autocurarInvoiceSaldado(
+  medplum: MedplumClient,
+  invoice: Invoice,
+  opts: { clave: string; medio?: MedioPago; secrets?: Secrets; mpPaymentId?: string },
+): Promise<void> {
+  const descripcion = invoice.lineItem?.[0]?.chargeItemCodeableConcept?.text ?? opts.clave;
+
+  // 1) ¿Retry benigno o pago doble?
+  if (opts.mpPaymentId) {
+    const idNuevo = `mp-${opts.mpPaymentId}`;
+    const registrados = (invoice.identifier ?? [])
+      .map((i) => i.value)
+      .filter((v): v is string => Boolean(v?.startsWith('mp-')));
+    if (!registrados.includes(idNuevo)) {
+      const medio = invoice.extension?.find((x) => x.url === EXT.medioPago)?.valueString;
+      if (registrados.length === 0 && medio === 'mercadopago') {
+        await medplum
+          .updateResource<Invoice>({
+            ...invoice,
+            identifier: [...(invoice.identifier ?? []), { system: SYSTEM.invoice, value: idNuevo }],
+          })
+          .catch(() => undefined);
+      } else {
+        await crearAlertaRecepcion(medplum, {
+          titulo: 'Pago DUPLICADO: devolver desde MercadoPago',
+          detalle: `MercadoPago acreditó el pago ${opts.mpPaymentId} de "${descripcion}" ($${(invoice.totalGross?.value ?? 0).toLocaleString('es-AR')}), pero ese cobro YA estaba saldado${
+            medio ? ` (${medio})` : ''
+          }. El cliente pagó dos veces: devolver este pago desde el panel de MercadoPago.`,
+          pacienteRef: invoice.subject?.reference,
+          focusRef: `Invoice/${invoice.id}`,
+          clave: `pago-duplicado-${opts.clave}-${opts.mpPaymentId}`,
+        });
+      }
+    }
+  }
+
+  // 2) ChargeItem faltante (corrida anterior cortada tras el candado).
+  const tieneChargeItem = invoice.lineItem?.some((li) => li.chargeItemReference);
+  const quietoMs = Date.now() - new Date(invoice.meta?.lastUpdated ?? 0).getTime();
+  if (!tieneChargeItem && quietoMs > 2 * 60_000) {
+    const pacienteRef = invoice.subject?.reference;
+    const tipo = invoice.extension?.find((e) => e.url === EXT.itemTipo)?.valueCode as TipoItemCobro | undefined;
+    const planCodigo = invoice.extension?.find((e) => e.url === EXT.itemCodigo)?.valueString;
+    const tc = invoice.extension?.find((e) => e.url === EXT.tcAplicado)?.valueDecimal ?? resolverTC();
+    const totalARS = invoice.totalGross?.value ?? 0;
+    if (pacienteRef && tipo && planCodigo) {
+      const chargeItems = await crearChargeItems(medplum, {
+        pacienteRef,
+        tc,
+        fecha: new Date().toISOString(),
+        lineas: [{ tipo, codigo: planCodigo, descripcion, montoARS: totalARS }],
+      });
+      await medplum.updateResource<Invoice>({
+        ...invoice,
+        lineItem: chargeItems.map((ci) => ({
+          chargeItemReference: { reference: `ChargeItem/${ci.id}`, display: descripcion },
+          priceComponent: [{ type: 'base' as const, amount: { value: totalARS, currency: 'ARS' } }],
+        })),
+      });
+    }
+  }
+
+  // 3) Activación pendiente (no-op si el Coverage ya está activo o no es plan).
+  await activarPlanPendiente(medplum, opts.clave, invoice, opts.secrets);
+}
+
+/**
  * Desenlace del cobro de un plan pendiente (webhook de MP):
  * - `pagado`: Invoice → balanced + medio mercadopago + ChargeItem del plan +
  *   levanta el bloqueo R-11 si lo había. Si el plan estaba pendiente de pago
@@ -1007,15 +1097,34 @@ async function activarPlanPendiente(
  *   Alta inicial NO concretada (Coverage `draft`) → sin bloqueo y el Invoice
  *   queda `issued` (el link sigue vigente y también se puede cobrar en
  *   mostrador); solo alerta idempotente.
- * Idempotente: si el Invoice ya no está `issued`, no repite efectos (pero sí
- * termina una activación pendiente si un reintento anterior quedó a medias).
+ * Idempotente y ATÓMICO: la transición a `balanced` usa un candado (JSONPatch
+ * con `test` de status) para que webhooks concurrentes de MP —que reenvía
+ * notificaciones— o webhook+mostrador a la vez nunca dupliquen ChargeItems.
+ * Un `mpPaymentId` DISTINTO sobre un Invoice ya saldado = pago doble real →
+ * alerta a Recepción para devolver (los retries del mismo pago son mudos).
  */
 export async function resolverInvoicePlan(
   medplum: MedplumClient,
-  opts: { clave: string; resultado: 'pagado' | 'rechazado'; detalle?: string; medio?: MedioPago; secrets?: Secrets },
+  opts: {
+    clave: string;
+    resultado: 'pagado' | 'rechazado';
+    detalle?: string;
+    medio?: MedioPago;
+    secrets?: Secrets;
+    /** Id del pago de MercadoPago (webhook): se registra como identifier `mp-{id}`. */
+    mpPaymentId?: string;
+  },
 ): Promise<{ ok: boolean; invoiceId?: string; mensaje?: string }> {
   const invoice = await medplum.searchOne('Invoice', `identifier=${SYSTEM.invoice}|${opts.clave}`);
   if (!invoice?.id) {
+    // Plata real acreditada sin registro interno: JAMÁS en silencio.
+    if (opts.resultado === 'pagado' && opts.mpPaymentId) {
+      await crearAlertaRecepcion(medplum, {
+        titulo: 'Pago acreditado SIN registro interno',
+        detalle: `MercadoPago acreditó el pago ${opts.mpPaymentId} con referencia "${opts.clave}", pero no existe ningún Invoice con esa clave. Verificar el pago en el panel de MP y registrarlo (o devolverlo) a mano.`,
+        clave: `pago-sin-invoice-${opts.clave}-${opts.mpPaymentId}`,
+      });
+    }
     return { ok: false, mensaje: `No existe Invoice con clave ${opts.clave}.` };
   }
   // 'pagado' también recupera un Invoice `cancelled` (el paciente regularizó
@@ -1023,10 +1132,8 @@ export async function resolverInvoicePlan(
   const puedeResolver =
     opts.resultado === 'pagado' ? invoice.status === 'issued' || invoice.status === 'cancelled' : invoice.status === 'issued';
   if (!puedeResolver) {
-    // Autocuración: si el Invoice quedó balanced pero el Coverage siguió en
-    // draft (corte entre pasos de una corrida anterior), completar la activación.
     if (opts.resultado === 'pagado' && invoice.status === 'balanced') {
-      await activarPlanPendiente(medplum, opts.clave, invoice, opts.secrets);
+      await autocurarInvoiceSaldado(medplum, invoice, opts);
     }
     return { ok: true, invoiceId: invoice.id, mensaje: `Invoice ya resuelto (${invoice.status}).` };
   }
@@ -1059,6 +1166,23 @@ export async function resolverInvoicePlan(
   const descripcion = invoice.lineItem?.[0]?.chargeItemCodeableConcept?.text ?? planCodigo ?? 'Plan';
 
   if (opts.resultado === 'pagado') {
+    // CANDADO atómico (JSONPatch `test`): de dos invocaciones concurrentes
+    // (MP reenvía webhooks; webhook + mostrador a la vez) solo UNA gana la
+    // transición a balanced y crea el ChargeItem. La otra completa lo que
+    // falte sin duplicar nada.
+    try {
+      await medplum.patchResource('Invoice', invoice.id, [
+        { op: 'test', path: '/status', value: invoice.status },
+        { op: 'replace', path: '/status', value: 'balanced' },
+      ]);
+    } catch {
+      const fresco = await medplum.readResource('Invoice', invoice.id).catch(() => undefined);
+      if (fresco?.status === 'balanced') {
+        await autocurarInvoiceSaldado(medplum, fresco, opts);
+      }
+      return { ok: true, invoiceId: invoice.id, mensaje: 'Invoice resuelto por una invocación concurrente.' };
+    }
+
     const fecha = new Date().toISOString();
     let lineItem = invoice.lineItem;
     if (pacienteRef && tipo && planCodigo) {
@@ -1079,6 +1203,14 @@ export async function resolverInvoicePlan(
       date: fecha,
       lineItem,
       totalNet: { value: totalARS, currency: 'ARS' },
+      // Rastro del pago de MP (como las señas): permite distinguir un retry
+      // benigno del webhook de un PAGO DOBLE real (identifier mp-{paymentId}).
+      identifier: [
+        ...(invoice.identifier ?? []),
+        ...(opts.mpPaymentId && !invoice.identifier?.some((i) => i.value === `mp-${opts.mpPaymentId}`)
+          ? [{ system: SYSTEM.invoice, value: `mp-${opts.mpPaymentId}` }]
+          : []),
+      ],
       extension: [...(invoice.extension ?? []).filter((e) => e.url !== EXT.medioPago), extMedioPago(opts.medio ?? 'mercadopago')],
     });
     if (pacienteRef) {
