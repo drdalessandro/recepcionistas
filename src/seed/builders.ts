@@ -54,6 +54,8 @@ export function buildActivityDefinition(s: Servicio): ActivityDefinition {
     url: canonical('ActivityDefinition', s.codigo),
     name: s.codigo,
     title: s.nombre,
+    // Voz de paciente: el portal la muestra tal cual en su lista de servicios.
+    ...(s.descripcion ? { description: s.descripcion } : {}),
     status: 'active',
     kind: 'ServiceRequest',
     identifier: [{ system: SYSTEM.servicioCodigo, value: s.codigo }],

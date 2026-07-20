@@ -67,6 +67,8 @@ export interface Servicio {
   fmAplica: boolean;
   /** Notas / fuente. */
   nota?: string;
+  /** Descripción en voz de paciente: el portal la muestra tal cual (ActivityDefinition.description). */
+  descripcion?: string;
 }
 
 export type VarianteCombo = 'INDIVIDUAL' | 'PAREJA';

@@ -8,7 +8,7 @@ describe('Seed — composición', () => {
   it('Construye los grupos de recursos esperados', () => {
     expect(seed.structureDefinitions.length).toBeGreaterThanOrEqual(28);
     expect(seed.accessPolicies.length).toBe(6); // 5 roles internos + Paciente — Portal
-    expect(seed.activityDefinitions.length).toBe(35); // 32 + 3 consultas médicas (v9: IHHT única)
+    expect(seed.activityDefinitions.length).toBe(36); // 32 + 3 consultas médicas + Chequeo BW (v9: IHHT única)
     expect(seed.combos.length).toBe(9);
     expect(seed.membresias.length).toBe(10);
     expect(seed.paquetes.length).toBe(18);
@@ -26,6 +26,14 @@ describe('Seed — ActivityDefinition (servicios)', () => {
       const precio = ad.extension?.find((e) => e.url === EXT.precioUsd);
       expect(typeof precio?.valueDecimal).toBe('number');
     }
+  });
+
+  it('Chequeo BioWellness: precio-ars de consulta y descripción en voz de paciente (portal)', () => {
+    const chequeo = seed.activityDefinitions.find((ad) => ad.name === 'CHEQUEO_BW')!;
+    expect(chequeo.identifier?.[0]?.value).toBe('CHEQUEO_BW');
+    expect(chequeo.extension?.find((e) => e.url === EXT.precioArs)?.valueDecimal).toBe(120000);
+    expect(chequeo.description).toMatch(/evaluación inicial/i);
+    expect(chequeo.timingTiming?.repeat?.duration).toBe(60);
   });
 });
 

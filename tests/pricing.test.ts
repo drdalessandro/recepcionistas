@@ -164,6 +164,17 @@ describe('Consultas médicas (precio en ARS)', () => {
     );
     expect(r.totalARS).toBe(239250 + 120000);
   });
+
+  it('Chequeo BioWellness: precio de consulta en ARS, sin FM ni prescripción', () => {
+    const s = getServicio('CHEQUEO_BW');
+    expect(s.categoria).toBe('CONSULTA');
+    expect(s.practitionerCodigo).toBeUndefined(); // devolución con cualquier médico
+    expect(s.requierePrescripcion).toBe(false);
+    const r = calcularCobro([{ tipo: 'servicio', codigo: 'CHEQUEO_BW', fm: true }], { tc: 1450 });
+    expect(r.totalARS).toBe(120000); // fm no aplica
+    expect(r.totalUSD).toBe(0);
+    expect(r.lineas[0]?.moneda).toBe('ARS');
+  });
 });
 
 describe('Conversión a ARS (R-17)', () => {
