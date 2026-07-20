@@ -65,8 +65,14 @@ export async function handler(medplum: MedplumClient, event: BotEvent): Promise<
   if (ref.startsWith('plan-')) {
     if (pago.status === 'approved') {
       // `secrets`: si el plan estaba pendiente (alta inicial con MP), la
-      // activación manda la bienvenida por WhatsApp.
-      const r = await resolverInvoicePlan(medplum, { clave: ref, resultado: 'pagado', secrets: event.secrets });
+      // activación manda la bienvenida. `mpPaymentId`: huella del pago — un id
+      // distinto sobre un Invoice ya saldado = pago doble → alerta.
+      const r = await resolverInvoicePlan(medplum, {
+        clave: ref,
+        resultado: 'pagado',
+        secrets: event.secrets,
+        mpPaymentId: String(paymentId),
+      });
       return { ok: r.ok, confirmado: true, status: 'approved', motivo: r.mensaje ?? 'cuota acreditada' };
     }
     if (pago.status === 'rejected' || pago.status === 'cancelled') {
@@ -86,7 +92,13 @@ export async function handler(medplum: MedplumClient, event: BotEvent): Promise<
   // saldo sigue pendiente y se cobra en el mostrador.
   if (ref.startsWith('saldo-')) {
     if (pago.status === 'approved') {
-      const r = await resolverInvoicePlan(medplum, { clave: ref, resultado: 'pagado', medio: 'mercadopago' });
+      const r = await resolverInvoicePlan(medplum, {
+        clave: ref,
+        resultado: 'pagado',
+        medio: 'mercadopago',
+        secrets: event.secrets,
+        mpPaymentId: String(paymentId),
+      });
       return { ok: r.ok, confirmado: true, status: 'approved', motivo: r.mensaje ?? 'saldo acreditado' };
     }
     return { ok: true, confirmado: false, status: pago.status, motivo: 'saldo sigue pendiente' };

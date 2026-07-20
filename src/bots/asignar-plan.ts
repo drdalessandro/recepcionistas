@@ -23,7 +23,7 @@ import { getPaquete } from '../config/paquetes.js';
 import { calcularCobro } from '../lib/pricing.js';
 import { cicloMes } from '../lib/planes.js';
 import { EXT, SYSTEM, esMedioPago } from '../fhir/identifiers.js';
-import { crearPreferenciaMP, emitirInvoicePlan, enviarWhatsApp, leerTcVigente, notificarPortal } from './_shared.js';
+import { crearPreferenciaMP, emitirInvoicePlan, enviarWhatsApp, leerTcVigente, notificarPortal, resolverInvoicePlan } from './_shared.js';
 
 export interface EntradaAsignarPlan {
   pacienteRef: string; // "Patient/123"
@@ -112,25 +112,68 @@ export async function handler(
         (c) => c.extension?.find((x) => x.url === EXT.planCodigo)?.valueString === e.planCodigo,
       );
       if (existente?.id) {
-        const clave = existente.extension?.find((x) => x.url === EXT.cicloMes)?.valueString
-          ? `plan-${existente.id}-${existente.extension?.find((x) => x.url === EXT.cicloMes)?.valueString}`
-          : `plan-${existente.id}`;
-        const inv = await medplum.searchOne('Invoice', `identifier=${SYSTEM.invoice}|${clave}`);
+        const cicloDraft = existente.extension?.find((x) => x.url === EXT.cicloMes)?.valueString;
+        const clave = cicloDraft ? `plan-${existente.id}-${cicloDraft}` : `plan-${existente.id}`;
+        let inv = await medplum.searchOne('Invoice', `identifier=${SYSTEM.invoice}|${clave}`);
+
+        // Ya PAGADO (una corrida anterior murió antes de activar): completar la
+        // activación en vez de volver a cobrar un plan con la plata adentro.
+        if (inv?.status === 'balanced') {
+          await resolverInvoicePlan(medplum, { clave, resultado: 'pagado', secrets: event.secrets });
+          return {
+            ok: true,
+            coverageId: existente.id,
+            invoiceId: inv.id,
+            totalARS: inv.totalGross?.value ?? totalARS,
+            sesiones,
+            mensaje: 'Este plan ya estaba pagado: se completó la activación (no se cobra de nuevo).',
+          };
+        }
+
+        // Invoice ausente (crash entre crear el Coverage y emitirlo): emitirlo
+        // AHORA — jamás un link de pago cuyo external_reference no tenga Invoice
+        // (la plata entraría sin registro).
+        if (!inv) {
+          const cobro = await emitirInvoicePlan(medplum, {
+            coverageId: existente.id,
+            pacienteRef: e.pacienteRef,
+            tipo: e.tipo,
+            planCodigo: e.planCodigo,
+            descripcion,
+            totalARS,
+            tc,
+            ciclo: cicloDraft,
+            status: 'issued',
+          });
+          inv = cobro.invoiceId ? await medplum.readResource('Invoice', cobro.invoiceId) : undefined;
+        }
+
+        const montoPendiente = inv?.totalGross?.value ?? totalARS;
         const pref = await crearPreferenciaMP(event.secrets, {
           titulo: `${descripcion} · cobro inicial`,
-          montoARS: inv?.totalGross?.value ?? totalARS,
+          montoARS: montoPendiente,
           referencia: clave,
           idempotencia: clave,
+        });
+        // Reenviar el link al paciente (el reintento suele ser porque no le llegó).
+        const montoTxt = `$${montoPendiente.toLocaleString('es-AR')}`;
+        await enviarWhatsApp(medplum, event.secrets, {
+          template: 'plan-link-pago',
+          pacienteRef: e.pacienteRef,
+          variables: [descripcion, montoTxt, pref.url ?? 'coordinándolo con recepción'],
+          body: `BioWellness: ¡reservamos tu ${descripcion}! Para activarla aboná ${montoTxt}${
+            pref.url ? ` en este enlace: ${pref.url}` : ' (recepción te pasa el medio de pago)'
+          } — cuando se acredite te confirmamos por acá y quedan tus ${sesiones} sesiones disponibles. 💚`,
         });
         return {
           ok: true,
           pendiente: true,
           coverageId: existente.id,
           invoiceId: inv?.id,
-          totalARS: inv?.totalGross?.value ?? totalARS,
+          totalARS: montoPendiente,
           sesiones,
           url: pref.url,
-          mensaje: 'Este plan ya estaba pendiente de pago: se reutilizó (link regenerado).',
+          mensaje: 'Este plan ya estaba pendiente de pago: se reutilizó (link regenerado y reenviado).',
         };
       }
     }
