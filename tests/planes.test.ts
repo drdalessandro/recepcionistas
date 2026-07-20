@@ -1,7 +1,47 @@
 import { describe, it, expect } from 'vitest';
+import type { Coverage } from '@medplum/fhirtypes';
 import { saldoPlan, motivoNoDisponible, cicloMes, debeRenovarMembresia, parseClavePlan } from '../src/lib/planes.js';
+import { esPlanBW } from '../src/fhir/coverage.js';
+import { EXT } from '../src/fhir/identifiers.js';
 
 const AHORA = new Date('2026-06-22T10:00:00-03:00');
+
+describe('esPlanBW — los dos usos de Coverage (plan BW vs. obra social del portal)', () => {
+  const base: Coverage = {
+    resourceType: 'Coverage',
+    status: 'active',
+    beneficiary: { reference: 'Patient/p1' },
+    payor: [{ reference: 'Patient/p1' }],
+  };
+
+  it('Membresía/paquete BW (con extensiones del alta) => es plan', () => {
+    expect(
+      esPlanBW({
+        ...base,
+        extension: [
+          { url: EXT.tipoCobertura, valueCode: 'membresia' },
+          { url: EXT.planCodigo, valueString: 'PRIME_INT_IND' },
+          { url: EXT.sesionesMes, valueInteger: 8 },
+        ],
+      }),
+    ).toBe(true);
+  });
+
+  it('Obra social del paciente (type ActCode HIP, sin extensiones BW) => NO es plan', () => {
+    expect(
+      esPlanBW({
+        ...base,
+        type: {
+          coding: [{ system: 'http://terminology.hl7.org/CodeSystem/v3-ActCode', code: 'HIP' }],
+        },
+      }),
+    ).toBe(false);
+  });
+
+  it('Coverage con extensiones ajenas (no BW) => NO es plan', () => {
+    expect(esPlanBW({ ...base, extension: [{ url: 'https://otra.cosa/ext', valueString: 'x' }] })).toBe(false);
+  });
+});
 
 describe('saldoPlan', () => {
   it('Membresía con saldo => disponible', () => {

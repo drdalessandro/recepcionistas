@@ -52,6 +52,25 @@ describe('Seed — Contraindicaciones', () => {
   });
 });
 
+describe('Seed — AccessPolicy Paciente — Portal (los dos usos de Coverage)', () => {
+  it('Mantiene la lectura amplia Y la escritura acotada a type ActCode HIP', () => {
+    const portal = seed.accessPolicies.find((p) => p.name === 'Paciente — Portal')!;
+    const coverages = (portal.resource ?? []).filter((r) => r.resourceType === 'Coverage');
+    // Readonly amplia: el paciente ve sus planes BW.
+    expect(coverages.some((r) => r.readonly === true && r.criteria === 'Coverage?beneficiary=%patient')).toBe(true);
+    // Escritura SOLO de su obra social/prepaga (portal → "Datos de cobertura").
+    // Sin esta entrada, el próximo seed pisa la policy aplicada a mano y el
+    // guardado de cobertura del portal rompe con 403.
+    expect(
+      coverages.some(
+        (r) =>
+          !r.readonly &&
+          r.criteria === 'Coverage?beneficiary=%patient&type=http://terminology.hl7.org/CodeSystem/v3-ActCode|HIP',
+      ),
+    ).toBe(true);
+  });
+});
+
 describe('Seed — AccessPolicy de recepción (privacidad por diseño)', () => {
   it('No otorga acceso a recursos clínicos sensibles', () => {
     const recep = seed.accessPolicies.find((p) => p.name === 'Recepción — Operativo')!;

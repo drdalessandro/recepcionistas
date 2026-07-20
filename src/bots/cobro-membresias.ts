@@ -16,7 +16,7 @@ import type { Coverage } from '@medplum/fhirtypes';
 import { getMembresia } from '../config/membresias.js';
 import { calcularCobro } from '../lib/pricing.js';
 import { cicloMes, debeRenovarMembresia } from '../lib/planes.js';
-import { estadoDeCoverage, planCodigoDeCoverage } from '../fhir/coverage.js';
+import { esPlanBW, estadoDeCoverage, planCodigoDeCoverage } from '../fhir/coverage.js';
 import { EXT, SYSTEM } from '../fhir/identifiers.js';
 import { emitirInvoicePlan, enviarWhatsApp, leerTcVigente, notificarPortal, resolverInvoicePlan } from './_shared.js';
 
@@ -50,6 +50,13 @@ export async function handler(
   let renovadas = 0;
   let omitidas = 0;
   for (const c of coberturas) {
+    // La obra social del paciente (portal, type ActCode HIP) también es un
+    // Coverage activo: sin extensiones BW no es un plan — jamás renovarla ni
+    // escribirle (estadoDeCoverage defaulta a 'membresia' si falta el tipo).
+    if (!esPlanBW(c)) {
+      omitidas++;
+      continue;
+    }
     const estado = estadoDeCoverage(c);
     if (estado.tipo !== 'membresia' || !c.id) {
       continue;
