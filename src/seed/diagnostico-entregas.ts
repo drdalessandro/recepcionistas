@@ -63,6 +63,24 @@ const EXPLICACIONES: Record<number, { causa: string; accion: string }> = {
     causa: 'Destinatario inválido para el canal.',
     accion: 'Verificar el número (E.164, celular argentino con 9: +54 9 …).',
   },
+  63050: {
+    causa: 'El destinatario optó por NO recibir mensajes de marketing de este negocio.',
+    accion: 'Solo puede recibir plantillas UTILITY/autenticación; no reintentar marketing.',
+  },
+  63051: {
+    causa:
+      'El sender o la cuenta de WhatsApp Business (WABA) está BLOQUEADA por Meta ' +
+      '(violación de políticas, seguridad o 30 días sin tráfico). No es el mensaje: es la cuenta — ' +
+      'TODO el tráfico saliente queda frenado (los entrantes siguen llegando).',
+    accion:
+      'Twilio Console → Messaging → Senders → WhatsApp senders: estado del número (re-registrar si está locked). ' +
+      'Meta Business Manager → WhatsApp → salud de la cuenta: apelar la restricción si figura. ' +
+      'Si persiste, ticket a Twilio Support citando el 63051 para que apelen ante Meta.',
+  },
+  21656: {
+    causa: 'Las ContentVariables no matchean los placeholders de la plantilla ({{1}}, {{2}}… numéricos, sin espacios).',
+    accion: 'npm run whatsapp:plantilla — valida el cuerpo de cada plantilla y marca el placeholder roto.',
+  },
   30008: {
     causa: 'Error desconocido del canal (Meta no dio detalle).',
     accion: 'Reintentar; si persiste, revisar el estado del sender y de la cuenta en Meta.',
