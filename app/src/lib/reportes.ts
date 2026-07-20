@@ -11,8 +11,11 @@ export interface Reportes {
     cobros: number;
     senasARS: number;
     whatsapp: number;
+    /** Facturas `issued` emitidas hoy: plata que todavía NO entró (accionable). */
+    aCobrarARS: number;
+    aCobrarN: number;
   };
-  mes: { ingresosARS: number; turnos: number };
+  mes: { ingresosARS: number; turnos: number; aCobrarARS: number };
   ocupacion: Array<{ sala: string; turnos: number }>;
 }
 
@@ -73,18 +76,32 @@ export async function cargarReportes(): Promise<Reportes> {
     .map(([code, n]) => ({ sala: RECURSOS_POR_CODIGO.get(code)?.nombre ?? code, turnos: n }))
     .sort((a, b) => b.turnos - a.turnos);
 
-  // Cobros de hoy y del mes (Invoices, en ARS).
+  // Cobros de hoy y del mes (Invoices, en ARS). SOLO `balanced` es ingreso:
+  // el contrato de pagos (docs/bots.md) define balanced = cobrado · issued =
+  // pendiente · cancelled = fallido/anulado. Sin el filtro, cada saldo o alta
+  // de plan por MercadoPago sin acreditar inflaba "Ingresos" con plata que
+  // todavía no entró (bug verificado en producción, 2026-07-20).
   const invHoy = await safe(() =>
-    medplum.searchResources('Invoice', { date: `ge${inicioHoy.toISOString()}`, _count: 1000 }),
+    medplum.searchResources('Invoice', { date: `ge${inicioHoy.toISOString()}`, status: 'balanced', _count: 1000 }),
   );
   const invDelDia = (invHoy as Invoice[]).filter((i) => i.date && i.date <= finHoyISO);
   const ingresosARS = sum(invDelDia, (i) => i.totalGross?.value ?? 0);
   const senasARS = sum(invDelDia.filter(esSena), (i) => i.totalGross?.value ?? 0);
 
   const invMes = await safe(() =>
-    medplum.searchResources('Invoice', { date: `ge${inicioMes.toISOString()}`, _count: 2000 }),
+    medplum.searchResources('Invoice', { date: `ge${inicioMes.toISOString()}`, status: 'balanced', _count: 2000 }),
   );
   const ingresosMesARS = sum(invMes as Invoice[], (i) => i.totalGross?.value ?? 0);
+
+  // A cobrar: las `issued` (pendientes), separadas de los ingresos reales.
+  // El dato accionable para Recepción: perseguir estos cobros.
+  const pendHoy = await safe(() =>
+    medplum.searchResources('Invoice', { date: `ge${inicioHoy.toISOString()}`, status: 'issued', _count: 1000 }),
+  );
+  const pendDelDia = (pendHoy as Invoice[]).filter((i) => i.date && i.date <= finHoyISO);
+  const pendMes = await safe(() =>
+    medplum.searchResources('Invoice', { date: `ge${inicioMes.toISOString()}`, status: 'issued', _count: 2000 }),
+  );
 
   const turnosMes = await contar('Appointment', { date: `ge${inicioMes.toISOString()}` });
   const whatsapp = await contar('Communication', { sent: `ge${inicioHoy.toISOString()}` });
@@ -97,8 +114,14 @@ export async function cargarReportes(): Promise<Reportes> {
       cobros: invDelDia.length,
       senasARS,
       whatsapp,
+      aCobrarARS: sum(pendDelDia, (i) => i.totalGross?.value ?? 0),
+      aCobrarN: pendDelDia.length,
     },
-    mes: { ingresosARS: ingresosMesARS, turnos: turnosMes },
+    mes: {
+      ingresosARS: ingresosMesARS,
+      turnos: turnosMes,
+      aCobrarARS: sum(pendMes as Invoice[], (i) => i.totalGross?.value ?? 0),
+    },
     ocupacion,
   };
 }

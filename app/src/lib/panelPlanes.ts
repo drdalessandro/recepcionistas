@@ -1,7 +1,7 @@
 import type { Appointment, Coverage, Patient } from '@medplum/fhirtypes';
 import { getDisplayString } from '@medplum/core';
 import { medplum } from '../medplum';
-import { estadoDeCoverage, planCodigoDeCoverage } from '@bw/fhir/coverage';
+import { esPlanBW, estadoDeCoverage, planCodigoDeCoverage } from '@bw/fhir/coverage';
 import { saldoPlan } from '@bw/lib/planes';
 import { EXT } from '@bw/fhir/identifiers';
 import { nombreYBase } from './planes';
@@ -113,6 +113,10 @@ export async function cargarPanelPlanes(ahora: Date = new Date()): Promise<Panel
 
   const filas: FilaPlan[] = [];
   for (const c of coberturas as Coverage[]) {
+    // La obra social del paciente (portal, ActCode HIP) no es un plan BW.
+    if (!esPlanBW(c)) {
+      continue;
+    }
     const planCodigo = planCodigoDeCoverage(c);
     const pacienteId = c.beneficiary?.reference?.slice('Patient/'.length);
     if (!c.id || !planCodigo || !pacienteId) {

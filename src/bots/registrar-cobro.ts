@@ -17,7 +17,7 @@ import type { BotEvent, MedplumClient } from '@medplum/core';
 import type { Invoice } from '@medplum/fhirtypes';
 import { calcularCobro, descuentoALaCarteDe, type ItemCobro } from '../lib/pricing.js';
 import { validarMedios } from '../lib/cobros.js';
-import { estadoDeCoverage, planCodigoDeCoverage } from '../fhir/coverage.js';
+import { esPlanBW, estadoDeCoverage, planCodigoDeCoverage } from '../fhir/coverage.js';
 import { getMembresia } from '../config/membresias.js';
 import { EXT, SYSTEM } from '../fhir/identifiers.js';
 import { crearChargeItems, extMedioPago, leerTcVigente, lineaAChargeItem } from './_shared.js';
@@ -79,6 +79,10 @@ export async function handler(
       _count: 20,
     });
     for (const c of coberturas) {
+      // La obra social del paciente (portal, ActCode HIP) no es un plan BW.
+      if (!esPlanBW(c)) {
+        continue;
+      }
       const estado = estadoDeCoverage(c);
       if (estado.tipo !== 'membresia') {
         continue;

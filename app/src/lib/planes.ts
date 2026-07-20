@@ -1,6 +1,6 @@
 import type { Coverage } from '@medplum/fhirtypes';
 import { medplum } from '../medplum';
-import { estadoDeCoverage, planCodigoDeCoverage } from '@bw/fhir/coverage';
+import { esPlanBW, estadoDeCoverage, planCodigoDeCoverage } from '@bw/fhir/coverage';
 import { saldoPlan, type EstadoPlan, type SaldoPlan } from '@bw/lib/planes';
 import { MEMBRESIAS_POR_CODIGO } from '@bw/config/membresias';
 import { PAQUETES_POR_CODIGO } from '@bw/config/paquetes';
@@ -45,6 +45,11 @@ export async function cargarPlanesActivos(pacienteId: string, ahora: Date = new 
   });
   const planes: PlanPaciente[] = [];
   for (const c of coberturas) {
+    // La obra social/prepaga que el paciente registra desde el portal (type
+    // ActCode HIP, sin extensiones BW) no es un plan: no es una fila acá.
+    if (!esPlanBW(c)) {
+      continue;
+    }
     const planCodigo = planCodigoDeCoverage(c);
     if (!c.id || !planCodigo) {
       continue;

@@ -207,6 +207,28 @@ export const SERVICIOS: Servicio[] = [
 
   // ---------------------- 09 · CONSULTAS MÉDICAS (consultorio, precio en ARS) ----------------------
   ...consultasDeMedicos(),
+
+  // ---------------------- 10 · CHEQUEO BIOWELLNESS (evaluación inicial — journey del portal) ----------------------
+  // Producto de entrada (decisiones de Andrés 2026-07-20): precio = consulta;
+  // devolución con Dalessandro o Dos Santos indistinto (sin practitionerCodigo);
+  // la orden de laboratorio NO se cobra (el paciente la resuelve por su
+  // cobertura y sube el PDF al portal). Comparte consultorio y reglas R-07.
+  {
+    codigo: 'CHEQUEO_BW',
+    nombre: 'Chequeo BioWellness',
+    categoria: 'CONSULTA',
+    duracionMin: 60,
+    precioUSD: 0,
+    precioARS: 120_000,
+    requierePrescripcion: false,
+    reglaPricing: 'POR_SESION',
+    split: BW100,
+    fmAplica: false,
+    descripcion:
+      'Tu evaluación inicial completa: consulta médica, orden de laboratorio y devolución con tu plan ' +
+      "personalizado. Completá tu score de salud (Life's Essential 8) y arrancá tu protocolo con datos reales.",
+    nota: 'Precio = consulta (2026-07-20); si cambia, ajustar acá y avisar al portal.',
+  },
 ];
 
 /**

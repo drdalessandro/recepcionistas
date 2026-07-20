@@ -108,6 +108,15 @@ export function Reportes(): JSX.Element {
               </Text>
             </Metric>
 
+            <Metric label="A cobrar hoy">
+              <Text size="2rem" fw={700} c={data.hoy.aCobrarARS > 0 ? 'orange.7' : undefined}>
+                <Pesos value={data.hoy.aCobrarARS} />
+              </Text>
+              <Text size="sm" c="dimmed">
+                {data.hoy.aCobrarN} facturas pendientes · mes <Pesos value={data.mes.aCobrarARS} />
+              </Text>
+            </Metric>
+
             <Metric label="WhatsApp hoy">
               <Text size="2rem" fw={700}>
                 {data.hoy.whatsapp}

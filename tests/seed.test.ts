@@ -8,7 +8,7 @@ describe('Seed — composición', () => {
   it('Construye los grupos de recursos esperados', () => {
     expect(seed.structureDefinitions.length).toBeGreaterThanOrEqual(28);
     expect(seed.accessPolicies.length).toBe(6); // 5 roles internos + Paciente — Portal
-    expect(seed.activityDefinitions.length).toBe(35); // 32 + 3 consultas médicas (v9: IHHT única)
+    expect(seed.activityDefinitions.length).toBe(36); // 32 + 3 consultas médicas + Chequeo BW (v9: IHHT única)
     expect(seed.combos.length).toBe(9);
     expect(seed.membresias.length).toBe(10);
     expect(seed.paquetes.length).toBe(18);
@@ -26,6 +26,14 @@ describe('Seed — ActivityDefinition (servicios)', () => {
       const precio = ad.extension?.find((e) => e.url === EXT.precioUsd);
       expect(typeof precio?.valueDecimal).toBe('number');
     }
+  });
+
+  it('Chequeo BioWellness: precio-ars de consulta y descripción en voz de paciente (portal)', () => {
+    const chequeo = seed.activityDefinitions.find((ad) => ad.name === 'CHEQUEO_BW')!;
+    expect(chequeo.identifier?.[0]?.value).toBe('CHEQUEO_BW');
+    expect(chequeo.extension?.find((e) => e.url === EXT.precioArs)?.valueDecimal).toBe(120000);
+    expect(chequeo.description).toMatch(/evaluación inicial/i);
+    expect(chequeo.timingTiming?.repeat?.duration).toBe(60);
   });
 });
 
@@ -49,6 +57,25 @@ describe('Seed — Contraindicaciones', () => {
     expect((cs.concept?.length ?? 0)).toBeGreaterThan(0);
     const c0 = cs.concept?.[0];
     expect(c0?.property?.some((p) => p.code === 'severidad')).toBe(true);
+  });
+});
+
+describe('Seed — AccessPolicy Paciente — Portal (los dos usos de Coverage)', () => {
+  it('Mantiene la lectura amplia Y la escritura acotada a type ActCode HIP', () => {
+    const portal = seed.accessPolicies.find((p) => p.name === 'Paciente — Portal')!;
+    const coverages = (portal.resource ?? []).filter((r) => r.resourceType === 'Coverage');
+    // Readonly amplia: el paciente ve sus planes BW.
+    expect(coverages.some((r) => r.readonly === true && r.criteria === 'Coverage?beneficiary=%patient')).toBe(true);
+    // Escritura SOLO de su obra social/prepaga (portal → "Datos de cobertura").
+    // Sin esta entrada, el próximo seed pisa la policy aplicada a mano y el
+    // guardado de cobertura del portal rompe con 403.
+    expect(
+      coverages.some(
+        (r) =>
+          !r.readonly &&
+          r.criteria === 'Coverage?beneficiary=%patient&type=http://terminology.hl7.org/CodeSystem/v3-ActCode|HIP',
+      ),
+    ).toBe(true);
   });
 });
 

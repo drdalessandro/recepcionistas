@@ -138,6 +138,16 @@ export const POLICY_PACIENTE_PORTAL: AccessPolicy = {
     // Compartimento propio — sólo lectura (lo gestiona Recepción / el equipo médico).
     { resourceType: 'Appointment', readonly: true, criteria: 'Appointment?actor=%patient' },
     { resourceType: 'Coverage', readonly: true, criteria: 'Coverage?beneficiary=%patient' },
+    // Cobertura de salud del paciente (obra social/prepaga, portal → Perfil →
+    // "Datos de cobertura"): escritura SOLO de Coverages marcadas con type
+    // ActCode HIP. Las membresías/paquetes BW no llevan ese type → siguen fuera
+    // del alcance del paciente. Convive con la readonly amplia de arriba.
+    // (Aplicada a mano el 2026-07-20; sin esta entrada el próximo seed la pisa
+    // y rompe el guardado de cobertura del portal con 403.)
+    {
+      resourceType: 'Coverage',
+      criteria: 'Coverage?beneficiary=%patient&type=http://terminology.hl7.org/CodeSystem/v3-ActCode|HIP',
+    },
     { resourceType: 'Invoice', readonly: true, criteria: 'Invoice?subject=%patient' },
     { resourceType: 'DiagnosticReport', readonly: true, criteria: 'DiagnosticReport?subject=%patient' },
     // CarePlan escribible: "Mi plan" del portal marca acciones (Empezar/Lograda)
