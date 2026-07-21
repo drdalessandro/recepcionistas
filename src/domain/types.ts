@@ -75,6 +75,12 @@ export interface Servicio {
    * para poder intercalar; los grupos comparten valor y desempatan alfabético.
    */
   orden?: number;
+  /**
+   * Sección comercial PROPIA en la góndola (→ `topic`), cuando difiere de la
+   * etiqueta de su categoría (addendum 2.1: las consultas se separan —
+   * "Consulta Evaluación" vs. "Consulta Director Médico").
+   */
+  categoriaComercial?: string;
 }
 
 export type VarianteCombo = 'INDIVIDUAL' | 'PAREJA';

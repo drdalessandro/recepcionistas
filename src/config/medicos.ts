@@ -18,7 +18,7 @@ export interface Medico {
 }
 
 export const MEDICOS: Medico[] = [
-  { codigo: 'MED_DALESSANDRO', nombre: 'Dr. Alejandro Dalessandro', esDirector: false, precioConsultaARS: 120_000 },
+  { codigo: 'MED_DALESSANDRO', nombre: "Dr. Alejandro D'Alessandro", esDirector: false, precioConsultaARS: 120_000 },
   { codigo: 'MED_DOS_SANTOS', nombre: 'Dra. Stephanie Dos Santos', esDirector: false, precioConsultaARS: 120_000 },
   {
     codigo: 'MED_CONRADO',
