@@ -39,6 +39,21 @@ export const CATEGORIA_COMERCIAL: Record<CategoriaServicio, string> = {
 // Descripciones compartidas por grupo (los nombres propios se mantienen).
 const DESC_CONSULTA =
   'La puerta de entrada a tu protocolo: evaluación integral, revisión de tus biomarcadores y plan personalizado.';
+const DESC_CONSULTA_CONRADO =
+  'Consultas médicas traumatológicas y de Medicina del Deporte de Alto Rendimiento. No realiza las Evaluaciones ' +
+  'Biowellness: para tu evaluación inicial, elegí una Consulta Evaluación o el Chequeo Biowellness.';
+
+/**
+ * Addendum 2.1 (2026-07-21): las consultas se SEPARAN en la góndola. La Dra.
+ * Dos Santos va primera (11 < 12) dentro de "Consulta Evaluación"; el Dr.
+ * Conrado tiene sección propia y su descripción aclara que NO hace las
+ * Evaluaciones Biowellness. Un médico nuevo cae al default (Evaluación, 11).
+ */
+const CONSULTAS_COMERCIAL: Record<string, { orden: number; categoriaComercial: string; descripcion: string }> = {
+  CONSULTA_MED_DOS_SANTOS: { orden: 11, categoriaComercial: 'Consulta Evaluación', descripcion: DESC_CONSULTA },
+  CONSULTA_MED_DALESSANDRO: { orden: 12, categoriaComercial: 'Consulta Evaluación', descripcion: DESC_CONSULTA },
+  CONSULTA_MED_CONRADO: { orden: 13, categoriaComercial: 'Consulta Director Médico', descripcion: DESC_CONSULTA_CONRADO },
+};
 const DESC_IV =
   'Vitaminas, minerales y antioxidantes directo en sangre, según tu objetivo. Siempre con evaluación médica previa.';
 const DESC_TB = 'Medicina regenerativa avanzada con indicación médica personalizada. El primer paso es la consulta.';
@@ -307,22 +322,29 @@ export const SERVICIOS: Servicio[] = [
  * 15 de descanso => el slot ocupa 60 min. Todas usan el único consultorio.
  */
 function consultasDeMedicos(): Servicio[] {
-  return MEDICOS.map((m) => ({
-    codigo: codigoConsulta(m.codigo),
-    nombre: `Consulta médica — ${m.nombre}`,
-    categoria: 'CONSULTA' as const,
-    duracionMin: 60,
-    precioUSD: 0,
-    precioARS: m.precioConsultaARS,
-    practitionerCodigo: m.codigo,
-    requierePrescripcion: false,
-    reglaPricing: 'POR_SESION' as const,
-    split: BW100,
-    fmAplica: false,
-    orden: 11,
-    descripcion: DESC_CONSULTA,
-    ...(m.precioProvisorio ? { nota: 'Precio provisorio (Director Médico) — confirmar' } : {}),
-  }));
+  return MEDICOS.map((m) => {
+    const codigo = codigoConsulta(m.codigo);
+    const comercial = CONSULTAS_COMERCIAL[codigo] ?? {
+      orden: 11,
+      categoriaComercial: 'Evaluación',
+      descripcion: DESC_CONSULTA,
+    };
+    return {
+      codigo,
+      nombre: `Consulta médica — ${m.nombre}`,
+      categoria: 'CONSULTA' as const,
+      duracionMin: 60,
+      precioUSD: 0,
+      precioARS: m.precioConsultaARS,
+      practitionerCodigo: m.codigo,
+      requierePrescripcion: false,
+      reglaPricing: 'POR_SESION' as const,
+      split: BW100,
+      fmAplica: false,
+      ...comercial,
+      ...(m.precioProvisorio ? { nota: 'Precio provisorio (Director Médico) — confirmar' } : {}),
+    };
+  });
 }
 
 /** Helper para Terapias Biológicas (todas comparten split, regla y flags). */

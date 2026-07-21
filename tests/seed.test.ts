@@ -45,7 +45,21 @@ describe('Seed — ActivityDefinition (servicios)', () => {
     }
     // La góndola: Evaluación arriba, Cámara Hiperbárica 20-22, IV 90, Biológicas 95 al cierre.
     expect(orden('CHEQUEO_BW')).toBe(10);
-    expect(orden('CONSULTA_MED_DALESSANDRO')).toBe(11);
+    // Addendum 2.1: consultas separadas — Dos Santos primera, Conrado sección propia.
+    expect(orden('CONSULTA_MED_DOS_SANTOS')).toBe(11);
+    expect(orden('CONSULTA_MED_DALESSANDRO')).toBe(12);
+    expect(orden('CONSULTA_MED_CONRADO')).toBe(13);
+    const topicDe = (name: string): string | undefined =>
+      seed.activityDefinitions.find((ad) => ad.name === name)?.topic?.[0]?.text;
+    expect(topicDe('CONSULTA_MED_DOS_SANTOS')).toBe('Consulta Evaluación');
+    expect(topicDe('CONSULTA_MED_DALESSANDRO')).toBe('Consulta Evaluación');
+    expect(topicDe('CONSULTA_MED_CONRADO')).toBe('Consulta Director Médico');
+    const conrado = seed.activityDefinitions.find((ad) => ad.name === 'CONSULTA_MED_CONRADO')!;
+    expect(conrado.description).toMatch(/No realiza las Evaluaciones/);
+    expect(conrado.extension?.find((e) => e.url === EXT.precioArs)?.valueDecimal).toBe(150000);
+    expect(seed.activityDefinitions.find((ad) => ad.name === 'CONSULTA_MED_DALESSANDRO')?.title).toBe(
+      "Consulta médica — Dr. Alejandro D'Alessandro",
+    );
     expect(orden('HBOT_MONO')).toBe(20);
     expect(orden('HBOT_MULTIPLAZA')).toBe(22);
     expect(orden('IHHT')).toBe(30);

@@ -64,8 +64,9 @@ export function buildActivityDefinition(s: Servicio): ActivityDefinition {
     kind: 'ServiceRequest',
     identifier: [{ system: SYSTEM.servicioCodigo, value: s.codigo }],
     // Sección COMERCIAL de la góndola (el código interno de categoría no viaja:
-    // es contrato de R-07/pricing, no de la vidriera).
-    topic: [{ text: CATEGORIA_COMERCIAL[s.categoria] ?? s.categoria }],
+    // es contrato de R-07/pricing, no de la vidriera). `categoriaComercial`
+    // permite sección propia por servicio (addendum 2.1: las consultas).
+    topic: [{ text: s.categoriaComercial ?? CATEGORIA_COMERCIAL[s.categoria] ?? s.categoria }],
     extension: ext,
   };
   if (s.duracionMin > 0) {
