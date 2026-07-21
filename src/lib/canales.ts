@@ -8,12 +8,13 @@
  * preguntar. Los links al portal, en cambio, se miden con UTM clásico.
  */
 import type { OrigenLead } from '../fhir/identifiers.js';
+import { PORTAL_URL } from './onboarding.js';
 
 /** Número productivo de WhatsApp (E.164 sin '+'; el de wa.me). */
 export const WHATSAPP_NUMERO = '5491162470002';
 
-/** URL base del portal del paciente (autogestión). */
-export const PORTAL_URL = 'https://app.biowellness.ar';
+/** URL base del portal (fuente de verdad: onboarding.ts — una sola, sin deriva). */
+export { PORTAL_URL };
 
 /** Link wa.me con texto prefijado (el texto identifica el canal al llegar). */
 export function linkWhatsApp(texto: string, numero: string = WHATSAPP_NUMERO): string {

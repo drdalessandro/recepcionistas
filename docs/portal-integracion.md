@@ -1,7 +1,7 @@
 # Integración Recepción ↔ Portal del paciente
 
 Contrato de integración entre **esta app (recepción)** y el **portal del paciente**
-(`biowellness/portal`, basado en FooMedical, publicado en `bio.medplum.com.ar`).
+(`biowellness/portal`, basado en FooMedical, publicado en `app.biowellness.ar`).
 
 Las dos apps comparten el **mismo servidor y proyecto Medplum**. La recepción es
 para el staff (con su AccessPolicy operativa); el portal es para el paciente, que
@@ -46,7 +46,7 @@ ve **solo lo suyo** vía la AccessPolicy **"Paciente — Portal"**
   asigna el **default patient access policy** del proyecto.
 
 El link de invitación apunta al portal vía el secret **`PORTAL_BASE_URL`**
-(default `https://bio.medplum.com.ar`).
+(default `https://app.biowellness.ar`).
 
 ## Checklist de revisión del repo del portal
 
@@ -59,7 +59,7 @@ El link de invitación apunta al portal vía el secret **`PORTAL_BASE_URL`**
 2. **Ruta `/setpassword/:id/:secret` — ✅ YA EXISTE en el portal.**
    El portal tiene `SetPasswordPage` (`portal/src/pages/SetPasswordPage.tsx`) como
    ruta **pública** que hace `POST auth/setpassword` y redirige a `/signin`. El link
-   de invitación a `bio.medplum.com.ar/setpassword/...` ya funciona end-to-end; no
+   de invitación a `app.biowellness.ar/setpassword/...` ya funciona end-to-end; no
    hace falta el stopgap de apuntar a `app.medplum.com.ar`.
 
    <details><summary>Referencia (la página ya implementada en el portal)</summary>
@@ -104,7 +104,7 @@ El link de invitación apunta al portal vía el secret **`PORTAL_BASE_URL`**
    Referencia canónica: `medplum/packages/app/src/SetPasswordPage.tsx` (open source).
    </details>
 
-   `PORTAL_BASE_URL` debe quedar en `https://bio.medplum.com.ar` (default). Ya no se
+   `PORTAL_BASE_URL` debe quedar en `https://app.biowellness.ar` (default). Ya no se
    necesita el stopgap a `app.medplum.com.ar`.
 
 3. **Default patient access policy = "Paciente — Portal".** Para que el
@@ -129,7 +129,7 @@ El link de invitación apunta al portal vía el secret **`PORTAL_BASE_URL`**
    antes endurecerlos para derivar el paciente del login (no del input) y habilitar la
    ejecución solo de esos bots.
 
-5. **Branding/seguridad** ya consistente (theme BioWellness en `bio.medplum.com.ar`).
+5. **Branding/seguridad** ya consistente (theme BioWellness en `app.biowellness.ar`).
    Verificar `recaptchaSiteKey`/`googleClientId` si el registro los usa.
 
 ## Cómo dar acceso al repo del portal

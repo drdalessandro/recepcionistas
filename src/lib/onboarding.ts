@@ -44,8 +44,12 @@ export interface MensajeInvitacion {
   texto: string;
 }
 
-/** URL del portal del paciente (se muestra para que lo guarde / lo agregue a inicio). */
-export const PORTAL_URL = 'https://bio.medplum.com.ar';
+/**
+ * URL del portal del paciente (se muestra para que lo guarde / lo agregue a
+ * inicio). Dominio propio desde 2026-07-20; el viejo bio.medplum.com.ar queda
+ * como redirect 301 en nginx (links de invitación ya enviados, QRs impresos).
+ */
+export const PORTAL_URL = 'https://app.biowellness.ar';
 
 /**
  * Cuerpo de la invitación al portal (mismo link mágico en todos los canales).
