@@ -216,9 +216,9 @@ después):
    - **qr** → devuelve el link y el front lo dibuja como **QR** (client-side, el
      link nunca sale a un tercero).
 
-   El link apunta al **portal del paciente** (FooMedical, `bio.medplum.com.ar`),
+   El link apunta al **portal del paciente** (FooMedical, `app.biowellness.ar`),
    no a la app de recepción. Se configura con el secret **`PORTAL_BASE_URL`**
-   (default `https://bio.medplum.com.ar`).
+   (default `https://app.biowellness.ar`).
 
 ### Requisitos para invitar
 

@@ -73,7 +73,7 @@ AccessPolicy correspondiente.
 ## Pacientes y el portal
 
 El **portal del paciente** es una app aparte (basada en FooMedical, repo
-`biowellness/portal`, en `bio.medplum.com.ar`). Ahí el paciente puede
+`biowellness/portal`, en `app.biowellness.ar`). Ahí el paciente puede
 **auto-registrarse** ("Crear cuenta") e iniciar sesión. La AccessPolicy
 **"Paciente — Portal"** (`src/fhir/access-policies.ts`) es la que limita a cada
 paciente a ver **solo lo suyo** (`%patient`): sus turnos, pagos, plan y mensajes,
@@ -90,7 +90,7 @@ Hay dos caminos para que un paciente tenga acceso, y conviene que ambos usen la
   asigna explícitamente "Paciente — Portal". Ver `docs/bots.md` (onboarding).
 
 > El link de invitación apunta al **portal** (`PORTAL_BASE_URL`,
-> default `bio.medplum.com.ar`), no a la app de recepción.
+> default `app.biowellness.ar`), no a la app de recepción.
 
 > Contrato de integración reception ↔ portal (checklist a verificar en el repo
 > `biowellness/portal`): ver [`docs/portal-integracion.md`](portal-integracion.md).

@@ -103,7 +103,7 @@ export const NOMBRE_POLICY_PACIENTE = 'Paciente — Portal';
 
 /**
  * Paciente — Portal: el paciente accede **sólo a lo suyo** desde el portal
- * (bio.medplum.com.ar). Ve su agenda, plan, pagos y mensajes, y —ejerciendo su
+ * (app.biowellness.ar). Ve su agenda, plan, pagos y mensajes, y —ejerciendo su
  * derecho de acceso a sus propios datos— su historia (laboratorio, biomarcadores,
  * vacunas, medicación, plan de cuidado, consentimientos). Lo no listado queda
  * denegado; nunca ve datos de otros pacientes. `%patient` se liga al perfil del
@@ -117,9 +117,10 @@ export const NOMBRE_POLICY_PACIENTE = 'Paciente — Portal';
  * Catálogo, agenda y profesionales: sólo lectura (para mostrar la oferta).
  *
  * Reservar un turno NO se hace escribiendo `Appointment` directo: el modelo es de
- * **solicitud** (el paciente ejecuta solo el bot `bw-solicitar-turno`, que crea un
- * `Task`, y Recepción confirma con los bots de reserva), por eso `Appointment` es de
- * sólo lectura y el acceso a `Bot` está acotado a ese único bot.
+ * **solicitud** (el paciente consulta horarios con `bw-disponibilidad` —solo
+ * lectura— y pide con `bw-solicitar-turno`, que crea un `Task`; Recepción
+ * confirma con los bots de reserva), por eso `Appointment` es de sólo lectura y
+ * el acceso a `Bot` está acotado a esos dos bots.
  *
  * IMPORTANTE — fuente de verdad: esta definición es la que aplica `npm run seed`
  * (upsert por `name`). Debe mantenerse en sincronía con su **espejo** de

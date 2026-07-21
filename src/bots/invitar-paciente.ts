@@ -96,7 +96,7 @@ export async function handler(
     // pedimos uno nuevo con auth/resetpassword (sendEmail:false, flujo custom de
     // Medplum) y reintentamos. El link va al PORTAL del paciente (PORTAL_BASE_URL).
     const userId = membership.user?.reference?.split('/')[1];
-    const baseUrl = event.secrets['PORTAL_BASE_URL']?.valueString ?? 'https://bio.medplum.com.ar';
+    const baseUrl = event.secrets['PORTAL_BASE_URL']?.valueString ?? 'https://app.biowellness.ar';
 
     // UserSecurityRequest no está en el union tipado de búsqueda: vía REST directo.
     const buscarLink = async (): Promise<string | undefined> => {
