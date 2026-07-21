@@ -17,7 +17,7 @@ import type { Patient } from '@medplum/fhirtypes';
 import { getDisplayString } from '@medplum/core';
 import { medplum } from '../medplum';
 import { reservarTurno, mensajeError, type ResultadoReserva } from '../lib/bots';
-import { SERVICIOS } from '@bw/config/catalogo';
+import { SERVICIOS, nombreServicioRecepcion } from '@bw/config/catalogo';
 import { RECURSOS_POR_CODIGO, recursosParaCategoria } from '@bw/config/recursos';
 import { generarSlots } from '@bw/lib/slots';
 import { HORARIO_SEMANAL } from '@bw/config/horario';
@@ -190,7 +190,7 @@ export function ReservaModal({
           <Select
             label="Servicio"
             placeholder="Elegí un servicio"
-            data={serviciosCompatibles.map((s) => ({ value: s.codigo, label: s.nombre }))}
+            data={serviciosCompatibles.map((s) => ({ value: s.codigo, label: nombreServicioRecepcion(s) }))}
             value={servicioCodigo}
             onChange={setServicioCodigo}
             searchable

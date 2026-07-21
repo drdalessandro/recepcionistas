@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { getServicio, SERVICIOS } from '../src/config/catalogo.js';
+import { getServicio, nombreServicioRecepcion, SERVICIOS } from '../src/config/catalogo.js';
 import { COMBOS, getCombo } from '../src/config/combos.js';
 import { getMembresia } from '../src/config/membresias.js';
 import { getPaquete } from '../src/config/paquetes.js';
@@ -230,5 +230,22 @@ describe('Integridad del catálogo', () => {
         expect(s.requierePrescripcion).toBe(true);
       }
     }
+  });
+});
+
+describe('nombreServicioRecepcion — el mostrador siempre sabe con quién', () => {
+  it('Re-agrega el médico cuando el título comercial no lo menciona', () => {
+    expect(nombreServicioRecepcion(getServicio('CONSULTA_MED_DOS_SANTOS'))).toBe(
+      'Evaluación Biowellness — Dra. Stephanie Dos Santos',
+    );
+    expect(nombreServicioRecepcion(getServicio('CONSULTA_MED_DALESSANDRO'))).toBe(
+      "Evaluación Biowellness — Dr. Alejandro D'Alessandro",
+    );
+  });
+  it('No duplica si el título ya lo trae, ni toca servicios sin médico', () => {
+    expect(nombreServicioRecepcion(getServicio('CONSULTA_MED_CONRADO'))).toBe(
+      'Consulta médica — Dr. Conrado López Alonso',
+    );
+    expect(nombreServicioRecepcion(getServicio('HBOT_MONO'))).toBe('Cámara Hiperbárica (HBOT) — Monoplaza');
   });
 });
