@@ -69,6 +69,12 @@ export interface Servicio {
   nota?: string;
   /** Descripción en voz de paciente: el portal la muestra tal cual (ActivityDefinition.description). */
   descripcion?: string;
+  /**
+   * Posición en la góndola del portal (extensión `orden`, valueInteger; el
+   * portal ordena ascendente y sin la extensión cae al final). Valores de a 10
+   * para poder intercalar; los grupos comparten valor y desempatan alfabético.
+   */
+  orden?: number;
 }
 
 export type VarianteCombo = 'INDIVIDUAL' | 'PAREJA';

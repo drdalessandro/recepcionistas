@@ -42,6 +42,7 @@ const SPECS: SpecExtension[] = [
   { url: EXT.reglaPricingRecurso, nombre: 'regla-pricing-recurso', contexto: ['ActivityDefinition'], tipoValor: 'code', descripcion: 'Regla de pricing del recurso.' },
   { url: EXT.splitBw, nombre: 'split-bw', contexto: ['ActivityDefinition'], tipoValor: 'code', descripcion: 'Tipo de split de ingresos.' },
   { url: EXT.requierePrescripcion, nombre: 'requiere-prescripcion', contexto: ['ActivityDefinition'], tipoValor: 'boolean', descripcion: 'Requiere prescripción médica.' },
+  { url: EXT.orden, nombre: 'orden', contexto: ['ActivityDefinition'], tipoValor: 'integer', descripcion: 'Posición en la góndola del portal (ascendente; sin extensión cae al final).' },
   // PlanDefinition (combos)
   { url: EXT.secuenciaOrdenada, nombre: 'secuencia-ordenada', contexto: ['PlanDefinition'], tipoValor: 'boolean', descripcion: 'El combo tiene secuencia ordenada (HBOT primero).' },
   { url: EXT.descuentoCombo, nombre: 'descuento-combo', contexto: ['PlanDefinition'], tipoValor: 'decimal', descripcion: 'Descuento del combo sobre lista.' },
