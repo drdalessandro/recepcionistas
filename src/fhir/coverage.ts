@@ -19,7 +19,7 @@ export function planCodigoDeCoverage(c: Coverage): string | undefined {
 }
 
 /**
- * ¿Es un plan BioWellness (membresía/paquete)? Un Coverage del paciente puede
+ * ¿Es un plan Biowellness (membresía/paquete)? Un Coverage del paciente puede
  * ser también su obra social/prepaga, registrada desde el portal (type ActCode
  * HIP, sin extensiones BW): esa NUNCA es un plan — no lista sesiones, no se
  * renueva ni se cobra. Ojo: `estadoDeCoverage` defaulta `tipo` a 'membresia'

@@ -110,7 +110,7 @@ export function mensajeWhatsAppRecepcion(s: SolicitudTurno, nombrePaciente?: str
   const quien = nombrePaciente?.trim() || 'Un paciente';
   const pref = preferenciaLegible(s);
   return (
-    `BioWellness · Nueva solicitud de turno.\n${quien} pidió: ${s.terapia.trim()}` +
+    `Biowellness · Nueva solicitud de turno.\n${quien} pidió: ${s.terapia.trim()}` +
     (pref ? `.\nPreferencia: ${pref}` : '') +
     (s.nota?.trim() ? `.\nNota: ${s.nota.trim()}` : '') +
     `.\nConfirmala desde la app de Recepción (Solicitudes).`

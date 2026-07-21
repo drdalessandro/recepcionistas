@@ -1,4 +1,4 @@
-/* Look & feel BioWellness: fondo crema cálido en modo claro. */
+/* Look & feel Biowellness: fondo crema cálido en modo claro. */
 [data-mantine-color-scheme='light'] body {
   background-color: var(--mantine-color-bio-0);
 }

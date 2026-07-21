@@ -4,7 +4,7 @@
  * Le da acceso de login al paciente (para ver SUS turnos/plan/pagos) reutilizando
  * el invite de Medplum con `sendEmail:false`, y entrega el link mágico
  * (`/setpassword/{id}/{secret}`) por el canal elegido:
- *   - whatsapp → Twilio;     - email → mail BioWellness (SES);     - qr → devuelve
+ *   - whatsapp → Twilio;     - email → mail Biowellness (SES);     - qr → devuelve
  *     el link para que el front lo muestre como QR en el mostrador.
  *
  * Reusa el `Patient` existente (`upsert:true` → no duplica). Requiere que el bot
@@ -149,7 +149,7 @@ export async function handler(
       const m = mensajeInvitacion(display, link);
       // Remitente con marca (la dirección sigue siendo la identidad SES verificada).
       // Configurable con el secret EMAIL_FROM.
-      const from = event.secrets['EMAIL_FROM']?.valueString ?? 'BioWellness San Isidro <hola@medplum.com.ar>';
+      const from = event.secrets['EMAIL_FROM']?.valueString ?? 'Biowellness San Isidro <hola@medplum.com.ar>';
       const comm = await enviarEmail(medplum, {
         to: email,
         asunto: m.asunto,

@@ -45,7 +45,7 @@ function construir(ahora: Date) {
     status: 'active',
     identifier: [{ system: PRUEBA, value: 'recordatorio-membresia' }],
     beneficiary: { reference: `Patient/${PATIENT_ID}` },
-    payor: [{ display: 'BioWellness' }],
+    payor: [{ display: 'Biowellness' }],
     extension: [
       { url: EXT.tipoCobertura, valueCode: 'membresia' },
       { url: EXT.planCodigo, valueString: PLAN },

@@ -45,6 +45,6 @@ describe('onboarding · link y nombre', () => {
     const m = mensajeInvitacion('Ana', 'https://x/setpassword/a/b');
     expect(m.texto).toContain('https://x/setpassword/a/b');
     expect(m.texto).toContain('Ana');
-    expect(m.asunto).toMatch(/BioWellness/);
+    expect(m.asunto).toMatch(/Biowellness/);
   });
 });

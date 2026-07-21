@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
 Genera los entregables .docx del bloque de gestión de sesiones:
-  - BioWellness-Gestion-de-Sesiones-Andres.docx  (resumen para Andrés)
-  - BioWellness-Guia-Recepcion.docx              (guía para recepcionistas)
+  - Biowellness-Gestion-de-Sesiones-Andres.docx  (resumen para Andrés)
+  - Biowellness-Guia-Recepcion.docx              (guía para recepcionistas)
 
 Uso: python3 docs/entregables/generar-docx.py
 Requiere: python-docx  (pip install python-docx)
@@ -83,7 +83,7 @@ def doc_andres():
     base(doc)
     titulo(
         doc,
-        "BioWellness · Gestión de Sesiones",
+        "Biowellness · Gestión de Sesiones",
         "Resumen del bloque entregado · Recepción (Bloque 0) · 21/06/2026",
     )
 
@@ -152,7 +152,7 @@ def doc_andres():
         "El detalle técnico está en el repositorio: docs/app-recepcion.md (la app), "
         "docs/bots.md (automatizaciones y secretos) y docs/decisiones-pendientes.md.",
     )
-    ruta = os.path.join(OUT, "BioWellness-Gestion-de-Sesiones-Andres.docx")
+    ruta = os.path.join(OUT, "Biowellness-Gestion-de-Sesiones-Andres.docx")
     doc.save(ruta)
     return ruta
 
@@ -164,7 +164,7 @@ def doc_recepcion():
     titulo(
         doc,
         "Guía rápida de Recepción",
-        "Planes, sesiones y recordatorios · BioWellness",
+        "Planes, sesiones y recordatorios · Biowellness",
     )
 
     parrafo(
@@ -212,7 +212,7 @@ def doc_recepcion():
     bullet(doc, "Un turno con plan no descuenta del saldo o el saldo se ve raro: avisá al equipo técnico (no lo fuerces a mano).")
     bullet(doc, "El sistema bloquea una reserva: te dice el motivo (sala ocupada, sin saldo, etc.). Seguí ese mensaje.")
 
-    ruta = os.path.join(OUT, "BioWellness-Guia-Recepcion.docx")
+    ruta = os.path.join(OUT, "Biowellness-Guia-Recepcion.docx")
     doc.save(ruta)
     return ruta
 

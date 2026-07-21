@@ -38,9 +38,9 @@ async function main(): Promise<void> {
   await medplum.startClientLogin(requireEnv('MEDPLUM_CLIENT_ID'), requireEnv('MEDPLUM_CLIENT_SECRET'));
   console.log(`Conectado a ${process.env.MEDPLUM_BASE_URL}. Enviando email de prueba a: ${to}`);
 
-  const asunto = `BioWellness · prueba de email (${new Date().toLocaleString('es-AR')})`;
+  const asunto = `Biowellness · prueba de email (${new Date().toLocaleString('es-AR')})`;
   const cuerpo =
-    'Este es un email de prueba del diagnóstico de recepción BioWellness.\n\n' +
+    'Este es un email de prueba del diagnóstico de recepción Biowellness.\n\n' +
     'Si lo recibiste, la cadena Medplum → SES funciona. 💚';
 
   // `from` opcional: por defecto lo decide el server (su supportEmail, p. ej.

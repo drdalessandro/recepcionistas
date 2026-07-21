@@ -1,7 +1,7 @@
 import { createTheme, type MantineColorsTuple } from '@mantine/core';
 
 /**
- * Paleta de marca BioWellness: cobre/bronce sobre crema cálida (identidad del
+ * Paleta de marca Biowellness: cobre/bronce sobre crema cálida (identidad del
  * logo). `bio` es el color primario; `cafe` es el marrón oscuro para textos/acentos.
  */
 const bio: MantineColorsTuple = [

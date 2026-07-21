@@ -1,5 +1,5 @@
 /**
- * StructureDefinitions de las extensiones custom de BioWellness.
+ * StructureDefinitions de las extensiones custom de Biowellness.
  * Se generan a partir de una tabla compacta (url, contexto, tipo de valor).
  * El seed las carga en Medplum para registrar el modelo de datos del Bloque 0.
  */

@@ -143,11 +143,11 @@ export function altasPorMes(pacientes: PacienteCanal[]): AltasMes[] {
 }
 
 export const CANALES_QR: CanalQR[] = [
-  { origen: 'instagram', nombre: 'Instagram (bio y stories)', texto: '¡Hola BioWellness! Quiero más info 🌿 (vengo de Instagram)' },
-  { origen: 'linkedin', nombre: 'LinkedIn (posts)', texto: '¡Hola BioWellness! Quiero más info (los vi en LinkedIn)' },
-  { origen: 'qr-local', nombre: 'QR impreso en el local', texto: '¡Hola! Estoy en BioWellness y quiero más info (QR del local)' },
-  { origen: 'qr-evento', nombre: 'QR para eventos y flyers', texto: '¡Hola BioWellness! Quiero más info (los conocí en un evento)' },
-  { origen: 'web', nombre: 'Sitio web (botón WhatsApp)', texto: '¡Hola BioWellness! Quiero más info (vengo de la web)' },
-  { origen: 'referido', nombre: 'Referidos (link para compartir)', texto: '¡Hola BioWellness! Me los recomendaron y quiero más info' },
-  { origen: 'google', nombre: 'Google (ficha del negocio)', texto: '¡Hola BioWellness! Quiero más info (los encontré en Google)' },
+  { origen: 'instagram', nombre: 'Instagram (bio y stories)', texto: '¡Hola Biowellness! Quiero más info 🌿 (vengo de Instagram)' },
+  { origen: 'linkedin', nombre: 'LinkedIn (posts)', texto: '¡Hola Biowellness! Quiero más info (los vi en LinkedIn)' },
+  { origen: 'qr-local', nombre: 'QR impreso en el local', texto: '¡Hola! Estoy en Biowellness y quiero más info (QR del local)' },
+  { origen: 'qr-evento', nombre: 'QR para eventos y flyers', texto: '¡Hola Biowellness! Quiero más info (los conocí en un evento)' },
+  { origen: 'web', nombre: 'Sitio web (botón WhatsApp)', texto: '¡Hola Biowellness! Quiero más info (vengo de la web)' },
+  { origen: 'referido', nombre: 'Referidos (link para compartir)', texto: '¡Hola Biowellness! Me los recomendaron y quiero más info' },
+  { origen: 'google', nombre: 'Google (ficha del negocio)', texto: '¡Hola Biowellness! Quiero más info (los encontré en Google)' },
 ];

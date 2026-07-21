@@ -215,7 +215,7 @@ export const SERVICIOS: Servicio[] = [
   // cobertura y sube el PDF al portal). Comparte consultorio y reglas R-07.
   {
     codigo: 'CHEQUEO_BW',
-    nombre: 'Chequeo BioWellness',
+    nombre: 'Chequeo Biowellness',
     categoria: 'CONSULTA',
     duracionMin: 60,
     precioUSD: 0,

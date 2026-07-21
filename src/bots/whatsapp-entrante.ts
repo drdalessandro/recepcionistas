@@ -3,7 +3,7 @@
  *
  * Twilio llama la URL pública (nginx `/webhooks/twilio-whatsapp`, que inyecta la
  * autenticación igual que el webhook de MercadoPago) cuando un paciente escribe
- * al número de WhatsApp de BioWellness. Patrón `inboundSmsActiveThreadLookup`
+ * al número de WhatsApp de Biowellness. Patrón `inboundSmsActiveThreadLookup`
  * del ejemplo oficial de mensajería de Medplum:
  *
  *  1. Valida la firma X-Twilio-Signature (si TWILIO_WEBHOOK_URL está configurado).

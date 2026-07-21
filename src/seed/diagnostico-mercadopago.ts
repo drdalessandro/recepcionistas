@@ -71,7 +71,7 @@ async function probarPreferencia(): Promise<void> {
     method: 'POST',
     headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      items: [{ title: 'Prueba de circuito BioWellness (diagnóstico)', quantity: 1, unit_price: 100, currency_id: 'ARS' }],
+      items: [{ title: 'Prueba de circuito Biowellness (diagnóstico)', quantity: 1, unit_price: 100, currency_id: 'ARS' }],
       external_reference: 'plan-prueba-diagnostico',
       notification_url: WEBHOOK_URL,
     }),

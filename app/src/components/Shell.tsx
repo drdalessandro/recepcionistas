@@ -39,7 +39,7 @@ export function Shell({ vista, onVista, children }: ShellProps): JSX.Element {
         <Group h="100%" px="md" justify="space-between" wrap="nowrap">
           <Group gap="xs" wrap="nowrap">
             <Title order={3} c="bio.7">
-              BioWellness
+              Biowellness
             </Title>
             <Text c="dimmed" size="sm" visibleFrom="sm">
               Recepción

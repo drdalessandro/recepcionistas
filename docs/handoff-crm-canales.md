@@ -8,10 +8,10 @@
 ## Objetivo
 
 Sumar al AdminDashboard (KPI metrics) un panel **"Clientes por canal"** que
-compare los canales de adquisición de BioWellness San Isidro: cuántos clientes
+compare los canales de adquisición de Biowellness San Isidro: cuántos clientes
 trae cada canal y cuántos convierten (turno → pago → socio), con evolución
 mensual. El dato ya existe en el servidor Medplum compartido
-(`https://api.medplum.com.ar/`, proyecto BioWellness San Isidro): lo carga
+(`https://api.medplum.com.ar/`, proyecto Biowellness San Isidro): lo carga
 Recepción en cada alta.
 
 ## Contrato de datos (estable — NO renombrar códigos)

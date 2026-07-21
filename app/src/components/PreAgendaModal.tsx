@@ -133,7 +133,7 @@ export function PreAgendaModal({
           await enviarWhatsApp({
             pacienteRef,
             template: 'serie-agendada',
-            body: `BioWellness: te dejamos agendadas ${agendadas} ${agendadas === 1 ? 'sesión' : 'sesiones'} de tu ${plan.nombre} este mes. ¡Te esperamos! 💚`,
+            body: `Biowellness: te dejamos agendadas ${agendadas} ${agendadas === 1 ? 'sesión' : 'sesiones'} de tu ${plan.nombre} este mes. ¡Te esperamos! 💚`,
           });
         } catch {
           // sin Twilio configurado igual queda registrada la Communication

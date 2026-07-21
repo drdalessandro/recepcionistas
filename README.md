@@ -1,6 +1,6 @@
-# Recepcionistas — BioWellness San Isidro
+# Recepcionistas — Biowellness San Isidro
 
-Herramienta de Recepción de BioWellness San Isidro. **Bloque 0 (Cimientos)**: la
+Herramienta de Recepción de Biowellness San Isidro. **Bloque 0 (Cimientos)**: la
 base sobre la que se apoya la pantalla de la recepción. Backend **Medplum (FHIR R4)**.
 
 > Principio rector: *"Las Recepcionistas nunca calculan ni deciden nada que el
