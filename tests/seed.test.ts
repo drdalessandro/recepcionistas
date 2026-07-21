@@ -77,6 +77,13 @@ describe('Seed — AccessPolicy Paciente — Portal (los dos usos de Coverage)',
       ),
     ).toBe(true);
   });
+
+  it('El paciente solo puede ejecutar los bots del portal (solicitar-turno y disponibilidad)', () => {
+    const portal = seed.accessPolicies.find((p) => p.name === 'Paciente — Portal')!;
+    const bot = (portal.resource ?? []).find((r) => r.resourceType === 'Bot')!;
+    expect(bot.readonly).toBe(true);
+    expect(bot.criteria).toBe('Bot?name=bw-solicitar-turno,bw-disponibilidad');
+  });
 });
 
 describe('Seed — AccessPolicy de recepción (privacidad por diseño)', () => {

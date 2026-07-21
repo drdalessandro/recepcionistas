@@ -224,6 +224,23 @@ export function validarCapacidadRecurso(reservas: ReservaRecurso[]): ResultadoVa
 }
 
 /**
+ * Personas anotadas en un recurso dentro de una franja: suma de `ocupantes` de
+ * las reservas que solapan, cada una acotada a la capacidad del recurso. Lo usan
+ * el mínimo grupal (abajo) y la disponibilidad del portal (Multiplaza: "ya somos N").
+ */
+export function personasEnFranja(
+  reservas: ReservaRecurso[],
+  recursoCodigo: string,
+  inicio: Date,
+  fin: Date,
+): number {
+  const capacidad = RECURSOS_POR_CODIGO.get(recursoCodigo)?.capacidad ?? 1;
+  return reservas
+    .filter((r) => r.recursoCodigo === recursoCodigo && r.inicio < fin && inicio < r.fin)
+    .reduce((acc, r) => acc + pesoPersonas(r, capacidad), 0);
+}
+
+/**
  * Mínimo operativo de una sesión grupal (Multiplaza: 3 personas, del Manual).
  * NO bloquea: advierte a la recepción que la sesión todavía no llega al mínimo,
  * contando las personas de todas las reservas que solapan la franja de `nueva`.
@@ -234,9 +251,7 @@ export function validarMinimoGrupal(reservas: ReservaRecurso[], nueva: ReservaRe
   if (!recurso || !minimo) {
     return resultado([]);
   }
-  const personas = reservas
-    .filter((r) => r.recursoCodigo === nueva.recursoCodigo && r.inicio < nueva.fin && nueva.inicio < r.fin)
-    .reduce((acc, r) => acc + pesoPersonas(r, recurso.capacidad), 0);
+  const personas = personasEnFranja(reservas, nueva.recursoCodigo, nueva.inicio, nueva.fin);
   if (personas < minimo) {
     return resultado([
       {

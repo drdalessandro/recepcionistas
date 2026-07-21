@@ -310,17 +310,24 @@ export async function cargarReservasDelDia(medplum: MedplumClient, dia: Date): P
   inicioDia.setHours(0, 0, 0, 0);
   const finDia = new Date(dia);
   finDia.setHours(23, 59, 59, 999);
+  return cargarReservasEnRango(medplum, inicioDia, finDia);
+}
 
+/**
+ * Agenda ocupada (Slots busy → ReservaRecurso) de un rango [desde, hasta].
+ * Lo usa la disponibilidad del portal (ventana de hasta 7 días, R-13).
+ */
+export async function cargarReservasEnRango(medplum: MedplumClient, desde: Date, hasta: Date): Promise<ReservaRecurso[]> {
   const ocupados = await medplum.searchResources('Slot', {
     status: 'busy',
-    start: `ge${inicioDia.toISOString()}`,
-    _count: 500,
+    start: `ge${desde.toISOString()}`,
+    _count: 1000,
   });
 
   const reservas: ReservaRecurso[] = [];
   for (const s of ocupados) {
     const codigo = s.extension?.find((x) => x.url === EXT.recursoFisico)?.valueString;
-    if (!codigo || !s.start || !s.end || s.start > finDia.toISOString()) {
+    if (!codigo || !s.start || !s.end || s.start > hasta.toISOString()) {
       continue;
     }
     // Personas de la reserva (Slots viejos sin la extensión cuentan como 1).
