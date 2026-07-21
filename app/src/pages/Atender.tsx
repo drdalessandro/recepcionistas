@@ -47,7 +47,7 @@ import { SYSTEM } from '@bw/fhir/identifiers';
 import { PreAgendaModal } from '../components/PreAgendaModal';
 import { InvitarPortal } from '../components/InvitarPortal';
 import { NuevoPacienteModal } from '../components/NuevoPacienteModal';
-import { SERVICIOS } from '@bw/config/catalogo';
+import { SERVICIOS, nombreServicioRecepcion } from '@bw/config/catalogo';
 import { COMBOS } from '@bw/config/combos';
 import { MEMBRESIAS } from '@bw/config/membresias';
 import { PAQUETES } from '@bw/config/paquetes';
@@ -605,7 +605,7 @@ function PanelReserva({
 
   const opciones = [
     { group: 'Combos (secuencia automática)', items: COMBOS.map((c) => ({ value: c.codigo, label: c.nombre })) },
-    { group: 'Servicios', items: SERVICIOS.map((s) => ({ value: s.codigo, label: s.nombre })) },
+    { group: 'Servicios', items: SERVICIOS.map((s) => ({ value: s.codigo, label: nombreServicioRecepcion(s) })) },
   ];
 
   const horas = useMemo(() => {
@@ -825,7 +825,7 @@ function PanelCobro({ paciente }: { paciente: Patient }): JSX.Element {
 
   const opciones = [
     { group: 'Combos', items: COMBOS.map((c) => ({ value: c.codigo, label: c.nombre })) },
-    { group: 'Servicios', items: SERVICIOS.map((s) => ({ value: s.codigo, label: s.nombre })) },
+    { group: 'Servicios', items: SERVICIOS.map((s) => ({ value: s.codigo, label: nombreServicioRecepcion(s) })) },
   ];
 
   const items = (): { tipo: 'combo' | 'servicio'; codigo: string }[] =>

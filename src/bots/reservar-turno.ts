@@ -12,7 +12,7 @@
 import type { BotEvent, MedplumClient } from '@medplum/core';
 import type { Appointment, AppointmentParticipant, Slot } from '@medplum/fhirtypes';
 import type { Servicio } from '../domain/types.js';
-import { getServicio } from '../config/catalogo.js';
+import { getServicio, nombreServicioRecepcion } from '../config/catalogo.js';
 import type { PerfilReserva } from '../config/reglas.js';
 import { EXT, SYSTEM } from '../fhir/identifiers.js';
 import { cargarReservasDelDia, consumirSesionDePlan, enviarWhatsApp, extraerCodigos, linkSena, resolverSolicitudTurno, scheduleIdDeRecurso, tieneBloqueoPago, type ConsumoPlan } from './_shared.js';
@@ -229,7 +229,7 @@ export async function handler(
   const appointment: Appointment = await medplum.createResource<Appointment>({
     resourceType: 'Appointment',
     status: consumo ? 'booked' : 'pending',
-    description: servicio.nombre,
+    description: nombreServicioRecepcion(servicio),
     start: inicio.toISOString(),
     end: fin.toISOString(),
     slot: [{ reference: `Slot/${slot.id}` }],
@@ -253,8 +253,8 @@ export async function handler(
       template: 'reserva-plan',
       pacienteRef: e.pacienteRef,
       // Plantilla: {{1}} servicio · {{2}} fecha/hora · {{3}} sesiones restantes.
-      variables: [servicio.nombre, fmtFechaHora.format(inicio), String(consumo.restantes)],
-      body: `Biowellness: ¡tu turno de ${servicio.nombre} quedó confirmado con tu plan para el ${fmtFechaHora.format(inicio)}! Te quedan ${consumo.restantes} sesiones. ¡Te esperamos! 💚`,
+      variables: [nombreServicioRecepcion(servicio), fmtFechaHora.format(inicio), String(consumo.restantes)],
+      body: `Biowellness: ¡tu turno de ${nombreServicioRecepcion(servicio)} quedó confirmado con tu plan para el ${fmtFechaHora.format(inicio)}! Te quedan ${consumo.restantes} sesiones. ¡Te esperamos! 💚`,
     });
   } else {
     // Seña autoservicio (R-19): monto + link de pago + vencimiento en el mismo
@@ -267,13 +267,13 @@ export async function handler(
       // Plantilla v3: {{1}} servicio · {{2}} fecha/hora · {{3}} monto seña ·
       // {{4}} link de pago · {{5}} hora límite (docs/whatsapp-plantillas.md).
       variables: [
-        servicio.nombre,
+        nombreServicioRecepcion(servicio),
         fmtFechaHora.format(inicio),
         monto,
         link?.url ?? 'coordinándolo con recepción',
         fmtHoraCorta.format(vence),
       ],
-      body: `Biowellness: reservamos tu turno de ${servicio.nombre} para el ${fmtFechaHora.format(inicio)}. Para confirmarlo aboná la seña de ${monto}${
+      body: `Biowellness: reservamos tu turno de ${nombreServicioRecepcion(servicio)} para el ${fmtFechaHora.format(inicio)}. Para confirmarlo aboná la seña de ${monto}${
         link?.url ? ` acá: ${link.url}` : ' (recepción te pasa el medio de pago)'
       } — tenés tiempo hasta las ${fmtHoraCorta.format(vence)}, después el lugar se libera. 💚`,
     });

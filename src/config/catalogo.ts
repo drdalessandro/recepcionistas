@@ -12,7 +12,7 @@
  * los códigos de equipo (IPC06, COT03) salen de los títulos visibles.
  */
 import type { CategoriaServicio, Servicio, Split } from '../domain/types.js';
-import { MEDICOS, codigoConsulta } from './medicos.js';
+import { MEDICOS, MEDICOS_POR_CODIGO, codigoConsulta } from './medicos.js';
 
 const BW100: Split = { tipo: 'BW_100' };
 const IV_TB: Split = { tipo: 'IV_TB_85_15', bw: 85, prescriptores: 15 };
@@ -44,14 +44,21 @@ const DESC_CONSULTA_CONRADO =
   'Biowellness: para tu evaluación inicial, elegí una Consulta Evaluación o el Chequeo Biowellness.';
 
 /**
- * Addendum 2.1 (2026-07-21): las consultas se SEPARAN en la góndola. La Dra.
- * Dos Santos va primera (11 < 12) dentro de "Consulta Evaluación"; el Dr.
- * Conrado tiene sección propia y su descripción aclara que NO hace las
- * Evaluaciones Biowellness. Un médico nuevo cae al default (Evaluación, 11).
+ * Addendum 2.1 (2026-07-21) + correcciones vistas en producción (misma tarde):
+ * las consultas se SEPARAN en la góndola. Las dos de evaluación viven en la
+ * sección "Consulta Médica" como producto "Evaluación Biowellness" — SIN el
+ * nombre del médico en el título: el paciente lo elige al reservar (selector
+ * de médicos del portal; la Dra. Dos Santos primera, 11 < 12). El Dr. Conrado
+ * tiene sección propia y su descripción aclara que NO hace las Evaluaciones.
+ * Un médico nuevo cae al default. Para RECEPCIÓN el médico se re-agrega en el
+ * display (`nombreServicioRecepcion`): el mostrador sí distingue los códigos.
  */
-const CONSULTAS_COMERCIAL: Record<string, { orden: number; categoriaComercial: string; descripcion: string }> = {
-  CONSULTA_MED_DOS_SANTOS: { orden: 11, categoriaComercial: 'Consulta Evaluación', descripcion: DESC_CONSULTA },
-  CONSULTA_MED_DALESSANDRO: { orden: 12, categoriaComercial: 'Consulta Evaluación', descripcion: DESC_CONSULTA },
+const CONSULTAS_COMERCIAL: Record<
+  string,
+  { orden: number; categoriaComercial: string; descripcion: string; nombre?: string }
+> = {
+  CONSULTA_MED_DOS_SANTOS: { orden: 11, categoriaComercial: 'Consulta Médica', descripcion: DESC_CONSULTA, nombre: 'Evaluación Biowellness' },
+  CONSULTA_MED_DALESSANDRO: { orden: 12, categoriaComercial: 'Consulta Médica', descripcion: DESC_CONSULTA, nombre: 'Evaluación Biowellness' },
   CONSULTA_MED_CONRADO: { orden: 13, categoriaComercial: 'Consulta Director Médico', descripcion: DESC_CONSULTA_CONRADO },
 };
 const DESC_IV =
@@ -326,7 +333,7 @@ function consultasDeMedicos(): Servicio[] {
     const codigo = codigoConsulta(m.codigo);
     const comercial = CONSULTAS_COMERCIAL[codigo] ?? {
       orden: 11,
-      categoriaComercial: 'Evaluación',
+      categoriaComercial: 'Consulta Médica',
       descripcion: DESC_CONSULTA,
     };
     return {
@@ -379,4 +386,18 @@ export function getServicio(codigo: string): Servicio {
     throw new Error(`Servicio desconocido: ${codigo}`);
   }
   return s;
+}
+
+/**
+ * Nombre para las pantallas de RECEPCIÓN y los WhatsApps: si el título
+ * comercial no menciona al médico (la góndola muestra "Evaluación Biowellness"
+ * a secas y el paciente lo elige al reservar), acá se re-agrega — el mostrador
+ * y la confirmación del turno sí tienen que decir con quién es.
+ */
+export function nombreServicioRecepcion(s: Servicio): string {
+  const medico = s.practitionerCodigo ? MEDICOS_POR_CODIGO.get(s.practitionerCodigo) : undefined;
+  if (!medico || s.nombre.includes(medico.nombre)) {
+    return s.nombre;
+  }
+  return `${s.nombre} — ${medico.nombre}`;
 }

@@ -51,15 +51,17 @@ describe('Seed — ActivityDefinition (servicios)', () => {
     expect(orden('CONSULTA_MED_CONRADO')).toBe(13);
     const topicDe = (name: string): string | undefined =>
       seed.activityDefinitions.find((ad) => ad.name === name)?.topic?.[0]?.text;
-    expect(topicDe('CONSULTA_MED_DOS_SANTOS')).toBe('Consulta Evaluación');
-    expect(topicDe('CONSULTA_MED_DALESSANDRO')).toBe('Consulta Evaluación');
+    expect(topicDe('CONSULTA_MED_DOS_SANTOS')).toBe('Consulta Médica');
+    expect(topicDe('CONSULTA_MED_DALESSANDRO')).toBe('Consulta Médica');
     expect(topicDe('CONSULTA_MED_CONRADO')).toBe('Consulta Director Médico');
     const conrado = seed.activityDefinitions.find((ad) => ad.name === 'CONSULTA_MED_CONRADO')!;
     expect(conrado.description).toMatch(/No realiza las Evaluaciones/);
     expect(conrado.extension?.find((e) => e.url === EXT.precioArs)?.valueDecimal).toBe(150000);
-    expect(seed.activityDefinitions.find((ad) => ad.name === 'CONSULTA_MED_DALESSANDRO')?.title).toBe(
-      "Consulta médica — Dr. Alejandro D'Alessandro",
-    );
+    expect(conrado.title).toBe('Consulta médica — Dr. Conrado López Alonso');
+    // La góndola vende "Evaluación Biowellness" sin nombre de médico (el
+    // paciente lo elige al reservar); recepción lo re-agrega en el display.
+    expect(seed.activityDefinitions.find((ad) => ad.name === 'CONSULTA_MED_DOS_SANTOS')?.title).toBe('Evaluación Biowellness');
+    expect(seed.activityDefinitions.find((ad) => ad.name === 'CONSULTA_MED_DALESSANDRO')?.title).toBe('Evaluación Biowellness');
     expect(orden('HBOT_MONO')).toBe(20);
     expect(orden('HBOT_MULTIPLAZA')).toBe(22);
     expect(orden('IHHT')).toBe(30);
