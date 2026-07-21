@@ -39,6 +39,8 @@ export const EXT = {
   // ActivityDefinition (catálogo)
   precioUsd: `${BASE}/StructureDefinition/precio-usd`,
   precioArs: `${BASE}/StructureDefinition/precio-ars`,
+  /** Posición del servicio en la góndola del portal (menor = más arriba). */
+  orden: `${BASE}/StructureDefinition/orden`,
   reglaPricingRecurso: `${BASE}/StructureDefinition/regla-pricing-recurso`,
   splitBw: `${BASE}/StructureDefinition/split-bw`,
   requierePrescripcion: `${BASE}/StructureDefinition/requiere-prescripcion`,

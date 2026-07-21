@@ -20,7 +20,7 @@ import type {
 } from '@medplum/fhirtypes';
 import type { Servicio } from '../domain/types.js';
 import { MEDICOS } from '../config/medicos.js';
-import { SERVICIOS } from '../config/catalogo.js';
+import { CATEGORIA_COMERCIAL, SERVICIOS } from '../config/catalogo.js';
 import { COMBOS } from '../config/combos.js';
 import { MEMBRESIAS } from '../config/membresias.js';
 import { PAQUETES } from '../config/paquetes.js';
@@ -49,6 +49,10 @@ export function buildActivityDefinition(s: Servicio): ActivityDefinition {
   if (s.precioARS != null) {
     ext.push({ url: EXT.precioArs, valueDecimal: s.precioARS });
   }
+  // Posición en la góndola del portal (ascendente; sin extensión cae al final).
+  if (s.orden != null) {
+    ext.push({ url: EXT.orden, valueInteger: s.orden });
+  }
   const ad: ActivityDefinition = {
     resourceType: 'ActivityDefinition',
     url: canonical('ActivityDefinition', s.codigo),
@@ -59,7 +63,9 @@ export function buildActivityDefinition(s: Servicio): ActivityDefinition {
     status: 'active',
     kind: 'ServiceRequest',
     identifier: [{ system: SYSTEM.servicioCodigo, value: s.codigo }],
-    topic: [{ text: s.categoria }],
+    // Sección COMERCIAL de la góndola (el código interno de categoría no viaja:
+    // es contrato de R-07/pricing, no de la vidriera).
+    topic: [{ text: CATEGORIA_COMERCIAL[s.categoria] ?? s.categoria }],
     extension: ext,
   };
   if (s.duracionMin > 0) {

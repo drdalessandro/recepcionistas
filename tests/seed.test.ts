@@ -35,6 +35,33 @@ describe('Seed — ActivityDefinition (servicios)', () => {
     expect(chequeo.description).toMatch(/evaluación inicial/i);
     expect(chequeo.timingTiming?.repeat?.duration).toBe(60);
   });
+
+  it('Góndola comercial (handoff v2): orden 10-95, títulos comerciales y topic de vidriera', () => {
+    const orden = (name: string): number | undefined =>
+      seed.activityDefinitions.find((ad) => ad.name === name)?.extension?.find((e) => e.url === EXT.orden)?.valueInteger;
+    // Todos los servicios llevan la extensión (sin ella, el portal los tira al final).
+    for (const ad of seed.activityDefinitions) {
+      expect(ad.extension?.some((e) => e.url === EXT.orden), `${ad.name} sin orden`).toBe(true);
+    }
+    // La góndola: Evaluación arriba, Cámara Hiperbárica 20-22, IV 90, Biológicas 95 al cierre.
+    expect(orden('CHEQUEO_BW')).toBe(10);
+    expect(orden('CONSULTA_MED_DALESSANDRO')).toBe(11);
+    expect(orden('HBOT_MONO')).toBe(20);
+    expect(orden('HBOT_MULTIPLAZA')).toBe(22);
+    expect(orden('IHHT')).toBe(30);
+    expect(orden('RECOVERY_PRO')).toBe(40);
+    expect(orden('IV_NAD')).toBe(90);
+    expect(orden('CELULAS_MADRE')).toBe(95);
+    // Títulos comerciales sin códigos de equipo; los códigos de negocio intactos.
+    const compresion = seed.activityDefinitions.find((ad) => ad.name === 'COMPRESION')!;
+    expect(compresion.title).toBe('Compresión Neumática');
+    expect(compresion.title).not.toMatch(/IPC06/);
+    expect(seed.activityDefinitions.find((ad) => ad.name === 'CRIO')?.title).not.toMatch(/COT03/);
+    expect(seed.activityDefinitions.find((ad) => ad.name === 'HBOT_MONO')?.title).toBe('Cámara Hiperbárica (HBOT) — Monoplaza');
+    // Topic = sección comercial, no el código interno de categoría.
+    expect(compresion.topic?.[0]?.text).toBe('Compresión');
+    expect(seed.activityDefinitions.find((ad) => ad.name === 'CHEQUEO_BW')?.topic?.[0]?.text).toBe('Evaluación');
+  });
 });
 
 describe('Seed — Combos (PlanDefinition)', () => {

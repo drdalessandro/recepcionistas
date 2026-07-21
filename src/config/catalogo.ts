@@ -4,19 +4,51 @@
  *
  * v9 final: IHHT vuelve a ser una única sesión (45 min / USD 90); las variantes
  * Express/Premium del changelog intermedio quedaron descartadas.
+ *
+ * Catálogo COMERCIAL (handoff v2, 2026-07-21): la góndola del portal se ordena
+ * por valor y prestigio, no alfabético (`orden`, de a 10 para intercalar), los
+ * títulos son nombres comerciales y las descripciones van en voz de paciente.
+ * Regla de oro: los CÓDIGOS jamás cambian (contrato con portal/bots/Admin);
+ * los códigos de equipo (IPC06, COT03) salen de los títulos visibles.
  */
-import type { Servicio, Split } from '../domain/types.js';
+import type { CategoriaServicio, Servicio, Split } from '../domain/types.js';
 import { MEDICOS, codigoConsulta } from './medicos.js';
 
 const BW100: Split = { tipo: 'BW_100' };
 const IV_TB: Split = { tipo: 'IV_TB_85_15', bw: 85, prescriptores: 15 };
 const MASAJE: Split = { tipo: 'MASAJE_50_50', bw: 50, terapeuta: 50 };
 
+/**
+ * Etiqueta COMERCIAL de cada categoría (→ `ActivityDefinition.topic`, lo que
+ * muestra el portal como sección). El código interno de categoría no cambia:
+ * lo usan R-07, el mapeo a recursos y el pricing.
+ */
+export const CATEGORIA_COMERCIAL: Record<CategoriaServicio, string> = {
+  CONSULTA: 'Evaluación',
+  HBOT: 'Cámara Hiperbárica',
+  IHHT: 'IHHT',
+  RECOVERY_PRO: 'Recovery',
+  RED_LIGHT: 'Red Light',
+  COMPRESION: 'Compresión',
+  CRIO: 'Crioterapia',
+  MASAJE_OSTEOPATIA: 'Masajes y Osteopatía',
+  IV_THERAPY: 'Terapias IV',
+  TERAPIA_BIOLOGICA: 'Terapias Biológicas',
+};
+
+// Descripciones compartidas por grupo (los nombres propios se mantienen).
+const DESC_CONSULTA =
+  'La puerta de entrada a tu protocolo: evaluación integral, revisión de tus biomarcadores y plan personalizado.';
+const DESC_IV =
+  'Vitaminas, minerales y antioxidantes directo en sangre, según tu objetivo. Siempre con evaluación médica previa.';
+const DESC_TB = 'Medicina regenerativa avanzada con indicación médica personalizada. El primer paso es la consulta.';
+const DESC_MASAJES = 'Trabajo manual profesional para soltar tensiones y complementar tu protocolo.';
+
 export const SERVICIOS: Servicio[] = [
   // ---------------------- 01 · HBOT ----------------------
   {
     codigo: 'HBOT_MONO',
-    nombre: 'HBOT Monoplaza',
+    nombre: 'Cámara Hiperbárica (HBOT) — Monoplaza',
     categoria: 'HBOT',
     duracionMin: 60,
     precioUSD: 165,
@@ -24,10 +56,14 @@ export const SERVICIOS: Servicio[] = [
     reglaPricing: 'HBOT_MONO',
     split: BW100,
     fmAplica: true,
+    orden: 20,
+    descripcion:
+      'Hasta 6 veces más oxígeno en tus células: regeneración profunda, menos inflamación, mejor recuperación. ' +
+      'Sesión individual, acostado y cómodo.',
   },
   {
     codigo: 'HBOT_BIPLAZA',
-    nombre: 'HBOT Biplaza',
+    nombre: 'Cámara Hiperbárica (HBOT) — Biplaza (2 personas)',
     categoria: 'HBOT',
     duracionMin: 60,
     precioUSD: 100, // por persona cuando van 2; 1 sola => precio monoplaza (165)
@@ -35,11 +71,13 @@ export const SERVICIOS: Servicio[] = [
     reglaPricing: 'HBOT_BIPLAZA',
     split: BW100,
     fmAplica: true,
+    orden: 21,
+    descripcion: 'La misma terapia, compartida: para dos personas en simultáneo.',
     nota: '2 personas = USD 100 c/u (USD 200 total); 1 persona sola = USD 165.',
   },
   {
     codigo: 'HBOT_MULTIPLAZA',
-    nombre: 'HBOT Multiplaza',
+    nombre: 'Cámara Hiperbárica (HBOT) — Multiplaza (grupal)',
     categoria: 'HBOT',
     duracionMin: 60,
     precioUSD: 80, // por persona; mínimo 3, máximo 6 plazas
@@ -47,13 +85,15 @@ export const SERVICIOS: Servicio[] = [
     reglaPricing: 'HBOT_MULTIPLAZA',
     split: BW100,
     fmAplica: true,
+    orden: 22,
+    descripcion: 'Sesión grupal de hasta 6 personas — sumate a un grupo.',
     nota: 'USD 80/persona. Mínimo 3 personas, máximo 6 plazas.',
   },
 
   // ---------------------- 02 · IHHT (v9) ----------------------
   {
     codigo: 'IHHT',
-    nombre: 'IHHT',
+    nombre: 'Entrenamiento Hipóxico-Hiperóxico Intermitente (IHHT)',
     categoria: 'IHHT',
     duracionMin: 45,
     precioUSD: 90,
@@ -61,13 +101,17 @@ export const SERVICIOS: Servicio[] = [
     reglaPricing: 'POR_SESION',
     split: BW100,
     fmAplica: true,
+    orden: 30,
+    descripcion:
+      'Como entrenar tus células en la altura de los Andes sin salir de San Isidro: ciclos de hipoxia e ' +
+      'hiperoxia que fortalecen tus mitocondrias en 45 minutos.',
     nota: 'Sesión individual 45 min. En combos dura 30 min pero lista a precio de sesión (USD 90).',
   },
 
   // ---------------------- 03 · RED LIGHT ----------------------
   {
     codigo: 'RED_LIGHT',
-    nombre: 'Red Light (tumbona suelta)',
+    nombre: 'Red Light — Fotobiomodulación',
     categoria: 'RED_LIGHT',
     duracionMin: 30,
     precioUSD: 50,
@@ -75,12 +119,15 @@ export const SERVICIOS: Servicio[] = [
     reglaPricing: 'POR_SESION',
     split: BW100,
     fmAplica: true,
+    orden: 50,
+    descripcion: 'Luz roja e infrarroja que estimula la reparación de la piel y desinflama músculos y articulaciones en 30 minutos.',
+    nota: 'Tumbona suelta (fuera del gabinete Recovery).',
   },
 
   // ---------------------- 04 · RECOVERY PRO ----------------------
   {
     codigo: 'RECOVERY_PRO',
-    nombre: 'Recovery Pro (gabinete)',
+    nombre: 'Recovery Pro',
     categoria: 'RECOVERY_PRO',
     duracionMin: 60,
     precioUSD: 200, // por gabinete, INDIVISIBLE, 1 o 2 personas
@@ -88,13 +135,17 @@ export const SERVICIOS: Servicio[] = [
     reglaPricing: 'RECOVERY_PRO_INDIVISIBLE',
     split: BW100,
     fmAplica: true,
+    orden: 40,
+    descripcion:
+      'El circuito completo que usan los centros de longevidad del mundo — sauna infrarrojo, frío y red light — ' +
+      'en un gabinete privado.',
     nota: 'USD 200 por gabinete, mismo precio 1 o 2 personas. Nunca por persona ni por componente.',
   },
 
   // ---------------------- 05 · BOTAS ----------------------
   {
     codigo: 'COMPRESION',
-    nombre: 'Compression Recovery (IPC06)',
+    nombre: 'Compresión Neumática',
     categoria: 'COMPRESION',
     duracionMin: 30,
     precioUSD: 60,
@@ -102,10 +153,15 @@ export const SERVICIOS: Servicio[] = [
     reglaPricing: 'POR_SESION',
     split: BW100,
     fmAplica: true,
+    orden: 60,
+    descripcion:
+      'Compresión neumática de piernas que activa el drenaje linfático: menos retención, piernas livianas, ' +
+      'mejor recuperación deportiva.',
+    nota: 'Equipo: IPC06 (código interno, fuera del título visible).',
   },
   {
     codigo: 'CRIO',
-    nombre: 'Crio Therapy (COT03)',
+    nombre: 'Crioterapia Localizada',
     categoria: 'CRIO',
     duracionMin: 30,
     precioUSD: 90,
@@ -113,6 +169,9 @@ export const SERVICIOS: Servicio[] = [
     reglaPricing: 'POR_SESION',
     split: BW100,
     fmAplica: true,
+    orden: 70,
+    descripcion: 'Frío de precisión para desinflamar lesiones, calmar dolor articular y recuperar zonas puntuales.',
+    nota: 'Equipo: COT03 (código interno, fuera del título visible).',
   },
 
   // ---------------------- 06 · IV THERAPY (add-on, requiere prescripción) ----------------------
@@ -126,6 +185,8 @@ export const SERVICIOS: Servicio[] = [
     reglaPricing: 'CASCADA_TB',
     split: IV_TB,
     fmAplica: false,
+    orden: 90,
+    descripcion: DESC_IV,
   },
   {
     codigo: 'IV_PERFORMANCE',
@@ -137,6 +198,8 @@ export const SERVICIOS: Servicio[] = [
     reglaPricing: 'CASCADA_TB',
     split: IV_TB,
     fmAplica: false,
+    orden: 90,
+    descripcion: DESC_IV,
   },
   {
     codigo: 'IV_NAD',
@@ -148,6 +211,8 @@ export const SERVICIOS: Servicio[] = [
     reglaPricing: 'CASCADA_TB',
     split: IV_TB,
     fmAplica: false,
+    orden: 90,
+    descripcion: DESC_IV,
   },
 
   // ---------------------- 07 · TERAPIAS BIOLÓGICAS (requieren prescripción) ----------------------
@@ -181,6 +246,8 @@ export const SERVICIOS: Servicio[] = [
     reglaPricing: 'POR_SESION',
     split: MASAJE,
     fmAplica: false, // confirmar si FM aplica a masajes
+    orden: 80,
+    descripcion: DESC_MASAJES,
   },
   {
     codigo: 'MASAJE_DEPORTIVO',
@@ -192,6 +259,8 @@ export const SERVICIOS: Servicio[] = [
     reglaPricing: 'POR_SESION',
     split: MASAJE,
     fmAplica: false,
+    orden: 80,
+    descripcion: DESC_MASAJES,
   },
   {
     codigo: 'OSTEOPATIA',
@@ -203,6 +272,8 @@ export const SERVICIOS: Servicio[] = [
     reglaPricing: 'POR_SESION',
     split: MASAJE,
     fmAplica: false,
+    orden: 80,
+    descripcion: DESC_MASAJES,
   },
 
   // ---------------------- 09 · CONSULTAS MÉDICAS (consultorio, precio en ARS) ----------------------
@@ -224,9 +295,9 @@ export const SERVICIOS: Servicio[] = [
     reglaPricing: 'POR_SESION',
     split: BW100,
     fmAplica: false,
+    orden: 10, // la góndola arranca acá: el producto de entrada, arriba de todo
     descripcion:
-      'Tu evaluación inicial completa: consulta médica, orden de laboratorio y devolución con tu plan ' +
-      "personalizado. Completá tu score de salud (Life's Essential 8) y arrancá tu protocolo con datos reales.",
+      'Tu evaluación inicial completa: consulta médica, orden de laboratorio y devolución con tu plan personalizado.',
     nota: 'Precio = consulta (2026-07-20); si cambia, ajustar acá y avisar al portal.',
   },
 ];
@@ -238,7 +309,7 @@ export const SERVICIOS: Servicio[] = [
 function consultasDeMedicos(): Servicio[] {
   return MEDICOS.map((m) => ({
     codigo: codigoConsulta(m.codigo),
-    nombre: `Consulta — ${m.nombre}`,
+    nombre: `Consulta médica — ${m.nombre}`,
     categoria: 'CONSULTA' as const,
     duracionMin: 60,
     precioUSD: 0,
@@ -248,6 +319,8 @@ function consultasDeMedicos(): Servicio[] {
     reglaPricing: 'POR_SESION' as const,
     split: BW100,
     fmAplica: false,
+    orden: 11,
+    descripcion: DESC_CONSULTA,
     ...(m.precioProvisorio ? { nota: 'Precio provisorio (Director Médico) — confirmar' } : {}),
   }));
 }
@@ -265,6 +338,10 @@ function tb(codigo: string, nombre: string, duracionMin: number, precioUSD: numb
       reglaPricing: 'CASCADA_TB',
       split: IV_TB,
       fmAplica: false,
+      // IV/Biológicas cierran la góndola A PROPÓSITO: con su badge "requiere
+      // consulta médica" son el final aspiracional del catálogo, no un descarte.
+      orden: 95,
+      descripcion: DESC_TB,
     },
   ];
 }
