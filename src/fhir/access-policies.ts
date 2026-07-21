@@ -176,9 +176,11 @@ export const POLICY_PACIENTE_PORTAL: AccessPolicy = {
     { resourceType: 'Subscription', criteria: 'Subscription?type=websocket' },
     // Binary escribible: subida de adjuntos (mensajes / consentimientos).
     { resourceType: 'Binary' },
-    // Reserva por solicitud: el paciente solo puede ejecutar ESTE bot (crea el Task
-    // de solicitud y avisa a Recepción). No puede ejecutar ningún otro bot.
-    { resourceType: 'Bot', readonly: true, criteria: 'Bot?name=bw-solicitar-turno' },
+    // Bots que el paciente puede ejecutar — y NINGÚN otro:
+    //  - bw-solicitar-turno: crea el Task de solicitud y avisa a Recepción.
+    //  - bw-disponibilidad: SOLO LECTURA, horarios reservables para él (R-13).
+    // (Cambio acá => avisar al portal para actualizar su espejo.)
+    { resourceType: 'Bot', readonly: true, criteria: 'Bot?name=bw-solicitar-turno,bw-disponibilidad' },
   ],
 };
 

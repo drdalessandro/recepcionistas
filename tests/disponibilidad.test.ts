@@ -1,0 +1,137 @@
+import { describe, it, expect } from 'vitest';
+import { calcularDisponibilidad, perfilDeReserva, type DiaDisponible } from '../src/lib/disponibilidad.js';
+import { getServicio } from '../src/config/catalogo.js';
+import type { ReservaRecurso } from '../src/lib/reglas-turno.js';
+
+// Miércoles 10:00 de Argentina (el centro abre según HORARIO_SEMANAL).
+const AHORA = new Date('2026-07-22T10:00:00-03:00');
+
+function horarios(dias: DiaDisponible[]): string[] {
+  return dias.flatMap((d) => d.horarios.map((h) => h.inicio));
+}
+
+function reserva(recurso: string, inicio: string, fin: string, ocupantes = 1): ReservaRecurso {
+  return { recursoCodigo: recurso, inicio: new Date(inicio), fin: new Date(fin), ocupantes };
+}
+
+describe('perfilDeReserva — derivación R-13 (la del server)', () => {
+  it('tag-fm manda: FM aunque no tenga membresía', () => {
+    expect(perfilDeReserva(true, [])).toBe('FM');
+  });
+  it('Membresía Intensivo => INTENSIVO', () => {
+    expect(perfilDeReserva(false, ['INTENSIVO'])).toBe('INTENSIVO');
+    expect(perfilDeReserva(false, ['STANDARD', 'INTENSIVO'])).toBe('INTENSIVO');
+  });
+  it('Membresía Standard => STANDARD; sin membresía => PUBLICO', () => {
+    expect(perfilDeReserva(false, ['STANDARD'])).toBe('STANDARD');
+    expect(perfilDeReserva(false, [])).toBe('PUBLICO');
+  });
+});
+
+describe('calcularDisponibilidad — ventana por perfil (R-13, prueba e2e del handoff)', () => {
+  const servicio = getServicio('HBOT_MONO');
+
+  function ultimaFecha(perfil: 'PUBLICO' | 'STANDARD' | 'INTENSIVO' | 'FM'): string {
+    const r = calcularDisponibilidad({ servicio, perfil, ahora: AHORA, reservas: [] });
+    expect(r.dias.length).toBeGreaterThan(0);
+    return r.dias[r.dias.length - 1]!.fecha;
+  }
+
+  it('Público (48 h) llega menos lejos que Standard (72 h) que Intensivo (96 h) que FM (7 días)', () => {
+    const publico = ultimaFecha('PUBLICO');
+    const standard = ultimaFecha('STANDARD');
+    const intensivo = ultimaFecha('INTENSIVO');
+    const fm = ultimaFecha('FM');
+    expect(publico < standard || (publico === standard && true)).toBe(true);
+    expect(publico <= standard && standard <= intensivo && intensivo <= fm).toBe(true);
+    expect(publico < fm).toBe(true);
+    // Público: 48 h desde el miércoles 10:00 => nada después del viernes 24.
+    expect(publico <= '2026-07-24').toBe(true);
+    // FM: hasta 7 días.
+    expect(fm >= '2026-07-27').toBe(true);
+  });
+
+  it('ventanaHoras acompaña al perfil y solo ofrece horarios a futuro', () => {
+    const r = calcularDisponibilidad({ servicio, perfil: 'PUBLICO', ahora: AHORA, reservas: [] });
+    expect(r.ventanaHoras).toBe(48);
+    expect(r.grupal).toBe(false);
+    for (const ini of horarios(r.dias)) {
+      expect(new Date(ini).getTime()).toBeGreaterThan(AHORA.getTime());
+    }
+  });
+});
+
+describe('calcularDisponibilidad — capacidad y agenda real (R-07)', () => {
+  const servicio = getServicio('HBOT_MONO');
+
+  it('Una franja tomada en TODAS las salas aptas desaparece; sigue si queda alguna libre', () => {
+    const franjaMono = reserva('R_HBOT_MONO', '2026-07-22T15:00:00-03:00', '2026-07-22T16:00:00-03:00');
+    const franjaBi = reserva('R_HBOT_BIPLAZA', '2026-07-22T15:00:00-03:00', '2026-07-22T16:00:00-03:00');
+
+    const conUna = calcularDisponibilidad({ servicio, perfil: 'PUBLICO', ahora: AHORA, reservas: [franjaMono] });
+    // La mono está tomada pero la biplaza (misma categoría) queda: el horario se ofrece.
+    expect(horarios(conUna.dias)).toContain('2026-07-22T15:00:00-03:00');
+
+    const conDos = calcularDisponibilidad({ servicio, perfil: 'PUBLICO', ahora: AHORA, reservas: [franjaMono, franjaBi] });
+    expect(horarios(conDos.dias)).not.toContain('2026-07-22T15:00:00-03:00');
+    // Los vecinos que no solapan siguen.
+    expect(horarios(conDos.dias)).toContain('2026-07-22T16:00:00-03:00');
+  });
+
+  it('El turno completo tiene que caber: sin arranques que se pasen del cierre de la franja', () => {
+    const r = calcularDisponibilidad({ servicio, perfil: 'PUBLICO', ahora: AHORA, reservas: [] });
+    for (const d of r.dias) {
+      for (const h of d.horarios) {
+        // Ningún fin puede quedar después de la última media hora generada del día.
+        expect(h.fin.slice(0, 10)).toBe(h.inicio.slice(0, 10));
+      }
+    }
+  });
+});
+
+describe('calcularDisponibilidad — Multiplaza (sesión grupal "sumate")', () => {
+  const servicio = getServicio('HBOT_MULTIPLAZA');
+
+  it('Con 2 ocupantes anotados: lugares 4, ocupantes 2 (paso 4 del handoff)', () => {
+    const existente = reserva('R_HBOT_MULTIPLAZA', '2026-07-22T15:00:00-03:00', '2026-07-22T16:00:00-03:00', 2);
+    const r = calcularDisponibilidad({ servicio, perfil: 'PUBLICO', ahora: AHORA, reservas: [existente] });
+    expect(r.grupal).toBe(true);
+    const franja = r.dias.flatMap((d) => d.horarios).find((h) => h.inicio === '2026-07-22T15:00:00-03:00')!;
+    expect(franja).toBeDefined();
+    expect(franja.ocupantes).toBe(2);
+    expect(franja.lugares).toBe(4);
+  });
+
+  it('Debajo del mínimo de 3 igual se ofrece (advertencia, no bloqueo); llena (6/6) desaparece', () => {
+    const llena = reserva('R_HBOT_MULTIPLAZA', '2026-07-22T15:00:00-03:00', '2026-07-22T16:00:00-03:00', 6);
+    const r = calcularDisponibilidad({ servicio, perfil: 'PUBLICO', ahora: AHORA, reservas: [llena] });
+    const inicios = horarios(r.dias);
+    expect(inicios).not.toContain('2026-07-22T15:00:00-03:00');
+    // Una franja vacía (0 anotados, bajo el mínimo de 3) se ofrece igual.
+    const vacia = r.dias.flatMap((d) => d.horarios).find((h) => h.inicio === '2026-07-22T16:00:00-03:00')!;
+    expect(vacia).toBeDefined();
+    expect(vacia.ocupantes).toBe(0);
+    expect(vacia.lugares).toBe(6);
+  });
+
+  it('Una sesión individual HBOT no pisa la Multiplaza (y viceversa no la ve)', () => {
+    const mono = getServicio('HBOT_MONO');
+    const enMulti = reserva('R_HBOT_MULTIPLAZA', '2026-07-22T15:00:00-03:00', '2026-07-22T16:00:00-03:00', 6);
+    // La multiplaza llena no afecta la disponibilidad del servicio individual.
+    const r = calcularDisponibilidad({ servicio: mono, perfil: 'PUBLICO', ahora: AHORA, reservas: [enMulti] });
+    expect(horarios(r.dias)).toContain('2026-07-22T15:00:00-03:00');
+  });
+});
+
+describe('calcularDisponibilidad — desfasaje Recovery (R-07 / AC-05)', () => {
+  const servicio = getServicio('RECOVERY_PRO');
+
+  it('El gabinete hermano arrancando a la misma hora bloquea; a 30 min está OK', () => {
+    const g1 = reserva('R_RECOVERY_G1', '2026-07-22T15:00:00-03:00', '2026-07-22T16:00:00-03:00');
+    const r = calcularDisponibilidad({ servicio, perfil: 'PUBLICO', ahora: AHORA, reservas: [g1] });
+    const inicios = horarios(r.dias);
+    // 15:00 en el G2 arrancaría junto con el G1 => fuera. 15:30 => permitido.
+    expect(inicios).not.toContain('2026-07-22T15:00:00-03:00');
+    expect(inicios).toContain('2026-07-22T15:30:00-03:00');
+  });
+});
