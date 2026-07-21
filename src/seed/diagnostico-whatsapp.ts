@@ -46,7 +46,7 @@ async function main(): Promise<void> {
     return;
   }
 
-  const body = `BioWellness · prueba de WhatsApp (${new Date().toLocaleString('es-AR')}). Si lo recibiste, Twilio funciona. 💚`;
+  const body = `Biowellness · prueba de WhatsApp (${new Date().toLocaleString('es-AR')}). Si lo recibiste, Twilio funciona. 💚`;
   const comm = (await medplum.executeBot(bot.id, { to, template: 'diagnostico', body })) as Communication;
   const status = comm?.status;
   console.log(`\nCommunication creada: ${comm?.id ?? '(sin id)'} · status = ${status ?? '(desconocido)'}`);

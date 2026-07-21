@@ -19,7 +19,7 @@ import type { Bot } from '@medplum/fhirtypes';
 import { CONFIG_TC_ID } from '../fhir/identifiers.js';
 import { BOTS, type DefBot } from './bots-def.js';
 
-/** Runtime de los bots. Medplum BioWellness usa AWS Lambda. Configurable por env. */
+/** Runtime de los bots. Medplum Biowellness usa AWS Lambda. Configurable por env. */
 const RUNTIME_VERSION = process.env.BOT_RUNTIME_VERSION ?? 'awslambda';
 
 /** Resuelve imports relativos ".js" a su fuente ".ts" (ESM + Bundler). */

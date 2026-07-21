@@ -44,7 +44,7 @@ async function main(): Promise<void> {
 
   const total = grupos.reduce((acc, [, arr]) => acc + arr.length, 0);
 
-  console.log('=== Seed BioWellness · Bloque 0 (Manual v9) ===');
+  console.log('=== Seed Biowellness · Bloque 0 (Manual v9) ===');
   for (const [nombre, arr] of grupos) {
     console.log(`  • ${nombre}: ${arr.length}`);
   }

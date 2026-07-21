@@ -1,5 +1,5 @@
 /**
- * Sistemas (URLs canónicas) e identificadores FHIR de BioWellness.
+ * Sistemas (URLs canónicas) e identificadores FHIR de Biowellness.
  *
  * Convención: kebab-case para los nombres de extensión, bajo el namespace
  * `https://biowellness.ar/fhir/...`. Centralizado acá para que el seed, los

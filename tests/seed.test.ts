@@ -28,7 +28,7 @@ describe('Seed — ActivityDefinition (servicios)', () => {
     }
   });
 
-  it('Chequeo BioWellness: precio-ars de consulta y descripción en voz de paciente (portal)', () => {
+  it('Chequeo Biowellness: precio-ars de consulta y descripción en voz de paciente (portal)', () => {
     const chequeo = seed.activityDefinitions.find((ad) => ad.name === 'CHEQUEO_BW')!;
     expect(chequeo.identifier?.[0]?.value).toBe('CHEQUEO_BW');
     expect(chequeo.extension?.find((e) => e.url === EXT.precioArs)?.valueDecimal).toBe(120000);

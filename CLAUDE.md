@@ -1,6 +1,6 @@
 # CLAUDE.md — Guía del repositorio
 
-Contexto y convenciones para desarrollar en este repo (BioWellness · Recepción ·
+Contexto y convenciones para desarrollar en este repo (Biowellness · Recepción ·
 Bloque 0). Backend **Medplum (FHIR R4)**, todo en **TypeScript**.
 
 ## Principios

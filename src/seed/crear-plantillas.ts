@@ -33,13 +33,13 @@ const PLANTILLAS: DefPlantilla[] = [
   {
     nombre: 'biowellness_generico_v2',
     secret: 'TWILIO_CONTENT_SID_GENERICO',
-    body: 'BioWellness San Isidro: {{1}} Cualquier duda, escribinos por acá. 💚',
+    body: 'Biowellness San Isidro: {{1}} Cualquier duda, escribinos por acá. 💚',
     ejemplos: { '1': 'Te esperamos mañana a las 16:00 para tu sesión de HBOT.' },
   },
   {
     nombre: 'biowellness_mensaje_recepcion_v2',
     secret: 'TWILIO_CONTENT_SID_MENSAJE_RECEPCION',
-    body: 'BioWellness San Isidro: {{1}} Podés responder por acá. 💚',
+    body: 'Biowellness San Isidro: {{1}} Podés responder por acá. 💚',
     ejemplos: { '1': 'Sí, tu turno de mañana sigue confirmado a las 16:00.' },
   },
   {
@@ -49,7 +49,7 @@ const PLANTILLAS: DefPlantilla[] = [
     // recategoriza en vez de rechazarla. El nombre v3 quedó quemado.)
     nombre: 'biowellness_reserva_tentativa_v4',
     secret: 'TWILIO_CONTENT_SID_RESERVA_TENTATIVA',
-    body: 'BioWellness: reservamos tu turno de {{1}} para el {{2}}. Para confirmarlo aboná la seña de {{3}} acá: {{4}} — tenés tiempo hasta las {{5}}, después el lugar se libera. 💚',
+    body: 'Biowellness: reservamos tu turno de {{1}} para el {{2}}. Para confirmarlo aboná la seña de {{3}} acá: {{4}} — tenés tiempo hasta las {{5}}, después el lugar se libera. 💚',
     ejemplos: {
       '1': 'HBOT Monoplaza',
       '2': '21/07 16:00',
@@ -61,7 +61,7 @@ const PLANTILLAS: DefPlantilla[] = [
   {
     nombre: 'biowellness_sena_recordatorio',
     secret: 'TWILIO_CONTENT_SID_SENA_RECORDATORIO',
-    body: 'BioWellness: ¡último aviso! Tu reserva de {{1}} ({{2}}) se libera a las {{3}} si no abonás la seña de {{4}}. Pagala acá: {{5}} y quedás confirmado. 💚',
+    body: 'Biowellness: ¡último aviso! Tu reserva de {{1}} ({{2}}) se libera a las {{3}} si no abonás la seña de {{4}}. Pagala acá: {{5}} y quedás confirmado. 💚',
     ejemplos: {
       '1': 'HBOT Monoplaza',
       '2': '21/07 16:00',
@@ -73,7 +73,7 @@ const PLANTILLAS: DefPlantilla[] = [
   {
     nombre: 'biowellness_plan_link_pago',
     secret: 'TWILIO_CONTENT_SID_PLAN_LINK_PAGO',
-    body: 'BioWellness: ¡reservamos tu {{1}}! Para activarla aboná {{2}} en este enlace: {{3}} — cuando se acredite el pago te confirmamos por acá. 💚',
+    body: 'Biowellness: ¡reservamos tu {{1}}! Para activarla aboná {{2}} en este enlace: {{3}} — cuando se acredite el pago te confirmamos por acá. 💚',
     ejemplos: {
       '1': 'Membresía HEALTHSPAN Intensivo Individual',
       '2': '$5.652.100',
@@ -83,31 +83,31 @@ const PLANTILLAS: DefPlantilla[] = [
   {
     nombre: 'biowellness_tentativa_vencida',
     secret: 'TWILIO_CONTENT_SID_TENTATIVA_VENCIDA',
-    body: 'BioWellness: tu reserva de {{1}} del {{2}} se liberó porque no llegó la seña a tiempo. Si todavía querés venir, escribinos por acá y buscamos otro horario. 💚',
+    body: 'Biowellness: tu reserva de {{1}} del {{2}} se liberó porque no llegó la seña a tiempo. Si todavía querés venir, escribinos por acá y buscamos otro horario. 💚',
     ejemplos: { '1': 'HBOT Monoplaza', '2': '21/07 16:00' },
   },
   {
     nombre: 'biowellness_reserva_plan_v2',
     secret: 'TWILIO_CONTENT_SID_RESERVA_PLAN',
-    body: 'BioWellness: ¡tu turno de {{1}} quedó confirmado con tu plan para el {{2}}! Te quedan {{3}} sesiones. ¡Te esperamos! 💚',
+    body: 'Biowellness: ¡tu turno de {{1}} quedó confirmado con tu plan para el {{2}}! Te quedan {{3}} sesiones. ¡Te esperamos! 💚',
     ejemplos: { '1': 'BIO LONGEVITY', '2': '21/07 16:00', '3': '7' },
   },
   {
     nombre: 'biowellness_turno_confirmado_v2',
     secret: 'TWILIO_CONTENT_SID_TURNO_CONFIRMADO',
-    body: 'BioWellness: ¡tu turno quedó confirmado! {{1}}. Recibimos la seña de {{2}}. Saldo restante: {{3}}. ¡Te esperamos! 💚',
+    body: 'Biowellness: ¡tu turno quedó confirmado! {{1}}. Recibimos la seña de {{2}}. Saldo restante: {{3}}. ¡Te esperamos! 💚',
     ejemplos: { '1': 'HBOT Monoplaza', '2': '$119.708', '3': '$119.707 (se abona el día de la sesión)' },
   },
   {
     nombre: 'biowellness_recordatorio_48h_v2',
     secret: 'TWILIO_CONTENT_SID_RECORDATORIO_48H',
-    body: 'BioWellness: te recordamos tu turno de {{1}} el {{2}}. ¡Te esperamos! 💚',
+    body: 'Biowellness: te recordamos tu turno de {{1}} el {{2}}. ¡Te esperamos! 💚',
     ejemplos: { '1': 'HBOT Monoplaza', '2': '21/07 16:00' },
   },
   {
     nombre: 'biowellness_recordatorio_2h_v2',
     secret: 'TWILIO_CONTENT_SID_RECORDATORIO_2H',
-    body: 'BioWellness: ¡tu turno de {{1}} es hoy a las {{2}}! Te esperamos en un rato. 💚',
+    body: 'Biowellness: ¡tu turno de {{1}} es hoy a las {{2}}! Te esperamos en un rato. 💚',
     ejemplos: { '1': 'HBOT Monoplaza', '2': '16:00' },
   },
 ];

@@ -34,26 +34,26 @@ carga como secret se activa solo.
 
 | Secret | Cuerpo sugerido |
 |---|---|
-| `TWILIO_CONTENT_SID_GENERICO` | `BioWellness San Isidro: {{1}} Cualquier duda, escribinos por acá. 💚` |
+| `TWILIO_CONTENT_SID_GENERICO` | `Biowellness San Isidro: {{1}} Cualquier duda, escribinos por acá. 💚` |
 
 **Específicas con variables estructuradas** (los bots ya mandan estas variables):
 
 | Plantilla (bot) | Secret | Cuerpo sugerido | Variables |
 |---|---|---|---|
-| `reserva-tentativa` | `TWILIO_CONTENT_SID_RESERVA_TENTATIVA` | `BioWellness: reservamos tu turno de {{1}} para el {{2}}. Para confirmarlo aboná la seña de {{3}} acá: {{4}} — tenés tiempo hasta las {{5}}, después el lugar se libera. 💚` | 1 servicio · 2 fecha/hora · 3 monto seña · 4 link MP · 5 hora límite (v4, R-19) |
-| `sena-recordatorio` | `TWILIO_CONTENT_SID_SENA_RECORDATORIO` | `BioWellness: ¡último aviso! Tu reserva de {{1}} ({{2}}) se libera a las {{3}} si no abonás la seña de {{4}}. Pagala acá: {{5}} y quedás confirmado. 💚` | 1 servicio · 2 fecha/hora · 3 hora límite · 4 monto · 5 link MP |
-| `tentativa-vencida` | `TWILIO_CONTENT_SID_TENTATIVA_VENCIDA` | `BioWellness: tu reserva de {{1}} del {{2}} se liberó porque no llegó la seña a tiempo. Si todavía querés venir, escribinos por acá y buscamos otro horario. 💚` | 1 servicio · 2 fecha/hora |
-| `plan-link-pago` | `TWILIO_CONTENT_SID_PLAN_LINK_PAGO` | `BioWellness: ¡reservamos tu {{1}}! Para activarla aboná {{2}} en este enlace: {{3}} — cuando se acredite el pago te confirmamos por acá. 💚` | 1 plan · 2 monto · 3 link MP (alta de plan con MP) |
-| `reserva-plan` | `TWILIO_CONTENT_SID_RESERVA_PLAN` | `BioWellness: ¡tu turno de {{1}} quedó confirmado con tu plan para el {{2}}! Te quedan {{3}} sesiones. ¡Te esperamos! 💚` | 1 servicio · 2 fecha/hora · 3 sesiones restantes |
-| `turno-confirmado` | `TWILIO_CONTENT_SID_TURNO_CONFIRMADO` | `BioWellness: ¡tu turno quedó confirmado! {{1}}. Recibimos la seña de {{2}}. Saldo restante: {{3}}. ¡Te esperamos! 💚` | 1 turno · 2 seña (con $) · 3 saldo o "sin saldo pendiente" |
-| `recordatorio-48h` | `TWILIO_CONTENT_SID_RECORDATORIO_48H` | `BioWellness: te recordamos tu turno de {{1}} el {{2}}. ¡Te esperamos! 💚` | 1 servicio · 2 fecha/hora |
-| `recordatorio-2h` | `TWILIO_CONTENT_SID_RECORDATORIO_2H` | `BioWellness: ¡tu turno de {{1}} es hoy a las {{2}}! Te esperamos en un rato. 💚` | 1 servicio · 2 hora |
+| `reserva-tentativa` | `TWILIO_CONTENT_SID_RESERVA_TENTATIVA` | `Biowellness: reservamos tu turno de {{1}} para el {{2}}. Para confirmarlo aboná la seña de {{3}} acá: {{4}} — tenés tiempo hasta las {{5}}, después el lugar se libera. 💚` | 1 servicio · 2 fecha/hora · 3 monto seña · 4 link MP · 5 hora límite (v4, R-19) |
+| `sena-recordatorio` | `TWILIO_CONTENT_SID_SENA_RECORDATORIO` | `Biowellness: ¡último aviso! Tu reserva de {{1}} ({{2}}) se libera a las {{3}} si no abonás la seña de {{4}}. Pagala acá: {{5}} y quedás confirmado. 💚` | 1 servicio · 2 fecha/hora · 3 hora límite · 4 monto · 5 link MP |
+| `tentativa-vencida` | `TWILIO_CONTENT_SID_TENTATIVA_VENCIDA` | `Biowellness: tu reserva de {{1}} del {{2}} se liberó porque no llegó la seña a tiempo. Si todavía querés venir, escribinos por acá y buscamos otro horario. 💚` | 1 servicio · 2 fecha/hora |
+| `plan-link-pago` | `TWILIO_CONTENT_SID_PLAN_LINK_PAGO` | `Biowellness: ¡reservamos tu {{1}}! Para activarla aboná {{2}} en este enlace: {{3}} — cuando se acredite el pago te confirmamos por acá. 💚` | 1 plan · 2 monto · 3 link MP (alta de plan con MP) |
+| `reserva-plan` | `TWILIO_CONTENT_SID_RESERVA_PLAN` | `Biowellness: ¡tu turno de {{1}} quedó confirmado con tu plan para el {{2}}! Te quedan {{3}} sesiones. ¡Te esperamos! 💚` | 1 servicio · 2 fecha/hora · 3 sesiones restantes |
+| `turno-confirmado` | `TWILIO_CONTENT_SID_TURNO_CONFIRMADO` | `Biowellness: ¡tu turno quedó confirmado! {{1}}. Recibimos la seña de {{2}}. Saldo restante: {{3}}. ¡Te esperamos! 💚` | 1 turno · 2 seña (con $) · 3 saldo o "sin saldo pendiente" |
+| `recordatorio-48h` | `TWILIO_CONTENT_SID_RECORDATORIO_48H` | `Biowellness: te recordamos tu turno de {{1}} el {{2}}. ¡Te esperamos! 💚` | 1 servicio · 2 fecha/hora |
+| `recordatorio-2h` | `TWILIO_CONTENT_SID_RECORDATORIO_2H` | `Biowellness: ¡tu turno de {{1}} es hoy a las {{2}}! Te esperamos en un rato. 💚` | 1 servicio · 2 hora |
 
 **Espejo de la bandeja de Mensajes** (respuestas de Recepción por WhatsApp):
 
 | Plantilla (bot) | Secret | Cuerpo sugerido | Variables |
 |---|---|---|---|
-| `mensaje-recepcion` | `TWILIO_CONTENT_SID_MENSAJE_RECEPCION` | `BioWellness San Isidro: {{1}} Podés responder por acá. 💚` | 1 texto del mensaje |
+| `mensaje-recepcion` | `TWILIO_CONTENT_SID_MENSAJE_RECEPCION` | `Biowellness San Isidro: {{1}} Podés responder por acá. 💚` | 1 texto del mensaje |
 
 **El resto** (`invitacion-portal`, `plan-asignado`, `membresia-renovada`,
 `membresia-cobro-link`, `membresia-pago-rechazado`, `solicitud-turno`) usa la

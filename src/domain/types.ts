@@ -1,5 +1,5 @@
 /**
- * Tipos de dominio de BioWellness Recepción (Bloque 0).
+ * Tipos de dominio de Biowellness Recepción (Bloque 0).
  *
  * Fuente de verdad de datos: Manual de Protocolos v9 (changelog aplicado sobre v8).
  * Estos tipos describen el catálogo, las membresías, los recursos físicos y las

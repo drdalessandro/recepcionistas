@@ -161,7 +161,7 @@ export async function handler(
           template: 'plan-link-pago',
           pacienteRef: e.pacienteRef,
           variables: [descripcion, montoTxt, pref.url ?? 'coordinándolo con recepción'],
-          body: `BioWellness: ¡reservamos tu ${descripcion}! Para activarla aboná ${montoTxt}${
+          body: `Biowellness: ¡reservamos tu ${descripcion}! Para activarla aboná ${montoTxt}${
             pref.url ? ` en este enlace: ${pref.url}` : ' (recepción te pasa el medio de pago)'
           } — cuando se acredite te confirmamos por acá y quedan tus ${sesiones} sesiones disponibles. 💚`,
         });
@@ -227,7 +227,7 @@ export async function handler(
         pacienteRef: e.pacienteRef,
         // Plantilla: {{1}} plan · {{2}} monto · {{3}} link (docs/whatsapp-plantillas.md).
         variables: [descripcion, monto, pref.url ?? 'coordinándolo con recepción'],
-        body: `BioWellness: ¡reservamos tu ${descripcion}! Para activarla aboná ${monto}${
+        body: `Biowellness: ¡reservamos tu ${descripcion}! Para activarla aboná ${monto}${
           pref.url ? ` en este enlace: ${pref.url}` : ' (recepción te pasa el medio de pago)'
         } — cuando se acredite te confirmamos por acá y quedan tus ${sesiones} sesiones disponibles. 💚`,
       });
@@ -254,7 +254,7 @@ export async function handler(
     await enviarWhatsApp(medplum, event.secrets, {
       template: 'plan-asignado',
       pacienteRef: e.pacienteRef,
-      body: `BioWellness: ¡activamos tu ${descripcion}! Tenés ${sesiones} sesiones${
+      body: `Biowellness: ¡activamos tu ${descripcion}! Tenés ${sesiones} sesiones${
         e.tipo === 'membresia' ? ' este mes' : ` (vencen el ${new Date(periodEnd!).toLocaleDateString('es-AR')})`
       }. ¡Te esperamos! 💚`,
     });

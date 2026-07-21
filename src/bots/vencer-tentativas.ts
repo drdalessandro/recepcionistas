@@ -111,7 +111,7 @@ export async function handler(
         // Plantilla: {{1}} servicio · {{2}} fecha/hora · {{3}} hora límite ·
         // {{4}} monto · {{5}} link (docs/whatsapp-plantillas.md).
         variables: [descripcion, cuando, fmtHora.format(vence), monto, link?.url ?? 'coordinándolo con recepción'],
-        body: `BioWellness: ¡último aviso! Tu reserva de ${descripcion} (${cuando}) se libera a las ${fmtHora.format(vence)} si no abonás la seña de ${monto}${
+        body: `Biowellness: ¡último aviso! Tu reserva de ${descripcion} (${cuando}) se libera a las ${fmtHora.format(vence)} si no abonás la seña de ${monto}${
           link?.url ? `. Pagala acá: ${link.url}` : ' (recepción te pasa el medio de pago)'
         } y quedás confirmado. 💚`,
       });
@@ -153,7 +153,7 @@ export async function handler(
       pacienteRef,
       // Plantilla: {{1}} servicio · {{2}} fecha/hora.
       variables: [descripcion, cuando],
-      body: `BioWellness: tu reserva de ${descripcion} del ${cuando} se liberó porque no llegó la seña a tiempo. Si todavía querés venir, escribinos por acá y buscamos otro horario. 💚`,
+      body: `Biowellness: tu reserva de ${descripcion} del ${cuando} se liberó porque no llegó la seña a tiempo. Si todavía querés venir, escribinos por acá y buscamos otro horario. 💚`,
     });
     await notificarPortal(medplum, {
       tipo: 'reserva-vencida',

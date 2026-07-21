@@ -2,7 +2,7 @@
   "name": "@biowellness/recepcionistas",
   "version": "0.1.0",
   "private": true,
-  "description": "BioWellness San Isidro — Herramienta de Recepción · Bloque 0 (Cimientos). Backend Medplum (FHIR R4).",
+  "description": "Biowellness San Isidro — Herramienta de Recepción · Bloque 0 (Cimientos). Backend Medplum (FHIR R4).",
   "type": "module",
   "engines": {
     "node": ">=22.18"

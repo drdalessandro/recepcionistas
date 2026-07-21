@@ -1,5 +1,5 @@
 /**
- * SearchParameters custom de BioWellness (los aplica `npm run seed`).
+ * SearchParameters custom de Biowellness (los aplica `npm run seed`).
  *
  * `origen-lead` habilita la consulta por canal directamente en FHIR — es lo que
  * consume el CRM de Administración (AdminDashboard / kpis-crm) para comparar
@@ -20,7 +20,7 @@ export const SEARCH_PARAMETER_ORIGEN_LEAD: SearchParameter = {
   version: '1.0.0',
   name: 'PatientOrigenLead',
   status: 'active',
-  publisher: 'BioWellness San Isidro',
+  publisher: 'Biowellness San Isidro',
   description:
     'Canal de origen del lead (extensión origen-lead; lista cerrada ORIGENES_LEAD de src/fhir/identifiers.ts). Contrato CRM con Administración.',
   code: 'origen-lead',

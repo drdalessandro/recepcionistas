@@ -1,7 +1,7 @@
 /**
  * Lógica pura de plantillas de WhatsApp (Twilio Content API, sin red).
  *
- * En producción, los mensajes que inicia BioWellness fuera de la ventana de 24 h
+ * En producción, los mensajes que inicia Biowellness fuera de la ventana de 24 h
  * requieren plantillas aprobadas por Meta. Cada plantilla aprobada en Twilio tiene
  * un Content SID (`HX...`) que se carga como Project Secret; el nombre del secret
  * se deriva del nombre de la plantilla interna del bot:

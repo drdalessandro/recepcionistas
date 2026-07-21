@@ -165,7 +165,7 @@ describe('Consultas médicas (precio en ARS)', () => {
     expect(r.totalARS).toBe(239250 + 120000);
   });
 
-  it('Chequeo BioWellness: precio de consulta en ARS, sin FM ni prescripción', () => {
+  it('Chequeo Biowellness: precio de consulta en ARS, sin FM ni prescripción', () => {
     const s = getServicio('CHEQUEO_BW');
     expect(s.categoria).toBe('CONSULTA');
     expect(s.practitionerCodigo).toBeUndefined(); // devolución con cualquier médico

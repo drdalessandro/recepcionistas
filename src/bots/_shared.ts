@@ -826,7 +826,7 @@ export async function confirmarReserva(
     pacienteRef,
     // Plantilla aprobada: {{1}} turno · {{2}} seña · {{3}} saldo (ver docs/whatsapp-plantillas.md).
     variables: [appt.description ?? 'tu sesión', `$${senaARS.toLocaleString('es-AR')}`, saldoTexto],
-    body: `BioWellness: ¡tu turno quedó confirmado! ${appt.description ?? ''}. Recibimos la seña de $${senaARS.toLocaleString('es-AR')}${
+    body: `Biowellness: ¡tu turno quedó confirmado! ${appt.description ?? ''}. Recibimos la seña de $${senaARS.toLocaleString('es-AR')}${
       saldoARS > 0 ? ` (saldo restante: $${saldoARS.toLocaleString('es-AR')}, se abona el día de la sesión)` : ''
     }. ¡Te esperamos! 💚`,
   });
@@ -1003,7 +1003,7 @@ async function activarPlanPendiente(
       template: 'plan-asignado',
       identifier: { system: SYSTEM.communication, value: `plan-activado-${clave}` },
       pacienteRef,
-      body: `BioWellness: ¡pago acreditado y ${descripcion} activada! Tenés ${sesiones} sesiones${
+      body: `Biowellness: ¡pago acreditado y ${descripcion} activada! Tenés ${sesiones} sesiones${
         tipoCob === 'membresia' ? ' este mes' : ''
       } disponibles. ¡Te esperamos! 💚`,
     });

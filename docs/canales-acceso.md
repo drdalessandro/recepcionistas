@@ -1,4 +1,4 @@
-# Canales de acceso a BioWellness San Isidro — rol de Recepción
+# Canales de acceso a Biowellness San Isidro — rol de Recepción
 
 Cómo llega una persona a los servicios, qué hace Recepción en cada caso y por
 dónde entra la solicitud al sistema (FHIR R4). La idea central: **todos los

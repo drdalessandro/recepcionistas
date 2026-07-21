@@ -212,7 +212,7 @@ después):
    duplica) y la AccessPolicy **"Paciente — Portal"**. Recupera el link mágico
    (`/setpassword/{id}/{secret}`) y lo entrega por el canal elegido:
    - **whatsapp** → Twilio;
-   - **email** → mail BioWellness (SES, `medplum.sendEmail`);
+   - **email** → mail Biowellness (SES, `medplum.sendEmail`);
    - **qr** → devuelve el link y el front lo dibuja como **QR** (client-side, el
      link nunca sale a un tercero).
 

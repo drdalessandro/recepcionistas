@@ -1,7 +1,7 @@
-# Handoff → recepcionistas: Chequeo BioWellness + policy del portal
+# Handoff → recepcionistas: Chequeo Biowellness + policy del portal
 
 > Para pegar en una sesión del repo `biowellness/recepcionistas`.
-> Contexto: el portal adopta el journey "Chequeo BioWellness" (evaluación
+> Contexto: el portal adopta el journey "Chequeo Biowellness" (evaluación
 > inicial como producto de entrada — ver `portal/docs/chequeo-biowellness-journey.md`).
 > Decisiones de Andrés del 2026-07-20 incluidas acá. Tres tareas, en orden de
 > urgencia (la 1 es un fix de seguridad operativa, las otras dos son del
@@ -53,7 +53,7 @@ Nuevo servicio (decisiones: precio = consulta; devolución con Dalessandro o
 Dos Santos indistinto; la orden de laboratorio no se cobra — el paciente la
 resuelve por su cobertura y sube el PDF al portal):
 
-- `codigo: 'CHEQUEO_BW'` · nombre **"Chequeo BioWellness"**.
+- `codigo: 'CHEQUEO_BW'` · nombre **"Chequeo Biowellness"**.
 - Categoría: la misma de las consultas médicas (comparte el consultorio y las
   reglas R-07); si el catálogo distingue, puede ir como categoría propia
   "Evaluación".

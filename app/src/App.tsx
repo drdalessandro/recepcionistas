@@ -51,7 +51,7 @@ function Login(): JSX.Element {
         <Stack gap="md">
           <Stack gap={2} align="center">
             <Title order={2} c="bio.7">
-              BioWellness
+              Biowellness
             </Title>
             <Text c="dimmed" size="sm">
               Recepción · San Isidro

@@ -129,7 +129,7 @@ El link de invitación apunta al portal vía el secret **`PORTAL_BASE_URL`**
    antes endurecerlos para derivar el paciente del login (no del input) y habilitar la
    ejecución solo de esos bots.
 
-5. **Branding/seguridad** ya consistente (theme BioWellness en `app.biowellness.ar`).
+5. **Branding/seguridad** ya consistente (theme Biowellness en `app.biowellness.ar`).
    Verificar `recaptchaSiteKey`/`googleClientId` si el registro los usa.
 
 ## Cómo dar acceso al repo del portal
