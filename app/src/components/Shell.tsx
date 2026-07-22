@@ -47,21 +47,22 @@ export function Shell({ vista, onVista, children }: ShellProps): JSX.Element {
           </Group>
 
           <SegmentedControl
+            size="xs"
             value={vista}
             onChange={(v) => onVista(v as Vista)}
             data={[
-              { value: 'agenda', label: segLabel(<IconCalendarEvent size={16} />, 'Agenda') },
-              { value: 'solicitudes', label: segLabel(<IconInbox size={16} />, 'Solicitudes', solicitudesPendientes, 'red') },
-              { value: 'duplicados', label: segLabel(<IconUsersGroup size={16} />, 'Duplicados') },
-              { value: 'mensajes', label: segLabel(<IconMessages size={16} />, 'Mensajes', mensajesSinLeer) },
-              { value: 'planes', label: segLabel(<IconLicense size={16} />, 'Planes y sesiones') },
-              { value: 'atender', label: segLabel(<IconUserHeart size={16} />, 'Atender paciente') },
-              { value: 'reportes', label: segLabel(<IconChartBar size={16} />, 'Reportes') },
+              { value: 'agenda', label: segLabel(<IconCalendarEvent size={15} />, 'Agenda') },
+              { value: 'solicitudes', label: segLabel(<IconInbox size={15} />, 'Solicitudes', solicitudesPendientes, 'red') },
+              { value: 'duplicados', label: segLabel(<IconUsersGroup size={15} />, 'Duplicados') },
+              { value: 'mensajes', label: segLabel(<IconMessages size={15} />, 'Mensajes', mensajesSinLeer) },
+              { value: 'planes', label: segLabel(<IconLicense size={15} />, 'Planes') },
+              { value: 'atender', label: segLabel(<IconUserHeart size={15} />, 'Atender') },
+              { value: 'reportes', label: segLabel(<IconChartBar size={15} />, 'Reportes') },
             ]}
           />
 
-          <Group gap="sm" wrap="nowrap">
-            <Text size="sm" visibleFrom="sm">
+          <Group gap="xs" wrap="nowrap">
+            <Text size="sm" visibleFrom="lg">
               {profile ? getDisplayString(profile) : ''}
             </Text>
             <CampanitaNovedades
@@ -71,17 +72,18 @@ export function Shell({ vista, onVista, children }: ShellProps): JSX.Element {
             />
             <ActionIcon
               variant="default"
-              size="lg"
+              size="md"
               onClick={() => setColorScheme(oscuro ? 'light' : 'dark')}
               aria-label={oscuro ? 'Activar modo claro' : 'Activar modo oscuro'}
               title={oscuro ? 'Modo claro' : 'Modo oscuro'}
             >
-              {oscuro ? <IconSun size={18} /> : <IconMoon size={18} />}
+              {oscuro ? <IconSun size={16} /> : <IconMoon size={16} />}
             </ActionIcon>
             <Button
+              size="xs"
               variant="light"
               color="gray"
-              leftSection={<IconLogout size={16} />}
+              leftSection={<IconLogout size={15} />}
               onClick={() => medplum.signOut().then(() => window.location.reload())}
             >
               Salir
