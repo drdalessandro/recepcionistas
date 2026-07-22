@@ -50,13 +50,17 @@ export function Shell({ vista, onVista, children }: ShellProps): JSX.Element {
             size="xs"
             value={vista}
             onChange={(v) => onVista(v as Vista)}
+            // Orden por frecuencia + urgencia de uso en recepción (decisión de
+            // Andrés): la acción del mostrador primero, luego la agenda del día,
+            // después lo time-sensitive con badge (solicitudes/mensajes), y al
+            // final las tareas ocasionales de mantenimiento/supervisión.
             data={[
+              { value: 'atender', label: segLabel(<IconUserHeart size={15} />, 'Atender') },
               { value: 'agenda', label: segLabel(<IconCalendarEvent size={15} />, 'Agenda') },
               { value: 'solicitudes', label: segLabel(<IconInbox size={15} />, 'Solicitudes', solicitudesPendientes, 'red') },
-              { value: 'duplicados', label: segLabel(<IconUsersGroup size={15} />, 'Duplicados') },
               { value: 'mensajes', label: segLabel(<IconMessages size={15} />, 'Mensajes', mensajesSinLeer) },
               { value: 'planes', label: segLabel(<IconLicense size={15} />, 'Planes') },
-              { value: 'atender', label: segLabel(<IconUserHeart size={15} />, 'Atender') },
+              { value: 'duplicados', label: segLabel(<IconUsersGroup size={15} />, 'Duplicados') },
               { value: 'reportes', label: segLabel(<IconChartBar size={15} />, 'Reportes') },
             ]}
           />
