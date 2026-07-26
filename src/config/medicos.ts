@@ -6,6 +6,13 @@
  * garantiza). El precio de la consulta es por médico y está en ARS (pesos),
  * no en USD.
  */
+/** Franja de atención semanal de un médico (día 0=domingo … 6=sábado). */
+export interface FranjaAgendaMedico {
+  dia: number;
+  desde: string; // "HH:MM"
+  hasta: string; // "HH:MM"
+}
+
 export interface Medico {
   codigo: string;
   nombre: string;
@@ -15,6 +22,13 @@ export interface Medico {
   precioConsultaARS: number;
   /** Marca de precio provisorio (pendiente de confirmar). */
   precioProvisorio?: boolean;
+  /**
+   * Agenda PUBLICADA en el portal (Schedule `bw-sched-*` + Slots free que
+   * genera el seed). Sin agenda acá, el seed no publica nada para ese médico
+   * (su Schedule puede existir creado a mano en el server, como hoy los de
+   * la Dra. Dos Santos y el Dr. D'Alessandro).
+   */
+  agenda?: FranjaAgendaMedico[];
 }
 
 export const MEDICOS: Medico[] = [
@@ -27,6 +41,8 @@ export const MEDICOS: Medico[] = [
     // PROVISORIO: el Director Médico cobra más; confirmar monto con Andrés.
     precioConsultaARS: 150_000,
     precioProvisorio: true,
+    // Definido por Alejandro (2026-07-26): atiende los miércoles de 17 a 20.
+    agenda: [{ dia: 3, desde: '17:00', hasta: '20:00' }],
   },
 ];
 

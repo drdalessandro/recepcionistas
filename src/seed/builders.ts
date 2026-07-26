@@ -19,7 +19,7 @@ import type {
   StructureDefinition,
 } from '@medplum/fhirtypes';
 import type { Servicio } from '../domain/types.js';
-import { MEDICOS } from '../config/medicos.js';
+import { MEDICOS, type Medico } from '../config/medicos.js';
 import { CATEGORIA_COMERCIAL, SERVICIOS } from '../config/catalogo.js';
 import { COMBOS } from '../config/combos.js';
 import { MEMBRESIAS } from '../config/membresias.js';
@@ -28,6 +28,7 @@ import { CONTRAINDICACIONES } from '../config/contraindicaciones.js';
 import { RECURSOS } from '../config/recursos.js';
 import { TC_DEFAULT } from '../config/tipo-cambio.js';
 import type { SlotDescriptor } from '../lib/slots.js';
+import type { HorarioDia } from '../config/horario.js';
 import { EXTENSIONES } from '../fhir/extensions.js';
 import { SEARCH_PARAMETERS } from '../fhir/search-parameters.js';
 import { ACCESS_POLICIES } from '../fhir/access-policies.js';
@@ -222,6 +223,56 @@ export function buildSlot(descriptor: SlotDescriptor, scheduleRef: string): Slot
   };
 }
 
+/** Slug del médico para los identifiers del portal ("MED_CONRADO" → "conrado"). */
+function slugMedico(codigo: string): string {
+  return codigo.replace(/^MED_/, '').toLowerCase().replace(/[^a-z0-9]+/g, '-');
+}
+
+/**
+ * Agenda PUBLICADA de un médico (portal → "Consulta con Director Médico"):
+ * Schedule con doble identifier — el canónico del repo (SCH_{codigo}) y el del
+ * contrato del portal (`bw-sched-{medico}` bajo sid/recurso, que el portal
+ * busca por valor). El actor es el Practitioner (referencia condicional).
+ */
+export function buildScheduleMedico(m: Medico): Schedule {
+  return {
+    resourceType: 'Schedule',
+    identifier: [
+      { system: SYSTEM.recursoCodigo, value: `SCH_${m.codigo}` },
+      { system: SYSTEM.sidRecurso, value: `bw-sched-${slugMedico(m.codigo)}` },
+    ],
+    active: true,
+    actor: [{ reference: `Practitioner?identifier=${SYSTEM.medico}|${m.codigo}`, display: m.nombre }],
+  };
+}
+
+/**
+ * Slot libre de la agenda de un médico. Identifier determinista para regenerar
+ * sin duplicar; el runner NO pisa los existentes (un slot ya reservado quedó
+ * `busy` y una regeneración jamás debe volverlo a ofrecer).
+ */
+export function buildSlotMedico(m: Medico, descriptor: SlotDescriptor, scheduleRef: string): Slot {
+  return {
+    resourceType: 'Slot',
+    identifier: [
+      { system: SYSTEM.recursoCodigo, value: `${m.codigo}|${descriptor.inicio}` },
+      { system: SYSTEM.sidRecurso, value: `bw-slot-${slugMedico(m.codigo)}-${descriptor.inicio}` },
+    ],
+    schedule: { reference: scheduleRef },
+    status: 'free',
+    start: descriptor.inicio,
+    end: descriptor.fin,
+  };
+}
+
+/** Horario semanal (shape de HORARIO_SEMANAL) armado desde la agenda del médico. */
+export function horarioDeAgendaMedico(m: Medico): HorarioDia[] {
+  return Array.from({ length: 7 }, (_, dia) => {
+    const franjas = (m.agenda ?? []).filter((f) => f.dia === dia).map((f) => ({ desde: f.desde, hasta: f.hasta }));
+    return { dia, abierto: franjas.length > 0, franjas };
+  });
+}
+
 export function buildPractitioner(codigo: string): Practitioner {
   const m = MEDICOS.find((x) => x.codigo === codigo)!;
   return {
@@ -260,7 +311,11 @@ export function buildSeed(): RecursosSeed {
     paquetes: PAQUETES.map((p) => buildPaquetePlanDefinition(p.codigo)),
     contraindicaciones: buildContraindicacionesCodeSystem(),
     locations: RECURSOS.map((r) => buildLocation(r.codigo)),
-    schedules: RECURSOS.map((r) => buildSchedule(r.codigo)),
+    schedules: [
+      ...RECURSOS.map((r) => buildSchedule(r.codigo)),
+      // Agendas publicadas de médicos (portal): solo los que definen `agenda`.
+      ...MEDICOS.filter((m) => (m.agenda?.length ?? 0) > 0).map(buildScheduleMedico),
+    ],
     practitioners: MEDICOS.map((m) => buildPractitioner(m.codigo)),
   };
 }

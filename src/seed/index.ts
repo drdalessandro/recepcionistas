@@ -14,9 +14,11 @@
 import 'dotenv/config';
 import { MedplumClient } from '@medplum/core';
 import type { Resource } from '@medplum/fhirtypes';
-import { buildSeed, buildSlot } from './builders.js';
+import { buildSeed, buildSlot, buildSlotMedico, horarioDeAgendaMedico } from './builders.js';
 import { HORARIO_ES_PLACEHOLDER, HORARIO_SEMANAL } from '../config/horario.js';
 import { RECURSOS } from '../config/recursos.js';
+import { MEDICOS, codigoConsulta } from '../config/medicos.js';
+import { getServicio } from '../config/catalogo.js';
 import { CONTRAINDICACIONES } from '../config/contraindicaciones.js';
 import { generarSlots } from '../lib/slots.js';
 import { SYSTEM } from '../fhir/identifiers.js';
@@ -55,6 +57,15 @@ async function main(): Promise<void> {
   if (withSlots) {
     const descriptores = generarSlots(RECURSOS, HORARIO_SEMANAL, { desde: new Date(), dias });
     console.log(`\nSlots a generar (${dias} días): ${descriptores.length}`);
+    for (const m of MEDICOS.filter((x) => (x.agenda?.length ?? 0) > 0)) {
+      const dur = getServicio(codigoConsulta(m.codigo)).duracionMin;
+      const deMedico = generarSlots(
+        [{ codigo: m.codigo, nombre: m.nombre, tipo: 'CONSULTORIO', capacidad: 1 }],
+        horarioDeAgendaMedico(m),
+        { desde: new Date(), dias, granularidadMin: dur },
+      );
+      console.log(`  + agenda de ${m.nombre}: ${deMedico.length} slots de ${dur} min`);
+    }
     if (HORARIO_ES_PLACEHOLDER) {
       console.log('   ⚠️  Usando horario PLACEHOLDER: los Slot serán provisionales.');
     }
@@ -111,6 +122,39 @@ async function generarYCargarSlots(medplum: MedplumClient, dias: number): Promis
     creados++;
   }
   console.log(`  ✓ Slot (${creados})`);
+
+  // Agendas publicadas de MÉDICOS (portal → "Consulta con Director Médico"):
+  // slots free por franja del médico, con la duración de SU consulta. A
+  // diferencia de las salas, acá se crea SOLO lo que falta: un slot reservado
+  // quedó `busy` y una regeneración jamás debe volver a ofrecerlo.
+  for (const m of MEDICOS.filter((x) => (x.agenda?.length ?? 0) > 0)) {
+    const sch = await withRetry(() =>
+      medplum.searchOne('Schedule', `identifier=${SYSTEM.recursoCodigo}|SCH_${m.codigo}`),
+    );
+    if (!sch?.id) {
+      console.log(`  ⚠️  Sin Schedule para ${m.nombre}: se omite su agenda.`);
+      continue;
+    }
+    const dur = getServicio(codigoConsulta(m.codigo)).duracionMin;
+    const deMedico = generarSlots(
+      [{ codigo: m.codigo, nombre: m.nombre, tipo: 'CONSULTORIO', capacidad: 1 }],
+      horarioDeAgendaMedico(m),
+      { desde: new Date(), dias, granularidadMin: dur },
+    );
+    let nuevos = 0;
+    for (const desc of deMedico) {
+      const slot = buildSlotMedico(m, desc, `Schedule/${sch.id}`);
+      const existente = await withRetry(() =>
+        medplum.searchOne('Slot', `identifier=${SYSTEM.recursoCodigo}|${encodeURIComponent(`${m.codigo}|${desc.inicio}`)}`),
+      );
+      if (existente) {
+        continue; // ya existe (free u ocupado): no se pisa
+      }
+      await withRetry(() => medplum.createResource(slot));
+      nuevos++;
+    }
+    console.log(`  ✓ Agenda ${m.nombre}: ${nuevos} slots nuevos (${deMedico.length - nuevos} ya existían)`);
+  }
 }
 
 function sleep(ms: number): Promise<void> {
