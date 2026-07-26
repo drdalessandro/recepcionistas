@@ -21,12 +21,13 @@ import { getServicio } from '../config/catalogo.js';
 import { getMembresia } from '../config/membresias.js';
 import type { PerfilReserva } from '../config/reglas.js';
 import type { IntensidadMembresia } from '../domain/types.js';
-import { EXT } from '../fhir/identifiers.js';
+import { COD, EXT } from '../fhir/identifiers.js';
 import { esPlanBW, estadoDeCoverage, planCodigoDeCoverage } from '../fhir/coverage.js';
 import {
   calcularDisponibilidad,
   perfilDeReserva,
   type DiaDisponible,
+  type SolicitudPendiente,
 } from '../lib/disponibilidad.js';
 import { cargarReservasEnRango } from './_shared.js';
 
@@ -101,17 +102,41 @@ export async function handler(
   const limite = new Date(ahora.getTime() + 7 * 24 * 60 * 60 * 1000); // techo FM
   const reservas = await cargarReservasEnRango(medplum, inicioHoy, limite);
 
-  const disp = calcularDisponibilidad({ servicio, perfil, ahora, reservas });
+  // Solicitudes pendientes (decisión 2026-07-26): un horario ya pedido desde el
+  // portal deja de ofrecerse mientras Recepción no lo resuelva. Solo cuentan
+  // los Task sin resolver Y con horario exacto elegido de los chips; el
+  // vencimiento y el filtro por sala los aplica la lógica pura.
+  const tasksPendientes = await medplum
+    .searchResources('Task', `code=${COD.solicitudTurno}&status=requested,received,accepted,in-progress&_count=200`)
+    .catch(() => []);
+  const solicitudes = tasksPendientes
+    .map((t): SolicitudPendiente | undefined => {
+      const inicio = t.input?.find((i) => i.type?.text === 'preferencia-inicio')?.valueDateTime;
+      if (!inicio) {
+        return undefined; // preferencia en texto libre: no bloquea nada
+      }
+      return {
+        inicio: new Date(inicio),
+        servicioCodigo: t.input?.find((i) => i.type?.text === 'terapia-codigo')?.valueString,
+        pedidaEn: t.authoredOn ? new Date(t.authoredOn) : undefined,
+      };
+    })
+    .filter((s): s is SolicitudPendiente => Boolean(s));
+
+  const disp = calcularDisponibilidad({ servicio, perfil, ahora, reservas, solicitudes });
+  const sinOpciones =
+    disp.dias.length === 0
+      ? disp.excluidosPorSolicitudes > 0
+        ? // La única razón son horarios ya pedidos: que el paciente lo entienda.
+          'Los horarios de este servicio están pedidos y esperando confirmación. Escribinos y te avisamos apenas se libere alguno.'
+        : `Por ahora no hay horarios libres de ${servicio.nombre} dentro de tu ventana de reserva (${disp.ventanaHoras} h). Escribinos y lo resolvemos juntos.`
+      : undefined;
   return {
     ok: true,
     perfil,
     ventanaHoras: disp.ventanaHoras,
     grupal: disp.grupal,
     dias: disp.dias,
-    ...(disp.dias.length === 0
-      ? {
-          mensaje: `Por ahora no hay horarios libres de ${servicio.nombre} dentro de tu ventana de reserva (${disp.ventanaHoras} h). Escribinos y lo resolvemos juntos.`,
-        }
-      : {}),
+    ...(sinOpciones ? { mensaje: sinOpciones } : {}),
   };
 }

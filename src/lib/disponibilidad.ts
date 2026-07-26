@@ -11,6 +11,7 @@
  */
 import type { IntensidadMembresia, RecursoFisico, Servicio } from '../domain/types.js';
 import { HORARIO_SEMANAL, SLOT_GRANULARIDAD_MIN, type HorarioDia } from '../config/horario.js';
+import { getServicio } from '../config/catalogo.js';
 import { compartenEquipo, recursosParaCategoria } from '../config/recursos.js';
 import { VENTANA_RESERVA_HORAS, type PerfilReserva } from '../config/reglas.js';
 import { generarSlots } from './slots.js';
@@ -60,12 +61,35 @@ export interface DiaDisponible {
   horarios: HorarioDisponible[];
 }
 
+/**
+ * Horas tras las cuales una solicitud sin responder DEJA de bloquear horarios
+ * (un Task olvidado en la bandeja no puede matar un horario para siempre; si
+ * quedan muchos horarios bloqueados, la palanca es bajar esto, no volver atrás).
+ */
+export const VENCIMIENTO_SOLICITUD_HORAS = 24;
+
+/** Solicitud de turno pendiente (Task `solicitud-turno` sin resolver). */
+export interface SolicitudPendiente {
+  /** Horario exacto pedido (input `preferencia-inicio` del Task). */
+  inicio: Date;
+  /** Servicio pedido (input `terapia-codigo`). Sin código no se sabe si compite: no bloquea. */
+  servicioCodigo?: string;
+  /** Cuándo se pidió (authoredOn), para el vencimiento. */
+  pedidaEn?: Date;
+}
+
 export interface OpcionesDisponibilidad {
   servicio: Servicio;
   perfil: PerfilReserva;
   ahora: Date;
   /** Agenda ocupada (Slots busy → ReservaRecurso) de todo el rango a evaluar. */
   reservas: ReservaRecurso[];
+  /**
+   * Solicitudes pendientes del portal (decisión 2026-07-26): entre que un
+   * paciente pide un horario y Recepción confirma, ese horario deja de
+   * ofrecerse a los demás — preferimos ofrecer de menos a rechazar gente.
+   */
+  solicitudes?: SolicitudPendiente[];
   /** Horario del centro (default: HORARIO_SEMANAL). */
   horario?: HorarioDia[];
 }
@@ -74,6 +98,8 @@ export interface Disponibilidad {
   ventanaHoras: number;
   grupal: boolean;
   dias: DiaDisponible[];
+  /** Horarios que se dejaron de ofrecer SOLO por solicitudes pendientes. */
+  excluidosPorSolicitudes: number;
 }
 
 /** Los recursos donde el portal puede ofrecer el servicio. */
@@ -108,8 +134,32 @@ export function calcularDisponibilidad(opts: OpcionesDisponibilidad): Disponibil
   const grupal = servicio.codigo === SERVICIO_GRUPAL;
   const candidatos = candidatosPara(servicio);
   if (candidatos.length === 0 || servicio.duracionMin <= 0) {
-    return { ventanaHoras, grupal, dias: [] };
+    return { ventanaHoras, grupal, dias: [], excluidosPorSolicitudes: 0 };
   }
+
+  // Solicitudes pendientes que COMPITEN por estas salas: ya vencidas, pasadas,
+  // sin código de servicio o de salas ajenas no bloquean nada.
+  const codigosCandidatos = new Set(candidatos.map((r) => r.codigo));
+  const pendientes: Array<{ desde: number; hasta: number }> = [];
+  for (const sol of opts.solicitudes ?? []) {
+    if (sol.inicio.getTime() <= ahora.getTime() || !sol.servicioCodigo) {
+      continue;
+    }
+    if (sol.pedidaEn && ahora.getTime() - sol.pedidaEn.getTime() > VENCIMIENTO_SOLICITUD_HORAS * 3_600_000) {
+      continue;
+    }
+    let pedido: Servicio;
+    try {
+      pedido = getServicio(sol.servicioCodigo);
+    } catch {
+      continue;
+    }
+    if (!candidatosPara(pedido).some((r) => codigosCandidatos.has(r.codigo))) {
+      continue;
+    }
+    pendientes.push({ desde: sol.inicio.getTime(), hasta: sol.inicio.getTime() + pedido.duracionMin * 60_000 });
+  }
+  let excluidosPorSolicitudes = 0;
 
   // Grilla de arranques posibles (granularidad 30') por recurso, cubriendo
   // toda la ventana. `generarSlots` ya respeta el horario semanal del centro.
@@ -137,6 +187,15 @@ export function calcularDisponibilidad(opts: OpcionesDisponibilidad): Disponibil
       continue; // fuera de la ventana del perfil (R-13)
     }
     const fin = new Date(inicio.getTime() + servicio.duracionMin * 60_000);
+
+    // Solicitudes pendientes que solapan esta franja.
+    const pendientesSolapadas = pendientes.filter((p) => p.desde < fin.getTime() && inicio.getTime() < p.hasta).length;
+    if (!grupal && pendientesSolapadas > 0) {
+      // Individual: el horario ya está pedido — no se ofrece, como si estuviera
+      // ocupado (aunque otra sala de la categoría siga libre: ofrecer de menos).
+      excluidosPorSolicitudes++;
+      continue;
+    }
 
     let horarioOfrecible: HorarioDisponible | undefined;
     for (const recurso of candidatos) {
@@ -168,11 +227,18 @@ export function calcularDisponibilidad(opts: OpcionesDisponibilidad): Disponibil
       }
 
       if (grupal) {
+        // Grupal: cada solicitud pendiente resta un asiento del cupo, pero
+        // `ocupantes` sigue contando solo confirmados ("ya somos N").
         const ocupantes = personasEnFranja(opts.reservas, recurso.codigo, inicio, fin);
+        const lugares = Math.max(recurso.capacidad - ocupantes - pendientesSolapadas, 0);
+        if (lugares <= 0) {
+          excluidosPorSolicitudes++;
+          continue;
+        }
         horarioOfrecible = {
           inicio: inicioISO,
           fin: isoArgentina(fin),
-          lugares: Math.max(recurso.capacidad - ocupantes, 0),
+          lugares,
           ocupantes,
         };
       } else {
@@ -192,7 +258,7 @@ export function calcularDisponibilidad(opts: OpcionesDisponibilidad): Disponibil
   const dias: DiaDisponible[] = [...porDia.entries()]
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([fecha, horarios]) => ({ fecha, horarios }));
-  return { ventanaHoras, grupal, dias };
+  return { ventanaHoras, grupal, dias, excluidosPorSolicitudes };
 }
 
 /** ISO con offset fijo de Argentina (mismo formato que generarSlots). */
