@@ -1,5 +1,9 @@
 import { describe, it, expect } from 'vitest';
-import { buildSeed } from '../src/seed/builders.js';
+import { buildSeed, buildSlotMedico, horarioDeAgendaMedico } from '../src/seed/builders.js';
+import { generarSlots } from '../src/lib/slots.js';
+import { getServicio } from '../src/config/catalogo.js';
+import { MEDICOS } from '../src/config/medicos.js';
+import { SYSTEM } from '../src/fhir/identifiers.js';
 import { EXT } from '../src/fhir/identifiers.js';
 
 const seed = buildSeed();
@@ -13,7 +17,7 @@ describe('Seed — composición', () => {
     expect(seed.membresias.length).toBe(10);
     expect(seed.paquetes.length).toBe(18);
     expect(seed.locations.length).toBe(14); // 13 + Puesto IV 2 (handoff v9)
-    expect(seed.schedules.length).toBe(14);
+    expect(seed.schedules.length).toBe(15); // 14 salas + agenda publicada del Director Médico
     expect(seed.practitioners.length).toBe(3);
   });
 });
@@ -139,5 +143,40 @@ describe('Seed — AccessPolicy de recepción (privacidad por diseño)', () => {
     // Sí da acceso a lo operativo.
     expect(tipos).toContain('Appointment');
     expect(tipos).toContain('Invoice');
+  });
+});
+
+describe('Seed — agenda publicada del Director Médico (miércoles 17-20)', () => {
+  const conrado = MEDICOS.find((m) => m.codigo === 'MED_CONRADO')!;
+
+  it('El Schedule lleva el identifier canónico Y el del contrato del portal, con el Practitioner como actor', () => {
+    const sch = seed.schedules.find((s) =>
+      s.identifier?.some((i) => i.value === 'SCH_MED_CONRADO'),
+    )!;
+    expect(sch).toBeDefined();
+    expect(sch.active).toBe(true);
+    // Contrato del portal: namespace sid/recurso, valor que contiene "conrado".
+    const delPortal = sch.identifier?.find((i) => i.system === SYSTEM.sidRecurso);
+    expect(delPortal?.value).toBe('bw-sched-conrado');
+    expect(sch.actor?.[0]?.reference).toContain('Practitioner?identifier=');
+    expect(sch.actor?.[0]?.reference).toContain('MED_CONRADO');
+  });
+
+  it('Su agenda genera exactamente 3 slots de 60 min los miércoles (17, 18 y 19) y nada otros días', () => {
+    const dur = getServicio('CONSULTA_MED_CONRADO').duracionMin;
+    const slots = generarSlots(
+      [{ codigo: conrado.codigo, nombre: conrado.nombre, tipo: 'CONSULTORIO', capacidad: 1 }],
+      horarioDeAgendaMedico(conrado),
+      { desde: new Date('2026-07-20T12:00:00-03:00'), dias: 7, granularidadMin: dur },
+    );
+    expect(slots.map((s) => s.inicio)).toEqual([
+      '2026-07-22T17:00:00-03:00',
+      '2026-07-22T18:00:00-03:00',
+      '2026-07-22T19:00:00-03:00',
+    ]);
+    // El Slot que persiste el seed lleva la convención bw-slot-* del portal.
+    const slot = buildSlotMedico(conrado, slots[0]!, 'Schedule/xyz');
+    expect(slot.status).toBe('free');
+    expect(slot.identifier?.some((i) => i.system === SYSTEM.sidRecurso && i.value === 'bw-slot-conrado-2026-07-22T17:00:00-03:00')).toBe(true);
   });
 });

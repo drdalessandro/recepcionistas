@@ -211,6 +211,7 @@ export async function handler(
   });
 
   const participant: AppointmentParticipant[] = [{ actor: { reference: e.pacienteRef }, status: 'accepted' }];
+  const slotRefs = [{ reference: `Slot/${slot.id}` }];
   // Consultas: sumar al médico como participante (un consultorio, varios médicos).
   if (servicio.practitionerCodigo) {
     const pract = await medplum.searchOne('Practitioner', `identifier=${SYSTEM.medico}|${servicio.practitionerCodigo}`);
@@ -219,6 +220,24 @@ export async function handler(
         actor: { reference: `Practitioner/${pract.id}`, display: pract.name?.[0]?.text },
         status: 'accepted',
       });
+    }
+    // Agenda PUBLICADA del médico (portal): si su Schedule tiene un Slot libre
+    // en este horario, pasa a busy y viaja en appointment.slot — así el horario
+    // desaparece del portal (sin esto habría dobles reservas) y cancelar o
+    // completar lo libera solo (los flujos existentes recorren appointment.slot).
+    const schMedico = await medplum.searchOne(
+      'Schedule',
+      `identifier=${SYSTEM.recursoCodigo}|SCH_${servicio.practitionerCodigo}`,
+    );
+    if (schMedico?.id) {
+      const slotMedico = await medplum.searchOne(
+        'Slot',
+        `schedule=Schedule/${schMedico.id}&start=${inicio.toISOString()}&status=free`,
+      );
+      if (slotMedico?.id) {
+        await medplum.updateResource<Slot>({ ...slotMedico, status: 'busy' });
+        slotRefs.push({ reference: `Slot/${slotMedico.id}` });
+      }
     }
   }
 
@@ -232,7 +251,7 @@ export async function handler(
     description: nombreServicioRecepcion(servicio),
     start: inicio.toISOString(),
     end: fin.toISOString(),
-    slot: [{ reference: `Slot/${slot.id}` }],
+    slot: slotRefs,
     participant,
     extension: [
       { url: EXT.recursoFisico, valueString: e.recursoCodigo },

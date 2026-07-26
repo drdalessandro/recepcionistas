@@ -92,6 +92,12 @@ export const SYSTEM = {
   membresiaCodigo: `${BASE}/CodeSystem/membresia`,
   paqueteCodigo: `${BASE}/CodeSystem/paquete`,
   recursoCodigo: `${BASE}/CodeSystem/recurso-fisico`,
+  /**
+   * Namespace PUBLICADO que el portal usa para encontrar agendas de médicos
+   * (Schedule `bw-sched-{medico}` y sus Slot `bw-slot-*`). Contrato con
+   * portal/consulta-medica: no renombrar.
+   */
+  sidRecurso: `${BASE}/sid/recurso`,
   contraindicacion: `${BASE}/CodeSystem/contraindicacion`,
   medico: `${BASE}/CodeSystem/medico`,
   /** Identifier de Invoice (para deduplicar señas: manual o por pago MP). */
