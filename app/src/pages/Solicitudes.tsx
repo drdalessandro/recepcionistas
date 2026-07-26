@@ -5,6 +5,7 @@ import { IconInbox, IconUserHeart, IconCheck } from '@tabler/icons-react';
 import { useMedplum, useSubscription } from '@medplum/react';
 import { getDisplayString } from '@medplum/core';
 import type { Patient, Task } from '@medplum/fhirtypes';
+import type { ReservaPrefill } from './Atender';
 
 /**
  * Solicitudes de turno del portal (modelo de "solicitud"): el paciente pide y acá
@@ -30,7 +31,22 @@ function pacienteIdDeTask(t: Task): string | undefined {
   return ref?.startsWith('Patient/') ? ref.slice('Patient/'.length) : undefined;
 }
 
-export function Solicitudes({ onAtender }: { onAtender: (pacienteId: string) => void }): JSX.Element {
+/**
+ * Lo que el paciente pidió, para prellenar la reserva en Atender: sin esto,
+ * Recepción re-tipeaba servicio y horario de memoria y podía confirmar OTRO
+ * servicio (pasó en producción: pidió Chequeo, se confirmó una consulta).
+ */
+function prefillDeTask(t: Task): ReservaPrefill | undefined {
+  const servicioCodigo = t.input?.find((i) => i.type?.text === 'terapia-codigo')?.valueString;
+  const inicio = t.input?.find((i) => i.type?.text === 'preferencia-inicio')?.valueDateTime;
+  return servicioCodigo || inicio ? { servicioCodigo, inicio } : undefined;
+}
+
+export function Solicitudes({
+  onAtender,
+}: {
+  onAtender: (pacienteId: string, prefill?: ReservaPrefill) => void;
+}): JSX.Element {
   const medplum = useMedplum();
   const [tasks, setTasks] = useState<Task[]>();
   const [nombres, setNombres] = useState<Map<string, string>>(new Map());
@@ -128,7 +144,7 @@ export function Solicitudes({ onAtender }: { onAtender: (pacienteId: string) => 
                     size="xs"
                     leftSection={<IconUserHeart size={15} />}
                     disabled={!pid}
-                    onClick={() => pid && onAtender(pid)}
+                    onClick={() => pid && onAtender(pid, prefillDeTask(t))}
                   >
                     Atender
                   </Button>

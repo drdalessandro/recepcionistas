@@ -7,7 +7,7 @@ import { Solicitudes } from './pages/Solicitudes';
 import { Duplicados } from './pages/Duplicados';
 import { Mensajes } from './pages/Mensajes';
 import { PlanesSesiones } from './pages/PlanesSesiones';
-import { Atender } from './pages/Atender';
+import { Atender, type ReservaPrefill } from './pages/Atender';
 import { Reportes } from './pages/Reportes';
 
 export function App(): JSX.Element {
@@ -15,13 +15,17 @@ export function App(): JSX.Element {
   const [vista, setVista] = useState<Vista>('agenda');
   // Paciente con el que entrar a "Atender" (p. ej. al tocar "Atender" en el panel de planes).
   const [atenderId, setAtenderId] = useState<string | null>(null);
+  // Lo que el paciente PIDIÓ desde el portal (servicio + horario): viaja de la
+  // solicitud al formulario de reserva para que Recepción no re-tipee nada.
+  const [atenderPrefill, setAtenderPrefill] = useState<ReservaPrefill | null>(null);
 
   if (!profile) {
     return <Login />;
   }
 
-  const irAtender = (pacienteId: string): void => {
+  const irAtender = (pacienteId: string, prefill?: ReservaPrefill): void => {
     setAtenderId(pacienteId);
+    setAtenderPrefill(prefill ?? null);
     setVista('atender');
   };
 
@@ -32,7 +36,14 @@ export function App(): JSX.Element {
       {vista === 'duplicados' && <Duplicados />}
       {vista === 'mensajes' && <Mensajes />}
       {vista === 'planes' && <PlanesSesiones onAtender={irAtender} />}
-      {vista === 'atender' && <Atender pacienteInicialId={atenderId} onPacienteInicialCargado={() => setAtenderId(null)} />}
+      {vista === 'atender' && (
+        <Atender
+          pacienteInicialId={atenderId}
+          onPacienteInicialCargado={() => setAtenderId(null)}
+          reservaInicial={atenderPrefill}
+          onReservaInicialAplicada={() => setAtenderPrefill(null)}
+        />
+      )}
       {vista === 'reportes' && <Reportes />}
     </Shell>
   );

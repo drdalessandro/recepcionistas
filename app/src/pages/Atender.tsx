@@ -55,13 +55,30 @@ import { recursosParaCategoria } from '@bw/config/recursos';
 import { generarSlots } from '@bw/lib/slots';
 import { HORARIO_SEMANAL } from '@bw/config/horario';
 
+/**
+ * Lo que el paciente pidió desde el portal (Task solicitud-turno): llega desde
+ * Solicitudes → Atender para PRELLENAR la reserva. Sin esto, Recepción
+ * re-tipeaba de memoria y podía confirmar otro servicio u otro horario.
+ */
+export interface ReservaPrefill {
+  /** Código del servicio pedido (terapia-codigo). */
+  servicioCodigo?: string;
+  /** Horario exacto elegido de los chips (preferencia-inicio, ISO). */
+  inicio?: string;
+}
+
 export function Atender({
   pacienteInicialId,
   onPacienteInicialCargado,
+  reservaInicial,
+  onReservaInicialAplicada,
 }: {
   /** Si viene, se abre directo la ficha de ese paciente (p. ej. desde Planes y sesiones). */
   pacienteInicialId?: string | null;
   onPacienteInicialCargado?: () => void;
+  /** Si viene, la reserva arranca prellenada con lo que pidió el paciente. */
+  reservaInicial?: ReservaPrefill | null;
+  onReservaInicialAplicada?: () => void;
 } = {}): JSX.Element {
   const [query, setQuery] = useState('');
   const [resultados, setResultados] = useState<Patient[] | null>(null);
@@ -158,12 +175,29 @@ export function Atender({
           </Card>
         ))}
 
-      {seleccionado && <FichaPaciente paciente={seleccionado} onVolver={() => setSeleccionado(null)} />}
+      {seleccionado && (
+        <FichaPaciente
+          paciente={seleccionado}
+          onVolver={() => setSeleccionado(null)}
+          reservaInicial={reservaInicial}
+          onReservaInicialAplicada={onReservaInicialAplicada}
+        />
+      )}
     </Stack>
   );
 }
 
-function FichaPaciente({ paciente, onVolver }: { paciente: Patient; onVolver: () => void }): JSX.Element {
+function FichaPaciente({
+  paciente,
+  onVolver,
+  reservaInicial,
+  onReservaInicialAplicada,
+}: {
+  paciente: Patient;
+  onVolver: () => void;
+  reservaInicial?: ReservaPrefill | null;
+  onReservaInicialAplicada?: () => void;
+}): JSX.Element {
   const [planes, setPlanes] = useState<PlanPaciente[]>([]);
   const [versionPagos, setVersionPagos] = useState(0);
 
@@ -191,7 +225,13 @@ function FichaPaciente({ paciente, onVolver }: { paciente: Patient; onVolver: ()
       <PagosPendientes paciente={paciente} version={versionPagos} onCobrado={() => setVersionPagos((v) => v + 1)} />
       <InvitarPortal paciente={paciente} />
       <PanelPlanes paciente={paciente} planes={planes} onCambio={recargarPlanes} />
-      <PanelReserva paciente={paciente} planes={planes} onReservado={recargarPlanes} />
+      <PanelReserva
+        paciente={paciente}
+        planes={planes}
+        onReservado={recargarPlanes}
+        prefill={reservaInicial ?? undefined}
+        onPrefillAplicado={onReservaInicialAplicada}
+      />
       <PanelCobro paciente={paciente} />
     </Stack>
   );
@@ -572,21 +612,52 @@ function PagosPendientes({
   );
 }
 
+const TZ_AR = 'America/Argentina/Buenos_Aires';
+
 /** Reserva de turno o combo: el front arma la propuesta y el bot valida + crea. */
 function PanelReserva({
   paciente,
   planes,
   onReservado,
+  prefill,
+  onPrefillAplicado,
 }: {
   paciente: Patient;
   planes: PlanPaciente[];
   onReservado: () => Promise<void>;
+  /** Lo que pidió el paciente desde el portal: arranca cargado, editable. */
+  prefill?: ReservaPrefill;
+  onPrefillAplicado?: () => void;
 }): JSX.Element {
   const hoy = new Date().toISOString().slice(0, 10);
   const [seleccion, setSeleccion] = useState<string | null>(null);
   const [recursoCodigo, setRecursoCodigo] = useState<string | null>(null);
   const [fecha, setFecha] = useState(hoy);
   const [hora, setHora] = useState<string | null>(null);
+
+  // Prefill de la solicitud del portal (una sola vez): el servicio y el horario
+  // que el paciente ELIGIÓ llegan ya puestos — confirmar es un clic, y el error
+  // de re-tipear otro servicio (pasó en producción) desaparece. Editable igual.
+  useEffect(() => {
+    if (!prefill) {
+      return;
+    }
+    if (
+      prefill.servicioCodigo &&
+      (SERVICIOS.some((s) => s.codigo === prefill.servicioCodigo) || COMBOS.some((c) => c.codigo === prefill.servicioCodigo))
+    ) {
+      setSeleccion(prefill.servicioCodigo);
+    }
+    if (prefill.inicio) {
+      const d = new Date(prefill.inicio);
+      if (!Number.isNaN(d.getTime())) {
+        setFecha(d.toLocaleDateString('en-CA', { timeZone: TZ_AR }));
+        setHora(d.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: TZ_AR }));
+      }
+    }
+    onPrefillAplicado?.();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [prefill]);
   const [prescripcion, setPrescripcion] = useState(false);
   const [usarPlan, setUsarPlan] = useState(true);
   const [resultado, setResultado] = useState<ResultadoReserva | null>(null);
