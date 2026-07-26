@@ -135,3 +135,110 @@ describe('calcularDisponibilidad — desfasaje Recovery (R-07 / AC-05)', () => {
     expect(inicios).toContain('2026-07-22T15:30:00-03:00');
   });
 });
+
+describe('calcularDisponibilidad — solicitudes pendientes (decisión 2026-07-26)', () => {
+  const hbot = getServicio('HBOT_MONO');
+  const multi = getServicio('HBOT_MULTIPLAZA');
+
+  function sol(inicio: string, servicioCodigo?: string, pedidaEn: Date = AHORA): {
+    inicio: Date;
+    servicioCodigo?: string;
+    pedidaEn: Date;
+  } {
+    return { inicio: new Date(inicio), servicioCodigo, pedidaEn };
+  }
+
+  it('Individual: un horario ya pedido NO se ofrece (aunque otra sala siga libre)', () => {
+    const r = calcularDisponibilidad({
+      servicio: hbot,
+      perfil: 'PUBLICO',
+      ahora: AHORA,
+      reservas: [],
+      solicitudes: [sol('2026-07-22T15:00:00-03:00', 'HBOT_MONO')],
+    });
+    const inicios = horarios(r.dias);
+    expect(inicios).not.toContain('2026-07-22T15:00:00-03:00');
+    // El solape parcial también bloquea (el pedido de 15:00 dura hasta las 16:00).
+    expect(inicios).not.toContain('2026-07-22T15:30:00-03:00');
+    expect(inicios).toContain('2026-07-22T16:00:00-03:00');
+    expect(r.excluidosPorSolicitudes).toBeGreaterThan(0);
+  });
+
+  it('Resuelta (no llega a la lista) => vuelve a ofrecerse; confirmada => lo tapa la agenda, sin doble descuento', () => {
+    // Rechazada: la lista de pendientes queda vacía.
+    const rechazada = calcularDisponibilidad({ servicio: hbot, perfil: 'PUBLICO', ahora: AHORA, reservas: [], solicitudes: [] });
+    expect(horarios(rechazada.dias)).toContain('2026-07-22T15:00:00-03:00');
+    // Confirmada: hay Appointment (reserva) y el Task ya no está pendiente.
+    const confirmada = calcularDisponibilidad({
+      servicio: hbot,
+      perfil: 'PUBLICO',
+      ahora: AHORA,
+      reservas: [
+        reserva('R_HBOT_MONO', '2026-07-22T15:00:00-03:00', '2026-07-22T16:00:00-03:00'),
+        reserva('R_HBOT_BIPLAZA', '2026-07-22T15:00:00-03:00', '2026-07-22T16:00:00-03:00'),
+      ],
+      solicitudes: [],
+    });
+    expect(horarios(confirmada.dias)).not.toContain('2026-07-22T15:00:00-03:00');
+    expect(confirmada.excluidosPorSolicitudes).toBe(0);
+  });
+
+  it('Grupal: cada pendiente resta un lugar y ocupantes sigue contando solo confirmados', () => {
+    const r = calcularDisponibilidad({
+      servicio: multi,
+      perfil: 'PUBLICO',
+      ahora: AHORA,
+      reservas: [reserva('R_HBOT_MULTIPLAZA', '2026-07-22T15:00:00-03:00', '2026-07-22T16:00:00-03:00', 2)],
+      solicitudes: [sol('2026-07-22T15:00:00-03:00', 'HBOT_MULTIPLAZA')],
+    });
+    const franja = r.dias.flatMap((d) => d.horarios).find((h) => h.inicio === '2026-07-22T15:00:00-03:00')!;
+    expect(franja.lugares).toBe(3); // 6 − 2 confirmados − 1 pendiente
+    expect(franja.ocupantes).toBe(2); // "ya somos N" = solo confirmados
+  });
+
+  it('Grupal lleno entre confirmados y pendientes => el horario se omite', () => {
+    const r = calcularDisponibilidad({
+      servicio: multi,
+      perfil: 'PUBLICO',
+      ahora: AHORA,
+      reservas: [reserva('R_HBOT_MULTIPLAZA', '2026-07-22T15:00:00-03:00', '2026-07-22T16:00:00-03:00', 2)],
+      solicitudes: Array.from({ length: 4 }, () => sol('2026-07-22T15:00:00-03:00', 'HBOT_MULTIPLAZA')),
+    });
+    expect(horarios(r.dias)).not.toContain('2026-07-22T15:00:00-03:00');
+  });
+
+  it('Vencimiento: horario pasado o pedido hace más de 24 h => no bloquea', () => {
+    const r = calcularDisponibilidad({
+      servicio: hbot,
+      perfil: 'PUBLICO',
+      ahora: AHORA,
+      reservas: [],
+      solicitudes: [
+        sol('2026-07-22T09:00:00-03:00', 'HBOT_MONO'), // ya pasó (AHORA = 10:00)
+        sol('2026-07-22T15:00:00-03:00', 'HBOT_MONO', new Date(AHORA.getTime() - 25 * 3_600_000)), // vencida
+      ],
+    });
+    expect(horarios(r.dias)).toContain('2026-07-22T15:00:00-03:00');
+    expect(r.excluidosPorSolicitudes).toBe(0);
+  });
+
+  it('No compiten: otra sala (IHHT vs HBOT) o sin código de servicio => no bloquean; mismo consultorio sí', () => {
+    const r = calcularDisponibilidad({
+      servicio: hbot,
+      perfil: 'PUBLICO',
+      ahora: AHORA,
+      reservas: [],
+      solicitudes: [sol('2026-07-22T15:00:00-03:00', 'IHHT'), sol('2026-07-22T15:00:00-03:00', undefined)],
+    });
+    expect(horarios(r.dias)).toContain('2026-07-22T15:00:00-03:00');
+    // El Chequeo y las consultas comparten el consultorio: sí compiten.
+    const chequeo = calcularDisponibilidad({
+      servicio: getServicio('CHEQUEO_BW'),
+      perfil: 'PUBLICO',
+      ahora: AHORA,
+      reservas: [],
+      solicitudes: [sol('2026-07-22T15:00:00-03:00', 'CONSULTA_MED_DALESSANDRO')],
+    });
+    expect(horarios(chequeo.dias)).not.toContain('2026-07-22T15:00:00-03:00');
+  });
+});
