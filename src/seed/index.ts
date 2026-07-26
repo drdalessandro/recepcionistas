@@ -39,9 +39,13 @@ async function main(): Promise<void> {
     ['PlanDefinition (membresías)', seed.membresias],
     ['PlanDefinition (paquetes)', seed.paquetes],
     ['CodeSystem (contraindicaciones)', [seed.contraindicaciones]],
+    // ⚠️ ORDEN IMPORTA: los Schedule referencian por referencia CONDICIONAL a
+    // su actor (Location la sala; Practitioner la agenda de un médico). El
+    // actor tiene que existir CON su identifier antes de upsertear el
+    // Schedule, o Medplum corta con "Conditional reference did not match".
     ['Location (recursos)', seed.locations],
-    ['Schedule (agendas)', seed.schedules],
     ['Practitioner (médicos)', seed.practitioners],
+    ['Schedule (agendas)', seed.schedules],
   ];
 
   const total = grupos.reduce((acc, [, arr]) => acc + arr.length, 0);
