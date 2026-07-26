@@ -13,7 +13,7 @@
  */
 import 'dotenv/config';
 import { MedplumClient } from '@medplum/core';
-import type { Resource } from '@medplum/fhirtypes';
+import type { Resource, Slot } from '@medplum/fhirtypes';
 import { buildSeed, buildSlot, buildSlotMedico, horarioDeAgendaMedico } from './builders.js';
 import { HORARIO_ES_PLACEHOLDER, HORARIO_SEMANAL } from '../config/horario.js';
 import { RECURSOS } from '../config/recursos.js';
@@ -116,21 +116,14 @@ async function generarYCargarSlots(medplum: MedplumClient, dias: number): Promis
   }
 
   const descriptores = generarSlots(RECURSOS, HORARIO_SEMANAL, { desde: new Date(), dias });
-  let creados = 0;
-  for (const desc of descriptores) {
-    const id = scheduleId.get(desc.recursoCodigo);
-    if (!id) {
-      continue;
-    }
-    await upsert(medplum, buildSlot(desc, `Schedule/${id}`));
-    creados++;
-  }
-  console.log(`  ✓ Slot (${creados})`);
+  const slotsSalas = descriptores
+    .filter((desc) => scheduleId.has(desc.recursoCodigo))
+    .map((desc) => buildSlot(desc, `Schedule/${scheduleId.get(desc.recursoCodigo)}`));
+  const r = await crearSlotsEnLotes(medplum, slotsSalas);
+  console.log(`  ✓ Slot salas: ${r.creados} nuevos (${r.existentes} ya existían)`);
 
   // Agendas publicadas de MÉDICOS (portal → "Consulta con Director Médico"):
-  // slots free por franja del médico, con la duración de SU consulta. A
-  // diferencia de las salas, acá se crea SOLO lo que falta: un slot reservado
-  // quedó `busy` y una regeneración jamás debe volver a ofrecerlo.
+  // slots free por franja del médico, con la duración de SU consulta.
   for (const m of MEDICOS.filter((x) => (x.agenda?.length ?? 0) > 0)) {
     const sch = await withRetry(() =>
       medplum.searchOne('Schedule', `identifier=${SYSTEM.recursoCodigo}|SCH_${m.codigo}`),
@@ -145,20 +138,55 @@ async function generarYCargarSlots(medplum: MedplumClient, dias: number): Promis
       horarioDeAgendaMedico(m),
       { desde: new Date(), dias, granularidadMin: dur },
     );
-    let nuevos = 0;
-    for (const desc of deMedico) {
-      const slot = buildSlotMedico(m, desc, `Schedule/${sch.id}`);
-      const existente = await withRetry(() =>
-        medplum.searchOne('Slot', `identifier=${SYSTEM.recursoCodigo}|${encodeURIComponent(`${m.codigo}|${desc.inicio}`)}`),
-      );
-      if (existente) {
-        continue; // ya existe (free u ocupado): no se pisa
-      }
-      await withRetry(() => medplum.createResource(slot));
-      nuevos++;
-    }
-    console.log(`  ✓ Agenda ${m.nombre}: ${nuevos} slots nuevos (${deMedico.length - nuevos} ya existían)`);
+    const rm = await crearSlotsEnLotes(
+      medplum,
+      deMedico.map((desc) => buildSlotMedico(m, desc, `Schedule/${sch.id}`)),
+    );
+    console.log(`  ✓ Agenda ${m.nombre}: ${rm.creados} slots nuevos (${rm.existentes} ya existían)`);
   }
+}
+
+/**
+ * Alta masiva de Slots por LOTES batch con create condicional (`ifNoneExist`
+ * por identifier, resuelto en el server): una request cada N slots en vez de
+ * dos por slot — sin esto, el seed de ~2300 slots vive esperando el rate
+ * limit de Medplum. Nunca pisa un slot existente: uno reservado quedó `busy`
+ * y una regeneración jamás debe volver a ofrecerlo.
+ */
+const SLOTS_POR_LOTE = 100;
+async function crearSlotsEnLotes(
+  medplum: MedplumClient,
+  slots: Slot[],
+): Promise<{ creados: number; existentes: number }> {
+  let creados = 0;
+  let existentes = 0;
+  for (let i = 0; i < slots.length; i += SLOTS_POR_LOTE) {
+    const lote = slots.slice(i, i + SLOTS_POR_LOTE);
+    const bundle = await withRetry(() =>
+      medplum.executeBatch({
+        resourceType: 'Bundle',
+        type: 'batch',
+        entry: lote.map((s) => ({
+          resource: s,
+          request: {
+            method: 'POST' as const,
+            url: 'Slot',
+            // Mismo formato token crudo que buildQuery (probado en prod).
+            ifNoneExist: `identifier=${s.identifier![0]!.system}|${s.identifier![0]!.value}`,
+          },
+        })),
+      }),
+    );
+    for (const e of bundle.entry ?? []) {
+      if (e.response?.status?.startsWith('201')) {
+        creados++;
+      } else {
+        existentes++;
+      }
+    }
+    console.log(`    … slots ${Math.min(i + SLOTS_POR_LOTE, slots.length)}/${slots.length}`);
+  }
+  return { creados, existentes };
 }
 
 function sleep(ms: number): Promise<void> {
