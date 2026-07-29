@@ -26,6 +26,7 @@
     "mp:test": "tsx src/seed/diagnostico-mercadopago.ts",
     "mp:ordenes": "tsx src/seed/mp-ordenes.ts",
     "whatsapp:test": "tsx src/seed/diagnostico-whatsapp.ts",
+    "medicos:consolidar": "tsx src/seed/consolidar-medicos.ts",
     "whatsapp:entregas": "tsx src/seed/diagnostico-entregas.ts",
     "whatsapp:plantilla": "tsx src/seed/diagnostico-plantilla.ts",
     "whatsapp:crear-plantillas": "tsx src/seed/crear-plantillas.ts",
