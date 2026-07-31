@@ -192,13 +192,16 @@ async function main(): Promise<void> {
       estado = ((await ar.json()) as { whatsapp?: { status?: string } }).whatsapp?.status ?? 'unsubmitted';
     }
     if (estado === 'unsubmitted' || estado === 'draft') {
-      // allow_category_change: si Meta considera que la categoría no es UTILITY
-      // (p. ej. por el link de pago), la recategoriza en vez de rechazar con
-      // INCORRECT_CATEGORY (que quema el nombre de la plantilla).
+      // ⚠️ Historia de INCORRECT_CATEGORY (reserva_tentativa v3 y v5): Meta
+      // ELIMINÓ el soporte de allow_category_change, así que si su clasificador
+      // decide que el contenido no es UTILITY, rechaza y quema el nombre. Las
+      // defensas reales son (a) redacción estrictamente transaccional (sin
+      // urgencia promocional) y (b) si insiste, re-enviar esa plantilla como
+      // MARKETING asumiendo sus límites (63049/63050) — decisión de negocio.
       const envio = await fetch(`https://content.twilio.com/v1/Content/${contentSid}/ApprovalRequests/whatsapp`, {
         method: 'POST',
         headers,
-        body: JSON.stringify({ name: p.nombre, category: 'UTILITY', allow_category_change: true }),
+        body: JSON.stringify({ name: p.nombre, category: 'UTILITY' }),
       });
       estado = envio.ok
         ? 'enviada a aprobación de Meta'
