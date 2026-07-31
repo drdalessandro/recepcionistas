@@ -29,85 +29,86 @@ interface DefPlantilla {
   ejemplos: Record<string, string>;
 }
 
-// Decisión 2026-07-29 (Andrés): los mensajes NO empiezan con la marca —
+// Decisión 2026-07-29 (Andrés): los mensajes NO empiezan con la marca y NO
+// llevan emojis (👋/ fuera) —
 // WhatsApp ya muestra "Biowellness | San Isidro" como remitente en cada
 // mensaje y el prefijo era redundante. Nombres versionados: el contenido en
 // Twilio es inmutable y los nombres ya usados/rechazados quedan quemados.
 const PLANTILLAS: DefPlantilla[] = [
   {
-    nombre: 'biowellness_generico_v3',
+    nombre: 'biowellness_generico_v4',
     secret: 'TWILIO_CONTENT_SID_GENERICO',
-    body: 'Hola 👋 {{1}} Cualquier duda, escribinos por acá. 💚',
+    body: 'Hola: {{1}} Cualquier duda, escribinos por acá.',
     ejemplos: { '1': 'Te esperamos mañana a las 16:00 para tu sesión de Cámara Hiperbárica.' },
   },
   {
-    nombre: 'biowellness_mensaje_recepcion_v3',
+    nombre: 'biowellness_mensaje_recepcion_v4',
     secret: 'TWILIO_CONTENT_SID_MENSAJE_RECEPCION',
-    body: 'Hola 👋 {{1}} Podés responder por acá. 💚',
+    body: 'Hola: {{1}} Podés responder por acá.',
     ejemplos: { '1': 'Sí, tu turno de mañana sigue confirmado a las 16:00.' },
   },
   {
-    nombre: 'biowellness_reserva_tentativa_v5',
+    nombre: 'biowellness_reserva_tentativa_v6',
     secret: 'TWILIO_CONTENT_SID_RESERVA_TENTATIVA',
-    body: 'Reservamos tu turno de {{1}} para el {{2}}. Para confirmarlo aboná la seña de {{3}} acá: {{4}} — tenés tiempo hasta las {{5}}, después el lugar se libera. 💚',
+    body: 'Reservamos tu turno de {{1}} para el {{2}}. Para confirmarlo aboná la seña de {{3}} acá: {{4}} — tenés tiempo hasta las {{5}}, después el lugar se libera.',
     ejemplos: {
       '1': 'Cámara Hiperbárica (HBOT) — Monoplaza',
       '2': '31/07 16:00',
       '3': '$119.708',
-      '4': 'https://mpago.la/2ab3Cd4',
+      '4': 'https://www.mercadopago.com.ar/checkout/v1/redirect?pref_id=202607-2ab3cd4',
       '5': '14:30',
     },
   },
   {
-    nombre: 'biowellness_sena_recordatorio_v2',
+    nombre: 'biowellness_sena_recordatorio_v3',
     secret: 'TWILIO_CONTENT_SID_SENA_RECORDATORIO',
-    body: '¡Último aviso! Tu reserva de {{1}} ({{2}}) se libera a las {{3}} si no abonás la seña de {{4}}. Pagala acá: {{5}} y quedás confirmado. 💚',
+    body: '¡Último aviso! Tu reserva de {{1}} ({{2}}) se libera a las {{3}} si no abonás la seña de {{4}}. Pagala acá: {{5}} y quedás confirmado.',
     ejemplos: {
       '1': 'Cámara Hiperbárica (HBOT) — Monoplaza',
       '2': '31/07 16:00',
       '3': '14:30',
       '4': '$119.708',
-      '5': 'https://mpago.la/2ab3Cd4',
+      '5': 'https://www.mercadopago.com.ar/checkout/v1/redirect?pref_id=202607-2ab3cd4',
     },
   },
   {
-    nombre: 'biowellness_plan_link_pago_v2',
+    nombre: 'biowellness_plan_link_pago_v3',
     secret: 'TWILIO_CONTENT_SID_PLAN_LINK_PAGO',
-    body: '¡Reservamos tu {{1}}! Para activarla aboná {{2}} en este enlace: {{3}} — cuando se acredite el pago te confirmamos por acá. 💚',
+    body: '¡Reservamos tu {{1}}! Para activarla aboná {{2}} en este enlace: {{3}} — cuando se acredite el pago te confirmamos por acá.',
     ejemplos: {
       '1': 'Membresía HEALTHSPAN STANDARD INDIVIDUAL',
       '2': '$3.556.850',
-      '3': 'https://mpago.la/2ab3Cd4',
+      '3': 'https://www.mercadopago.com.ar/checkout/v1/redirect?pref_id=202607-2ab3cd4',
     },
   },
   {
-    nombre: 'biowellness_tentativa_vencida_v2',
+    nombre: 'biowellness_tentativa_vencida_v3',
     secret: 'TWILIO_CONTENT_SID_TENTATIVA_VENCIDA',
-    body: 'Tu reserva de {{1}} del {{2}} se liberó porque no llegó la seña a tiempo. Si todavía querés venir, escribinos por acá y buscamos otro horario. 💚',
+    body: 'Tu reserva de {{1}} del {{2}} se liberó porque no llegó la seña a tiempo. Si todavía querés venir, escribinos por acá y buscamos otro horario.',
     ejemplos: { '1': 'Cámara Hiperbárica (HBOT) — Monoplaza', '2': '31/07 16:00' },
   },
   {
-    nombre: 'biowellness_reserva_plan_v3',
+    nombre: 'biowellness_reserva_plan_v4',
     secret: 'TWILIO_CONTENT_SID_RESERVA_PLAN',
-    body: '¡Tu turno de {{1}} quedó confirmado con tu plan para el {{2}}! Te quedan {{3}} sesiones. ¡Te esperamos! 💚',
+    body: '¡Tu turno de {{1}} quedó confirmado con tu plan para el {{2}}! Te quedan {{3}} sesiones. ¡Te esperamos!',
     ejemplos: { '1': 'BIO LONGEVITY', '2': '31/07 16:00', '3': '7' },
   },
   {
-    nombre: 'biowellness_turno_confirmado_v3',
+    nombre: 'biowellness_turno_confirmado_v4',
     secret: 'TWILIO_CONTENT_SID_TURNO_CONFIRMADO',
-    body: '¡Tu turno quedó confirmado! {{1}}. Recibimos la seña de {{2}}. Saldo restante: {{3}}. ¡Te esperamos! 💚',
+    body: '¡Tu turno quedó confirmado! {{1}}. Recibimos la seña de {{2}}. Saldo restante: {{3}}. ¡Te esperamos!',
     ejemplos: { '1': 'Cámara Hiperbárica (HBOT) — Monoplaza', '2': '$119.708', '3': '$119.707 (se abona el día de la sesión)' },
   },
   {
-    nombre: 'biowellness_recordatorio_48h_v3',
+    nombre: 'biowellness_recordatorio_48h_v4',
     secret: 'TWILIO_CONTENT_SID_RECORDATORIO_48H',
-    body: 'Te recordamos tu turno de {{1}} el {{2}}. ¡Te esperamos! 💚',
+    body: 'Te recordamos tu turno de {{1}} el {{2}}. ¡Te esperamos!',
     ejemplos: { '1': 'Cámara Hiperbárica (HBOT) — Monoplaza', '2': '31/07 16:00' },
   },
   {
-    nombre: 'biowellness_recordatorio_2h_v3',
+    nombre: 'biowellness_recordatorio_2h_v4',
     secret: 'TWILIO_CONTENT_SID_RECORDATORIO_2H',
-    body: '¡Tu turno de {{1}} es hoy a las {{2}}! Te esperamos en un rato. 💚',
+    body: '¡Tu turno de {{1}} es hoy a las {{2}}! Te esperamos en un rato.',
     ejemplos: { '1': 'Cámara Hiperbárica (HBOT) — Monoplaza', '2': '16:00' },
   },
 ];

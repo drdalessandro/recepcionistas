@@ -163,7 +163,7 @@ export async function handler(
           variables: [descripcion, montoTxt, pref.url ?? 'coordinándolo con recepción'],
           body: `Biowellness: ¡reservamos tu ${descripcion}! Para activarla aboná ${montoTxt}${
             pref.url ? ` en este enlace: ${pref.url}` : ' (recepción te pasa el medio de pago)'
-          } — cuando se acredite te confirmamos por acá y quedan tus ${sesiones} sesiones disponibles. 💚`,
+          } — cuando se acredite te confirmamos por acá y quedan tus ${sesiones} sesiones disponibles.`,
         });
         return {
           ok: true,
@@ -229,7 +229,7 @@ export async function handler(
         variables: [descripcion, monto, pref.url ?? 'coordinándolo con recepción'],
         body: `Biowellness: ¡reservamos tu ${descripcion}! Para activarla aboná ${monto}${
           pref.url ? ` en este enlace: ${pref.url}` : ' (recepción te pasa el medio de pago)'
-        } — cuando se acredite te confirmamos por acá y quedan tus ${sesiones} sesiones disponibles. 💚`,
+        } — cuando se acredite te confirmamos por acá y quedan tus ${sesiones} sesiones disponibles.`,
       });
       await notificarPortal(medplum, {
         tipo: 'general',
@@ -256,7 +256,7 @@ export async function handler(
       pacienteRef: e.pacienteRef,
       body: `Biowellness: ¡activamos tu ${descripcion}! Tenés ${sesiones} sesiones${
         e.tipo === 'membresia' ? ' este mes' : ` (vencen el ${new Date(periodEnd!).toLocaleDateString('es-AR')})`
-      }. ¡Te esperamos! 💚`,
+      }. ¡Te esperamos!`,
     });
 
     if (invoiceId && claveInvoice) {
@@ -265,7 +265,7 @@ export async function handler(
         pacienteRef: e.pacienteRef,
         about: `Invoice/${invoiceId}`,
         identifier: { system: SYSTEM.communication, value: `portal-pago-${claveInvoice}` },
-        texto: `¡Activamos tu ${descripcion}! Recibimos el pago de $${totalARS.toLocaleString('es-AR')}. Tenés ${sesiones} sesiones disponibles. 💚`,
+        texto: `¡Activamos tu ${descripcion}! Recibimos el pago de $${totalARS.toLocaleString('es-AR')}. Tenés ${sesiones} sesiones disponibles.`,
       });
     }
 

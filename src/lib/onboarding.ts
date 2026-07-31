@@ -61,7 +61,7 @@ export function mensajeInvitacion(nombre: string, link: string): MensajeInvitaci
   return {
     asunto: 'Bienvenido a Biowellness | San Isidro',
     texto:
-      `${saludo} Te damos la bienvenida a Biowellness San Isidro 💚\n\n` +
+      `${saludo} Te damos la bienvenida a Biowellness San Isidro\n\n` +
       `Activá tu acceso al portal para ver tus turnos, tu plan, tus pagos y tus estudios. ` +
       `Entrá a este link y elegí tu contraseña:\n\n${link}\n\n` +
       `Después vas a poder ingresar siempre desde:\n${PORTAL_URL}\n\n` +

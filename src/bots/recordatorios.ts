@@ -51,9 +51,9 @@ const fmtHora = new Intl.DateTimeFormat('es-AR', {
 
 function cuerpo(tipo: TipoRecordatorio, descripcion: string, inicio: Date): string {
   if (tipo === '2h') {
-    return `Biowellness: ¡tu turno de ${descripcion} es hoy a las ${fmtHora.format(inicio)}! Te esperamos en un rato. 💚`;
+    return `Biowellness: ¡tu turno de ${descripcion} es hoy a las ${fmtHora.format(inicio)}! Te esperamos en un rato.`;
   }
-  return `Biowellness: te recordamos tu turno de ${descripcion} el ${fmtFechaHora.format(inicio)}. ¡Te esperamos! 💚`;
+  return `Biowellness: te recordamos tu turno de ${descripcion} el ${fmtFechaHora.format(inicio)}. ¡Te esperamos!`;
 }
 
 export async function handler(

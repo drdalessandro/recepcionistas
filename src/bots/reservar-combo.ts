@@ -283,7 +283,7 @@ export async function handler(medplum: MedplumClient, event: BotEvent<EntradaCom
         template: 'reserva-plan',
         pacienteRef: e.pacienteRef,
         variables: [combo.nombre, fmtHora(inicio), String(consumo.restantes)],
-        body: `Biowellness: ¡tu ${combo.nombre} quedó confirmado con tu membresía para las ${fmtHora(inicio)}! Te quedan ${consumo.restantes} sesiones este mes. ¡Te esperamos! 💚`,
+        body: `Biowellness: ¡tu ${combo.nombre} quedó confirmado con tu membresía para las ${fmtHora(inicio)}! Te quedan ${consumo.restantes} sesiones este mes. ¡Te esperamos!`,
       });
     } else {
       // Seña autoservicio (R-19): la seña del combo se paga con UN link (el
@@ -297,7 +297,7 @@ export async function handler(medplum: MedplumClient, event: BotEvent<EntradaCom
         variables: [combo.nombre, fmtHora(inicio), monto, link?.url ?? 'coordinándolo con recepción', fmtHora(vence)],
         body: `Biowellness: reservamos tu ${combo.nombre} para las ${fmtHora(inicio)}. Para confirmarlo aboná la seña de ${monto}${
           link?.url ? ` acá: ${link.url}` : ' (recepción te pasa el medio de pago)'
-        } — tenés tiempo hasta las ${fmtHora(vence)}, después el lugar se libera. 💚`,
+        } — tenés tiempo hasta las ${fmtHora(vence)}, después el lugar se libera.`,
       });
     }
   }

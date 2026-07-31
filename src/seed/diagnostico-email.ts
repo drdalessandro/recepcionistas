@@ -41,7 +41,7 @@ async function main(): Promise<void> {
   const asunto = `Biowellness · prueba de email (${new Date().toLocaleString('es-AR')})`;
   const cuerpo =
     'Este es un email de prueba del diagnóstico de recepción Biowellness.\n\n' +
-    'Si lo recibiste, la cadena Medplum → SES funciona. 💚';
+    'Si lo recibiste, la cadena Medplum → SES funciona.';
 
   // `from` opcional: por defecto lo decide el server (su supportEmail, p. ej.
   // hola@medplum.com.ar). Con SES_FROM_EMAIL probás un remitente explícito (útil

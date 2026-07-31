@@ -828,7 +828,7 @@ export async function confirmarReserva(
     variables: [appt.description ?? 'tu sesión', `$${senaARS.toLocaleString('es-AR')}`, saldoTexto],
     body: `Biowellness: ¡tu turno quedó confirmado! ${appt.description ?? ''}. Recibimos la seña de $${senaARS.toLocaleString('es-AR')}${
       saldoARS > 0 ? ` (saldo restante: $${saldoARS.toLocaleString('es-AR')}, se abona el día de la sesión)` : ''
-    }. ¡Te esperamos! 💚`,
+    }. ¡Te esperamos!`,
   });
 
   // Campanita del portal: confirmación de la reserva + constancia del pago de la
@@ -840,7 +840,7 @@ export async function confirmarReserva(
     identifier: { system: SYSTEM.communication, value: `portal-reserva-${invoiceKey}` },
     texto: `¡Tu turno quedó confirmado!${appt.description ? ` ${appt.description}.` : ''}${
       appt.start ? ` ${fechaTurnoNotif(appt.start)}.` : ''
-    } Te esperamos en San Isidro. 💚`,
+    } Te esperamos en San Isidro.`,
   });
   await notificarPortal(medplum, {
     tipo: 'pago-recibido',
@@ -1005,7 +1005,7 @@ async function activarPlanPendiente(
       pacienteRef,
       body: `Biowellness: ¡pago acreditado y ${descripcion} activada! Tenés ${sesiones} sesiones${
         tipoCob === 'membresia' ? ' este mes' : ''
-      } disponibles. ¡Te esperamos! 💚`,
+      } disponibles. ¡Te esperamos!`,
     });
   }
   await notificarPortal(medplum, {
@@ -1013,7 +1013,7 @@ async function activarPlanPendiente(
     pacienteRef,
     about: `Invoice/${invoice.id}`,
     identifier: { system: SYSTEM.communication, value: `portal-pago-${clave}` },
-    texto: `¡Activamos ${descripcion}! Recibimos el pago de $${totalARS.toLocaleString('es-AR')}. Tenés ${sesiones} sesiones disponibles. 💚`,
+    texto: `¡Activamos ${descripcion}! Recibimos el pago de $${totalARS.toLocaleString('es-AR')}. Tenés ${sesiones} sesiones disponibles.`,
   });
 }
 
