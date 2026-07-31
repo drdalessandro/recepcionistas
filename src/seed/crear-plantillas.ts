@@ -48,9 +48,13 @@ const PLANTILLAS: DefPlantilla[] = [
     ejemplos: { '1': 'Sí, tu turno de mañana sigue confirmado a las 16:00.' },
   },
   {
-    nombre: 'biowellness_reserva_tentativa_v6',
+    // v7: la v3, v5 Y v6 cayeron con INCORRECT_CATEGORY — el clasificador de
+    // Meta leía "tenés tiempo hasta las X, después el lugar se libera" como
+    // urgencia promocional. Redacción 100% transaccional (notificación de
+    // pago, caso canónico de UTILITY): sin exclamaciones ni presión.
+    nombre: 'biowellness_reserva_tentativa_v7',
     secret: 'TWILIO_CONTENT_SID_RESERVA_TENTATIVA',
-    body: 'Reservamos tu turno de {{1}} para el {{2}}. Para confirmarlo aboná la seña de {{3}} acá: {{4}} — tenés tiempo hasta las {{5}}, después el lugar se libera.',
+    body: 'Tu reserva de {{1}} para el {{2}} está registrada. Para confirmarla, aboná la seña de {{3}} en este enlace: {{4}}. El enlace vence a las {{5}}; si no se abona, la reserva se libera automáticamente.',
     ejemplos: {
       '1': 'Cámara Hiperbárica (HBOT) — Monoplaza',
       '2': '31/07 16:00',
@@ -192,13 +196,16 @@ async function main(): Promise<void> {
       estado = ((await ar.json()) as { whatsapp?: { status?: string } }).whatsapp?.status ?? 'unsubmitted';
     }
     if (estado === 'unsubmitted' || estado === 'draft') {
-      // allow_category_change: si Meta considera que la categoría no es UTILITY
-      // (p. ej. por el link de pago), la recategoriza en vez de rechazar con
-      // INCORRECT_CATEGORY (que quema el nombre de la plantilla).
+      // ⚠️ Historia de INCORRECT_CATEGORY (reserva_tentativa v3 y v5): Meta
+      // ELIMINÓ el soporte de allow_category_change, así que si su clasificador
+      // decide que el contenido no es UTILITY, rechaza y quema el nombre. Las
+      // defensas reales son (a) redacción estrictamente transaccional (sin
+      // urgencia promocional) y (b) si insiste, re-enviar esa plantilla como
+      // MARKETING asumiendo sus límites (63049/63050) — decisión de negocio.
       const envio = await fetch(`https://content.twilio.com/v1/Content/${contentSid}/ApprovalRequests/whatsapp`, {
         method: 'POST',
         headers,
-        body: JSON.stringify({ name: p.nombre, category: 'UTILITY', allow_category_change: true }),
+        body: JSON.stringify({ name: p.nombre, category: 'UTILITY' }),
       });
       estado = envio.ok
         ? 'enviada a aprobación de Meta'
