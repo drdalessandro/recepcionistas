@@ -48,9 +48,13 @@ const PLANTILLAS: DefPlantilla[] = [
     ejemplos: { '1': 'Sí, tu turno de mañana sigue confirmado a las 16:00.' },
   },
   {
-    nombre: 'biowellness_reserva_tentativa_v6',
+    // v7: la v3, v5 Y v6 cayeron con INCORRECT_CATEGORY — el clasificador de
+    // Meta leía "tenés tiempo hasta las X, después el lugar se libera" como
+    // urgencia promocional. Redacción 100% transaccional (notificación de
+    // pago, caso canónico de UTILITY): sin exclamaciones ni presión.
+    nombre: 'biowellness_reserva_tentativa_v7',
     secret: 'TWILIO_CONTENT_SID_RESERVA_TENTATIVA',
-    body: 'Reservamos tu turno de {{1}} para el {{2}}. Para confirmarlo aboná la seña de {{3}} acá: {{4}} — tenés tiempo hasta las {{5}}, después el lugar se libera.',
+    body: 'Tu reserva de {{1}} para el {{2}} está registrada. Para confirmarla, aboná la seña de {{3}} en este enlace: {{4}}. El enlace vence a las {{5}}; si no se abona, la reserva se libera automáticamente.',
     ejemplos: {
       '1': 'Cámara Hiperbárica (HBOT) — Monoplaza',
       '2': '31/07 16:00',
