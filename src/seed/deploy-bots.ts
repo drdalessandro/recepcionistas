@@ -93,21 +93,42 @@ async function main(): Promise<void> {
   const projectId = await resolverProjectId(medplum);
   console.log(`\nConectado a Medplum (project ${projectId}).`);
 
-  // 3) Asegurar + deployar cada bot.
+  // 3) Asegurar + deployar cada bot. Un fallo NO corta la tanda: se reintenta
+  // una vez, se muestra el DETALLE del OperationOutcome (el 'UnknownError'
+  // pelado no dice nada) y se sigue con el resto; al final, el resumen.
   const ids = new Map<string, string>();
   const faltantes: string[] = [];
+  const fallidos: Array<{ nombre: string; error: string }> = [];
   for (const b of BOTS) {
     const id = await asegurarBot(medplum, projectId, b);
     if (!id) {
       faltantes.push(b.name);
       continue;
     }
-    await medplum.post(medplum.fhirUrl('Bot', id, '$deploy'), {
-      code: bundles.get(b.name),
-      filename: basename(b.dist),
-    });
-    console.log(`    ✓ deployado`);
-    ids.set(b.name, id);
+    let ultimoError = '';
+    let deployado = false;
+    for (let intento = 1; intento <= 2 && !deployado; intento++) {
+      try {
+        await medplum.post(medplum.fhirUrl('Bot', id, '$deploy'), {
+          code: bundles.get(b.name),
+          filename: basename(b.dist),
+        });
+        deployado = true;
+      } catch (e) {
+        ultimoError = detalleDeError(e);
+        if (intento === 1) {
+          console.log(`    … $deploy falló (${ultimoError}); reintento en 3s`);
+          await new Promise((r) => setTimeout(r, 3000));
+        }
+      }
+    }
+    if (deployado) {
+      console.log(`    ✓ deployado`);
+      ids.set(b.name, id);
+    } else {
+      console.log(`    ✗ ${b.name}: ${ultimoError}`);
+      fallidos.push({ nombre: b.name, error: ultimoError });
+    }
   }
 
   // 4) Escribir los ids en medplum.config.json.
@@ -123,9 +144,30 @@ async function main(): Promise<void> {
         `   y runtime "${RUNTIME_VERSION}". Después volvé a correr: npm run deploy:bots\n` +
         '   (el bundle + deploy lo hace el script; solo falta la creación inicial).',
     );
+  } else if (fallidos.length > 0) {
+    console.log(`\n⚠️  Deploy INCOMPLETO: ${fallidos.length} bot(s) fallaron el $deploy:`);
+    for (const f of fallidos) {
+      console.log(`   - ${f.nombre}: ${f.error}`);
+    }
+    console.log(
+      '\n   El $deploy corre en el SERVER de Medplum (crea la Lambda en AWS): si el error\n' +
+        '   persiste, mirar los logs del servidor Medplum en la EC2 — causas típicas:\n' +
+        '   límite de almacenamiento de código de Lambda (75 GB de versiones acumuladas),\n' +
+        '   permisos IAM del server, o timeout. Re-correr: npm run deploy:bots (idempotente).',
+    );
+    process.exitCode = 1;
   } else {
     console.log('\nDeploy de bots completado. Ids guardados en medplum.config.json.');
   }
+}
+
+/** Detalle legible de un OperationOutcomeError (issue[].details/diagnostics). */
+function detalleDeError(e: unknown): string {
+  const outcome = (e as { outcome?: { issue?: Array<{ details?: { text?: string }; diagnostics?: string; code?: string }> } })
+    ?.outcome;
+  const issue = outcome?.issue?.[0];
+  const partes = [issue?.code, issue?.details?.text, issue?.diagnostics].filter(Boolean);
+  return partes.length > 0 ? partes.join(' · ') : String((e as Error)?.message ?? e);
 }
 
 /** Devuelve el id del bot: lo busca por nombre; si no existe intenta crearlo. */
