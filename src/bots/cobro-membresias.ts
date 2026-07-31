@@ -124,7 +124,7 @@ export async function handler(
           await enviarWhatsApp(medplum, event.secrets, {
             template: 'membresia-renovada',
             pacienteRef,
-            body: `Biowellness: renovamos tu Membresía ${m.tier} para ${ciclo} ($${totalARS.toLocaleString('es-AR')} con tu tarjeta guardada). Tenés ${m.sesionesMes} sesiones este mes. 💚`,
+            body: `Biowellness: renovamos tu Membresía ${m.tier} para ${ciclo} ($${totalARS.toLocaleString('es-AR')} con tu tarjeta guardada). Tenés ${m.sesionesMes} sesiones este mes.`,
           });
           // Campanita del portal: constancia del pago acreditado (idempotente por clave).
           await notificarPortal(medplum, {
@@ -132,14 +132,14 @@ export async function handler(
             pacienteRef,
             ...(cobro.invoiceId ? { about: `Invoice/${cobro.invoiceId}` } : {}),
             identifier: { system: SYSTEM.communication, value: `portal-pago-plan-${c.id}-${ciclo}` },
-            texto: `Renovamos tu Membresía ${m.tier} para ${ciclo}: $${totalARS.toLocaleString('es-AR')}. Tenés ${m.sesionesMes} sesiones este mes. 💚`,
+            texto: `Renovamos tu Membresía ${m.tier} para ${ciclo}: $${totalARS.toLocaleString('es-AR')}. Tenés ${m.sesionesMes} sesiones este mes.`,
           });
         } else if (resultado === 'rejected') {
           await resolverInvoicePlan(medplum, { clave: cobro.clave, resultado: 'rechazado', detalle: 'Cobro automático con tarjeta guardada.' });
           await enviarWhatsApp(medplum, event.secrets, {
             template: 'membresia-pago-rechazado',
             pacienteRef,
-            body: `Biowellness: no pudimos cobrar tu membresía de ${ciclo} (tarjeta rechazada). Regularizá el pago en recepción para seguir reservando. 💚`,
+            body: `Biowellness: no pudimos cobrar tu membresía de ${ciclo} (tarjeta rechazada). Regularizá el pago en recepción para seguir reservando.`,
           });
         }
         // 'pending' u otro estado no terminal: el webhook lo resuelve.
@@ -154,8 +154,8 @@ export async function handler(
           template: 'membresia-cobro-link',
           pacienteRef,
           body: url
-            ? `Biowellness: se renovó tu Membresía ${m.tier} (${ciclo}). Aboná $${totalARS.toLocaleString('es-AR')} acá: ${url} 💚`
-            : `Biowellness: se renovó tu Membresía ${m.tier} (${ciclo}). Acercate a recepción para abonar $${totalARS.toLocaleString('es-AR')}. 💚`,
+            ? `Biowellness: se renovó tu Membresía ${m.tier} (${ciclo}). Aboná $${totalARS.toLocaleString('es-AR')} acá: ${url}`
+            : `Biowellness: se renovó tu Membresía ${m.tier} (${ciclo}). Acercate a recepción para abonar $${totalARS.toLocaleString('es-AR')}.`,
         });
       } else {
         // Sin MP configurado: queda `issued`; se cobra en recepción (registrar-cobro
@@ -163,7 +163,7 @@ export async function handler(
         await enviarWhatsApp(medplum, event.secrets, {
           template: 'membresia-renovada',
           pacienteRef,
-          body: `Biowellness: renovamos tu Membresía ${m.tier} para ${ciclo}. Aboná $${totalARS.toLocaleString('es-AR')} en tu próxima visita. 💚`,
+          body: `Biowellness: renovamos tu Membresía ${m.tier} para ${ciclo}. Aboná $${totalARS.toLocaleString('es-AR')} en tu próxima visita.`,
         });
       }
     }

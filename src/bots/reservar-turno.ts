@@ -273,7 +273,7 @@ export async function handler(
       pacienteRef: e.pacienteRef,
       // Plantilla: {{1}} servicio · {{2}} fecha/hora · {{3}} sesiones restantes.
       variables: [nombreServicioRecepcion(servicio), fmtFechaHora.format(inicio), String(consumo.restantes)],
-      body: `Biowellness: ¡tu turno de ${nombreServicioRecepcion(servicio)} quedó confirmado con tu plan para el ${fmtFechaHora.format(inicio)}! Te quedan ${consumo.restantes} sesiones. ¡Te esperamos! 💚`,
+      body: `Biowellness: ¡tu turno de ${nombreServicioRecepcion(servicio)} quedó confirmado con tu plan para el ${fmtFechaHora.format(inicio)}! Te quedan ${consumo.restantes} sesiones. ¡Te esperamos!`,
     });
   } else {
     // Seña autoservicio (R-19): monto + link de pago + vencimiento en el mismo
@@ -294,7 +294,7 @@ export async function handler(
       ],
       body: `Biowellness: reservamos tu turno de ${nombreServicioRecepcion(servicio)} para el ${fmtFechaHora.format(inicio)}. Para confirmarlo aboná la seña de ${monto}${
         link?.url ? ` acá: ${link.url}` : ' (recepción te pasa el medio de pago)'
-      } — tenés tiempo hasta las ${fmtHoraCorta.format(vence)}, después el lugar se libera. 💚`,
+      } — tenés tiempo hasta las ${fmtHoraCorta.format(vence)}, después el lugar se libera.`,
     });
   }
 
