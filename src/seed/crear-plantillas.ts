@@ -27,6 +27,13 @@ interface DefPlantilla {
   body: string;
   /** Valores de EJEMPLO por variable (obligatorios para la aprobación de Meta). */
   ejemplos: Record<string, string>;
+  /**
+   * Categoría de WhatsApp. Default UTILITY; MARKETING solo cuando el
+   * clasificador de Meta rechazó UTILITY en versiones sucesivas (la
+   * reserva_tentativa cayó 4 veces: v3/v5/v6/v7). MARKETING implica
+   * conversación más cara y límites por usuario (63049/63050) — aceptado.
+   */
+  categoria?: 'UTILITY' | 'MARKETING';
 }
 
 // Decisión 2026-07-29 (Andrés): los mensajes NO empiezan con la marca y NO
@@ -48,13 +55,16 @@ const PLANTILLAS: DefPlantilla[] = [
     ejemplos: { '1': 'Sí, tu turno de mañana sigue confirmado a las 16:00.' },
   },
   {
-    // v7: la v3, v5 Y v6 cayeron con INCORRECT_CATEGORY — el clasificador de
-    // Meta leía "tenés tiempo hasta las X, después el lugar se libera" como
-    // urgencia promocional. Redacción 100% transaccional (notificación de
-    // pago, caso canónico de UTILITY): sin exclamaciones ni presión.
-    nombre: 'biowellness_reserva_tentativa_v7',
+    // v8 como MARKETING: la v3/v5/v6/v7 cayeron TODAS con INCORRECT_CATEGORY
+    // (la v7 ya era transaccional pura): el clasificador de Meta considera
+    // este contenido marketing y sin allow_category_change no hay apelación
+    // automática. Decisión: aceptar la categoría. ⚠️ Antes de crear esta,
+    // BORRAR en el Console las rechazadas v5/v6/v7 (cuerpo similar =>
+    // riesgo de rechazo por "identical content").
+    nombre: 'biowellness_reserva_tentativa_v8',
     secret: 'TWILIO_CONTENT_SID_RESERVA_TENTATIVA',
-    body: 'Tu reserva de {{1}} para el {{2}} está registrada. Para confirmarla, aboná la seña de {{3}} en este enlace: {{4}}. El enlace vence a las {{5}}; si no se abona, la reserva se libera automáticamente.',
+    categoria: 'MARKETING',
+    body: 'Registramos tu reserva de {{1}} para el {{2}}. Para confirmarla, aboná la seña de {{3}} en este enlace: {{4}}. Si el pago no se acredita antes de las {{5}}, la reserva se libera automáticamente.',
     ejemplos: {
       '1': 'Cámara Hiperbárica (HBOT) — Monoplaza',
       '2': '31/07 16:00',
@@ -205,7 +215,7 @@ async function main(): Promise<void> {
       const envio = await fetch(`https://content.twilio.com/v1/Content/${contentSid}/ApprovalRequests/whatsapp`, {
         method: 'POST',
         headers,
-        body: JSON.stringify({ name: p.nombre, category: 'UTILITY' }),
+        body: JSON.stringify({ name: p.nombre, category: p.categoria ?? 'UTILITY' }),
       });
       estado = envio.ok
         ? 'enviada a aprobación de Meta'
