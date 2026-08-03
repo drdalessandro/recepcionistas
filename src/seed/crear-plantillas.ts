@@ -55,16 +55,15 @@ const PLANTILLAS: DefPlantilla[] = [
     ejemplos: { '1': 'Sí, tu turno de mañana sigue confirmado a las 16:00.' },
   },
   {
-    // v9: el desenlace del ping-pong de INCORRECT_CATEGORY. Historia completa:
-    // v3/v5/v6 (texto con urgencia, UTILITY) → rechazadas: el clasificador las
-    // leía como marketing. v7 (transaccional, UTILITY) → rechazada. v8 (MISMA
-    // línea transaccional, enviada como MARKETING) → rechazada TAMBIÉN: o sea,
-    // para el clasificador esta redacción ES utility. v9 = cuerpo de la v8 con
-    // categoría UTILITY. ⚠️ BORRAR la v8 en el Console antes de crear esta
-    // (cuerpo idéntico => rechazo por "identical content"). Si la v9 también
-    // cae: apelación humana en Meta WhatsApp Manager ("Solicitar revisión") o
-    // partir el mensaje (sacar la cláusula de vencimiento y su variable).
-    nombre: 'biowellness_reserva_tentativa_v9',
+    // FAMILIA NUEVA tras 6 rechazos de 'biowellness_reserva_tentativa_*'
+    // (v3→v9, en UTILITY y en MARKETING): el contenido nunca fue el problema —
+    // sena_recordatorio_v3, con monto + link + deadline + '¡Último aviso!',
+    // fue APROBADA como UTILITY. Meta penaliza plantillas parecidas a
+    // rechazadas previas ('similar body to a rejected template'), y esa
+    // familia quedó envenenada por sus antepasados. Nombre sin linaje +
+    // cuerpo transaccional. ⚠️ Borrar TODAS las reserva_tentativa_* del
+    // Console antes de crear esta.
+    nombre: 'biowellness_sena_pendiente',
     secret: 'TWILIO_CONTENT_SID_RESERVA_TENTATIVA',
     body: 'Registramos tu reserva de {{1}} para el {{2}}. Para confirmarla, aboná la seña de {{3}} en este enlace: {{4}}. Si el pago no se acredita antes de las {{5}}, la reserva se libera automáticamente.',
     ejemplos: {
