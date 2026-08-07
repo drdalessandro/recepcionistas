@@ -15,6 +15,7 @@ import type { Servicio } from '../domain/types.js';
 import { getServicio, nombreServicioRecepcion } from '../config/catalogo.js';
 import type { PerfilReserva } from '../config/reglas.js';
 import { EXT, SYSTEM } from '../fhir/identifiers.js';
+import { clasificacionDeServicio } from '../fhir/appointment.js';
 import { cargarReservasDelDia, consumirSesionDePlan, enviarWhatsApp, extraerCodigos, linkSena, resolverSolicitudTurno, scheduleIdDeRecurso, tieneBloqueoPago, type ConsumoPlan } from './_shared.js';
 import { vencimientoSena } from '../lib/sena.js';
 
@@ -249,6 +250,8 @@ export async function handler(
     resourceType: 'Appointment',
     status: consumo ? 'booked' : 'pending',
     description: nombreServicioRecepcion(servicio),
+    // Qué se HACE, en los campos nativos de FHIR (el Panel Bio cuenta acá).
+    ...clasificacionDeServicio(e.servicioCodigo),
     start: inicio.toISOString(),
     end: fin.toISOString(),
     slot: slotRefs,

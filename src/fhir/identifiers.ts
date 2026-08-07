@@ -88,6 +88,12 @@ export const EXT = {
 /** Sistemas de codificación / identificadores de negocio. */
 export const SYSTEM = {
   servicioCodigo: `${BASE}/CodeSystem/servicio`,
+  /**
+   * Categoría (terapia) del servicio: `Appointment.serviceCategory`. Agrupa los
+   * códigos que son la MISMA exposición (mono/biplaza/multiplaza → `HBOT`). Lo
+   * lee el Panel Bio para el acumulado de sesiones. Ver src/fhir/appointment.ts.
+   */
+  categoriaServicio: `${BASE}/CodeSystem/categoria-servicio`,
   comboCodigo: `${BASE}/CodeSystem/combo`,
   membresiaCodigo: `${BASE}/CodeSystem/membresia`,
   paqueteCodigo: `${BASE}/CodeSystem/paquete`,
