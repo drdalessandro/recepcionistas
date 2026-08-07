@@ -17,6 +17,7 @@ import type { Appointment, Coverage, Patient, Slot } from '@medplum/fhirtypes';
 import { getServicio } from '../config/catalogo.js';
 import { codigoConsulta } from '../config/medicos.js';
 import { EXT, SYSTEM } from '../fhir/identifiers.js';
+import { clasificacionDeServicio } from '../fhir/appointment.js';
 import { META_DEMO, borrarRecursosDemo } from '../bots/_shared.js';
 
 const TZ = '-03:00';
@@ -193,6 +194,7 @@ async function generar(medplum: MedplumClient): Promise<void> {
       meta: META_DEMO,
       status: t.status,
       description: servicio.nombre,
+      ...clasificacionDeServicio(t.servicioCodigo),
       start: inicio.toISOString(),
       end: fin.toISOString(),
       slot: [{ reference: `Slot/${slot.id}` }],

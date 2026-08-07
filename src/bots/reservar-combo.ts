@@ -16,6 +16,7 @@ import { getServicio } from '../config/catalogo.js';
 import { RECURSOS_POR_CODIGO, compartenEquipo, recursosParaCategoria } from '../config/recursos.js';
 import type { PerfilReserva } from '../config/reglas.js';
 import { EXT, SYSTEM } from '../fhir/identifiers.js';
+import { clasificacionDeServicio } from '../fhir/appointment.js';
 import {
   DESFASAJE_RECOVERY_MIN,
   combinar,
@@ -245,6 +246,10 @@ export async function handler(medplum: MedplumClient, event: BotEvent<EntradaCom
       // Con membresía: confirmado (sesión paga). Sin plan: tentativo hasta la seña.
       status: consumo ? 'booked' : 'pending',
       description: `${combo.nombre} · ${item.servicioNombre}`,
+      // El combo es lo que se COBRA (item-codigo); acá va lo que se HACE en
+      // esta sala. Sin esto la pata de HBOT de un combo no sería atribuible a
+      // la terapia y el acumulado del paciente saldría mal.
+      ...clasificacionDeServicio(item.servicioCodigo),
       start: item.inicio.toISOString(),
       end: item.fin.toISOString(),
       slot: [{ reference: `Slot/${slot.id}` }],
