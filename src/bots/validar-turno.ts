@@ -15,6 +15,7 @@ import {
   combinar,
   recomendarHbotPrevio,
   validarContraindicaciones,
+  validarConsentimientoTB,
   validarOrdenHBOT,
   validarPrescripcion,
   validarRecursos,
@@ -39,6 +40,8 @@ export interface EntradaValidacion {
   /** Servicio principal (para prescripción y recomendación HBOT) — R-03. */
   servicioCodigo?: string;
   prescripcionActiva?: boolean;
+  /** TB: consentimiento informado firmado (R-03). */
+  consentimientoFirmado?: boolean;
   huboHbotPrevio?: boolean;
   /** Saldo de membresía — R-10. */
   sesionesUsadas?: number;
@@ -77,6 +80,7 @@ export function validarEntrada(e: EntradaValidacion): ResultadoValidacion {
   if (e.servicioCodigo) {
     const servicio = getServicio(e.servicioCodigo);
     partes.push(validarPrescripcion(servicio, e.prescripcionActiva ?? false));
+    partes.push(validarConsentimientoTB(servicio, e.consentimientoFirmado ?? false));
     partes.push(recomendarHbotPrevio(servicio.categoria, e.huboHbotPrevio ?? false));
     if (e.contraindicacionesActivas?.length) {
       partes.push(

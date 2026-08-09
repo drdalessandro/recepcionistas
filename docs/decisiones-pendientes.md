@@ -37,6 +37,7 @@ Esferoides dado de baja).
 |---|---|---|
 | Tabla de contraindicaciones | Ni v8 ni v9 la incluían; se cargó un borrador estándar HBOT/IHHT (`src/config/contraindicaciones.ts`). **Validada tal cual por el Dr. Conrado López Alonso (Director Médico) el 2026-08-09**; CodeSystem `active`. Una entrada nueva sin validar lo vuelve a `draft`. Cubre HBOT e IHHT: si el DM quiere codificar contraindicaciones de otras terapias (Crio, IV/TB), entran como borrador. | ✅ Resuelto (2026-08-09) |
 | Rol/alcance Dr. López Alonso | Pendiente de reunión. No frena la recepción. | A confirmar |
+| Péptidos nombrados (TB) | Marketing publica péptidos por nombre (Retatrutide, AOD-9604, SLU-PP-332, MOTS-c, Tesamorelina, …: `info.biowellness.ar/terapias-biologicas.html`). El catálogo los vende por GRUPO (`PEPTIDOS_G1` 36 / `G2` 13 / `G3` 5, precios del Manual v9). Si recepción debe verlos por nombre, falta el mapeo nombre→grupo (lista Regenerar / anexo del Manual). Mientras tanto se venden por grupo, con prescripción + consentimiento (R-03). | ⚠️ Pedir mapeo a Andrés |
 | Precio consulta Dr. Conrado (Director) | **PROVISORIO: ARS 150.000** en `src/config/medicos.ts` (`precioProvisorio`). Dalessandro y Dos Santos = ARS 120.000 (confirmados). | ⚠️ Confirmar monto |
 | Split / honorario de consultas | Hoy la consulta se cobra entera (split `BW_100`). Falta definir cómo se reparte el honorario del médico. | A definir |
 

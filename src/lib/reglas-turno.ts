@@ -104,6 +104,27 @@ export function validarPrescripcion(servicio: Servicio, prescripcionActiva: bool
   return resultado([]);
 }
 
+/**
+ * Terapias Biológicas (péptidos, PRP, exosomas…) además de la indicación
+ * requieren CONSENTIMIENTO INFORMADO firmado antes de reservar (Andrés,
+ * 2026-08-09): evidencia científica débil, se venden con mucho cuidado. El
+ * responsable principal es el médico que indica; luego el Director Médico.
+ * El documento firmado se archiva en la historia clínica (lado Panel Bio);
+ * recepción solo declara que existe — nunca ve el contenido.
+ */
+export function validarConsentimientoTB(servicio: Servicio, consentimientoFirmado: boolean): ResultadoValidacion {
+  if (servicio.categoria === 'TERAPIA_BIOLOGICA' && !consentimientoFirmado) {
+    return resultado([
+      {
+        regla: 'R-03',
+        nivel: 'bloqueo',
+        mensaje: `"${servicio.nombre}" requiere consentimiento informado firmado (responsable: el médico que indica; luego el Director Médico).`,
+      },
+    ]);
+  }
+  return resultado([]);
+}
+
 // --------------------------------------------------------------------------
 // R-01 · HBOT siempre primero
 // --------------------------------------------------------------------------

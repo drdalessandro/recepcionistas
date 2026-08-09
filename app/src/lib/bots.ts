@@ -53,6 +53,8 @@ export interface ReservaInput {
   inicio: string;
   ocupantes?: number;
   prescripcionActiva?: boolean;
+  /** TB: consentimiento informado firmado (R-03; el documento vive en la HC). */
+  consentimientoFirmado?: boolean;
   autorizacionMedica?: boolean;
   /** Coverage (paquete) con el que se paga el turno: confirma sin seña. */
   coverageId?: string;

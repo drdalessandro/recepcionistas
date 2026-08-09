@@ -17,6 +17,7 @@ function ctx(over: Partial<ContextoReserva> & { servicioCodigo: string; recursoC
     ocupantes: over.ocupantes,
     contraindicacionesActivas: over.contraindicacionesActivas ?? [],
     prescripcionActiva: over.prescripcionActiva ?? false,
+    consentimientoFirmado: over.consentimientoFirmado ?? false,
     autorizacionMedica: over.autorizacionMedica ?? false,
     reservasExistentes: over.reservasExistentes ?? [],
     perfil: over.perfil,
@@ -91,6 +92,27 @@ describe('validarReserva', () => {
     const r = validarReserva(ctx({ servicioCodigo: 'IV_NAD', recursoCodigo: 'R_SALA_TB', inicio: new Date('2026-06-22T09:00:00-03:00'), prescripcionActiva: true }));
     expect(r.ok).toBe(true);
     expect(r.advertencias.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('TB (péptidos) con prescripción pero SIN consentimiento firmado => bloqueo (R-03)', () => {
+    const r = validarReserva(
+      ctx({ servicioCodigo: 'PEPTIDOS_G1', recursoCodigo: 'R_SALA_TB', inicio: new Date('2026-06-22T09:00:00-03:00'), prescripcionActiva: true }),
+    );
+    expect(r.ok).toBe(false);
+    expect(r.bloqueos.some((b) => b.regla === 'R-03' && b.mensaje.includes('consentimiento'))).toBe(true);
+  });
+
+  it('TB con prescripción + consentimiento firmado => ok', () => {
+    const r = validarReserva(
+      ctx({
+        servicioCodigo: 'PEPTIDOS_G1',
+        recursoCodigo: 'R_SALA_TB',
+        inicio: new Date('2026-06-22T09:00:00-03:00'),
+        prescripcionActiva: true,
+        consentimientoFirmado: true,
+      }),
+    );
+    expect(r.ok).toBe(true);
   });
 
   it('Dos consultas en el consultorio a la misma hora => bloqueo (R-07, un solo consultorio)', () => {

@@ -39,6 +39,7 @@ import {
   validarBloqueoAdministrativo,
   validarContraindicaciones,
   validarMinimoGrupal,
+  validarConsentimientoTB,
   validarPrescripcion,
   validarRecursos,
   validarVentanaReserva,
@@ -58,6 +59,8 @@ export interface EntradaReserva {
   perfil?: PerfilReserva;
   /** IV/TB: prescripción activa (hasta modelar ServiceRequest). */
   prescripcionActiva?: boolean;
+  /** TB: consentimiento informado firmado (el documento vive en la HC, no acá). */
+  consentimientoFirmado?: boolean;
   /** Autorización médica que destraba una contraindicación absoluta (R-02). */
   autorizacionMedica?: boolean;
   /** Coverage (paquete) con el que se paga el turno: consume una sesión y confirma sin seña. */
@@ -83,6 +86,8 @@ export interface ContextoReserva {
   ocupantes?: number;
   contraindicacionesActivas: string[];
   prescripcionActiva: boolean;
+  /** TB: hay consentimiento informado firmado (R-03). */
+  consentimientoFirmado: boolean;
   autorizacionMedica: boolean;
   /** Turnos ya ocupados (de hoy), de todos los recursos, para capacidad/desfasaje. */
   reservasExistentes: ReservaRecurso[];
@@ -106,6 +111,7 @@ export function validarReserva(ctx: ContextoReserva): ResultadoValidacion {
   }
 
   partes.push(validarPrescripcion(ctx.servicio, ctx.prescripcionActiva));
+  partes.push(validarConsentimientoTB(ctx.servicio, ctx.consentimientoFirmado));
   partes.push(recomendarHbotPrevio(ctx.servicio.categoria, false));
   partes.push(
     validarContraindicaciones([ctx.servicio.categoria], ctx.contraindicacionesActivas, {
@@ -162,6 +168,7 @@ export async function handler(
     ocupantes: e.ocupantes,
     contraindicacionesActivas,
     prescripcionActiva: e.prescripcionActiva ?? false,
+    consentimientoFirmado: e.consentimientoFirmado ?? false,
     autorizacionMedica: e.autorizacionMedica ?? false,
     reservasExistentes,
     perfil: e.perfil,
