@@ -39,12 +39,23 @@ async function main(): Promise<void> {
   await medplum.startClientLogin(requireEnv('MEDPLUM_CLIENT_ID'), requireEnv('MEDPLUM_CLIENT_SECRET'));
   console.log(`Conectado a ${process.env.MEDPLUM_BASE_URL}. Probando WhatsApp a: ${to}`);
 
-  const bot = await medplum.searchOne('Bot', 'name=bw-enviar-whatsapp');
-  if (!bot?.id) {
+  const bots = (await medplum.searchResources('Bot', 'name=bw-enviar-whatsapp&_count=10')).filter(
+    (b) => b.name === 'bw-enviar-whatsapp',
+  );
+  if (bots.length === 0) {
     console.error('\n✗ No encontré el bot "bw-enviar-whatsapp". Deployalo: npm run deploy:bots');
     process.exitCode = 1;
     return;
   }
+  if (bots.length > 1) {
+    console.warn(`⚠️  Hay ${bots.length} bots llamados bw-enviar-whatsapp — puede estar corriendo código viejo:`);
+    for (const b of bots) {
+      console.warn(`   - Bot/${b.id} (actualizado ${b.meta?.lastUpdated ?? '?'})`);
+    }
+    console.warn('   Borrá los duplicados en Medplum y re-corré npm run deploy:bots.');
+  }
+  const bot = bots.sort((a, z) => (z.meta?.lastUpdated ?? '').localeCompare(a.meta?.lastUpdated ?? ''))[0]!;
+  console.log(`Ejecutando Bot/${bot.id} (${bot.name})`);
 
   const body = `Biowellness · prueba de WhatsApp (${new Date().toLocaleString('es-AR')}). Si lo recibiste, Twilio funciona.`;
   const comm = (await medplum.executeBot(bot.id, { to, template: 'diagnostico', body })) as Communication;

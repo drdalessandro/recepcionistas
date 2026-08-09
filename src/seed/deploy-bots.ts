@@ -172,7 +172,22 @@ function detalleDeError(e: unknown): string {
 
 /** Devuelve el id del bot: lo busca por nombre; si no existe intenta crearlo. */
 async function asegurarBot(medplum: MedplumClient, projectId: string, b: DefBot): Promise<string | undefined> {
-  const existente = await medplum.searchOne('Bot', `name=${encodeURIComponent(b.name)}`);
+  // TODOS los bots con ese nombre: si hay más de uno, el deploy actualiza uno y
+  // executeBot (que también busca por nombre) puede pegarle al OTRO — el
+  // síntoma es una Lambda corriendo código viejo sin bundlear
+  // ("Cannot find module '/var/fhir/identifiers.js'"). Mismo patrón que los
+  // Practitioners duplicados: se avisa fuerte y se elige el más reciente.
+  const todos = (await medplum.searchResources('Bot', `name=${encodeURIComponent(b.name)}&_count=10`)).filter(
+    (x) => x.name === b.name,
+  );
+  if (todos.length > 1) {
+    console.warn(`  ⚠️  HAY ${todos.length} bots llamados "${b.name}" — executeBot puede usar cualquiera:`);
+    for (const x of todos) {
+      console.warn(`      - Bot/${x.id} (actualizado ${x.meta?.lastUpdated ?? '?'})`);
+    }
+    console.warn('      Borrá los duplicados viejos en Medplum (quedarse con UNO) y re-corré el deploy.');
+  }
+  const existente = todos.sort((a, z) => (z.meta?.lastUpdated ?? '').localeCompare(a.meta?.lastUpdated ?? ''))[0];
   if (existente?.id) {
     console.log(`  = Bot existente: ${b.name} (${existente.id})`);
     return existente.id;
