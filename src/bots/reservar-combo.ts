@@ -295,14 +295,15 @@ export async function handler(medplum: MedplumClient, event: BotEvent<EntradaCom
       // webhook confirma todos los componentes juntos por el identifier de combo).
       const link = primerAppt ? await linkSena(medplum, event.secrets, primerAppt).catch(() => undefined) : undefined;
       const monto = link ? `$${link.senaARS.toLocaleString('es-AR')}` : 'del 50%';
+      // SIN variables a propósito: viaja por la plantilla GENÉRICA aprobada
+      // ({{1}} = cuerpo entero) tras 10 rechazos de Meta a una propia. No
+      // cargar nunca el secret TWILIO_CONTENT_SID_RESERVA_TENTATIVA.
       await enviarWhatsApp(medplum, event.secrets, {
         template: 'reserva-tentativa',
         pacienteRef: e.pacienteRef,
-        // Plantilla v3: {{1}} servicio · {{2}} fecha/hora · {{3}} monto · {{4}} link · {{5}} hora límite.
-        variables: [combo.nombre, fmtHora(inicio), monto, link?.url ?? 'coordinándolo con recepción', fmtHora(vence)],
-        body: `Biowellness: reservamos tu ${combo.nombre} para las ${fmtHora(inicio)}. Para confirmarlo aboná la seña de ${monto}${
+        body: `Reservamos tu ${combo.nombre} para las ${fmtHora(inicio)}. Para confirmarlo aboná la seña de ${monto}${
           link?.url ? ` acá: ${link.url}` : ' (recepción te pasa el medio de pago)'
-        } — tenés tiempo hasta las ${fmtHora(vence)}, después el lugar se libera.`,
+        } — tenés tiempo hasta las ${fmtHora(vence)}; después el lugar se libera.`,
       });
     }
   }
