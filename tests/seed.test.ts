@@ -97,13 +97,22 @@ describe('Seed — Combos (PlanDefinition)', () => {
   });
 });
 
-describe('Seed — Contraindicaciones', () => {
-  it('CodeSystem en estado draft con conceptos y propiedad severidad', () => {
+describe('Seed — Contraindicaciones (validadas por el Director Médico, 2026-08-09)', () => {
+  it('CodeSystem ACTIVO: la tabla está aprobada para uso real', () => {
     const cs = seed.contraindicaciones;
-    expect(cs.status).toBe('draft');
+    expect(cs.status).toBe('active');
+    expect(cs.publisher).toContain('Conrado López Alonso');
     expect((cs.concept?.length ?? 0)).toBeGreaterThan(0);
     const c0 = cs.concept?.[0];
     expect(c0?.property?.some((p) => p.code === 'severidad')).toBe(true);
+  });
+
+  it('Ninguna entrada quedó marcada borrador (una sola volvería el CodeSystem a draft)', () => {
+    const cs = seed.contraindicaciones;
+    const conBorrador = (cs.concept ?? []).filter((c) =>
+      c.property?.some((p) => p.code === 'borrador' && p.valueBoolean === true),
+    );
+    expect(conBorrador).toEqual([]);
   });
 });
 

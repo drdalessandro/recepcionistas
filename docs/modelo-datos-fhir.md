@@ -36,9 +36,11 @@ Naming: **kebab-case**.
 - **Tipo de cambio:** recurso `Basic` con identifier `config-tipo-cambio` y la
   extensión `tc-aplicado`; el bot de cobro lo lee como TC vigente (configurable
   por el admin).
-- **Contraindicaciones:** `CodeSystem` en estado `draft` (borrador pendiente de
-  validación médica). El banner que ve la recepción es una señal binaria
-  verde/rojo; el detalle clínico nunca se expone a recepción.
+- **Contraindicaciones:** `CodeSystem` en estado `active` — tabla validada por el
+  Director Médico (Dr. Conrado López Alonso, 2026-08-09). Una entrada nueva sin
+  validar (`borradorPendienteRevision`) lo vuelve a `draft` hasta su aprobación.
+  El banner que ve la recepción es una señal binaria verde/rojo; el detalle
+  clínico nunca se expone a recepción.
 - **Leads / prospectos:** a definir en el Bloque 0 (modelar como `Task` + perfil
   liviano que se promueve a `Patient` al convertir). Aún no implementado.
 

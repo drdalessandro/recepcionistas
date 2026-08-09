@@ -188,7 +188,7 @@ export interface RecursoFisico {
   nota?: string;
 }
 
-/** Una contraindicación (borrador para validación médica). */
+/** Una contraindicación (tabla validada por el Director Médico, 2026-08-09). */
 export interface Contraindicacion {
   codigo: string;
   /** Categorías de servicio afectadas. */
@@ -197,6 +197,9 @@ export interface Contraindicacion {
   descripcion: string;
   /** absoluta => bloquea sin autorización médica; relativa => advertencia. */
   severidad: 'absoluta' | 'relativa';
-  /** Marca de que necesita validación del Director Médico. */
-  borradorPendienteRevision: boolean;
+  /**
+   * Entrada nueva/modificada aún sin validar por el Director Médico. Mientras
+   * alguna lo tenga, el CodeSystem vuelve a `draft` y el seed avisa.
+   */
+  borradorPendienteRevision?: boolean;
 }
