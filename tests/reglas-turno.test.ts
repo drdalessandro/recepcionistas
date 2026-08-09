@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { getServicio } from '../src/config/catalogo.js';
+import { SERVICIOS, getServicio } from '../src/config/catalogo.js';
 import {
   validarOrdenHBOT,
   recomendarHbotPrevio,
@@ -10,6 +10,7 @@ import {
   evaluarCancelacion,
   validarSaldoMembresia,
   validarContraindicaciones,
+  validarConsentimientoTB,
   validarPrescripcion,
   bannerSeguridad,
   type ReservaRecurso,
@@ -234,5 +235,31 @@ describe('R-03 · Prescripción médica', () => {
   it('Servicio sin prescripción requerida => siempre permite', () => {
     const r = validarPrescripcion(getServicio('HBOT_MONO'), false);
     expect(r.ok).toBe(true);
+  });
+});
+
+describe('R-03 · Consentimiento informado de Terapias Biológicas (Andrés, 2026-08-09)', () => {
+  it('TB sin consentimiento firmado => bloqueo (aunque tenga prescripción)', () => {
+    const r = validarConsentimientoTB(getServicio('PEPTIDOS_G1'), false);
+    expect(r.ok).toBe(false);
+    expect(r.bloqueos[0]?.mensaje).toContain('consentimiento informado');
+    expect(r.bloqueos[0]?.mensaje).toContain('médico que indica');
+  });
+
+  it('TB con consentimiento firmado => permite', () => {
+    const r = validarConsentimientoTB(getServicio('PEPTIDOS_G1'), true);
+    expect(r.ok).toBe(true);
+  });
+
+  it('IV NO exige consentimiento (solo prescripción): la regla es de TB', () => {
+    const r = validarConsentimientoTB(getServicio('IV_NAD'), false);
+    expect(r.ok).toBe(true);
+  });
+
+  it('Toda la categoría TERAPIA_BIOLOGICA queda cubierta por la regla', () => {
+    for (const s of SERVICIOS.filter((x) => x.categoria === 'TERAPIA_BIOLOGICA')) {
+      expect(validarConsentimientoTB(s, false).ok).toBe(false);
+      expect(validarConsentimientoTB(s, true).ok).toBe(true);
+    }
   });
 });

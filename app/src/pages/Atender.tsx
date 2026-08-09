@@ -689,6 +689,7 @@ function PanelReserva({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [prefill]);
   const [prescripcion, setPrescripcion] = useState(false);
+  const [consentimiento, setConsentimiento] = useState(false);
   const [usarPlan, setUsarPlan] = useState(true);
   const [resultado, setResultado] = useState<ResultadoReserva | null>(null);
   const [resultadoCombo, setResultadoCombo] = useState<ResultadoCombo | null>(null);
@@ -743,6 +744,7 @@ function PanelReserva({
           recursoCodigo: recursoCodigo as string,
           inicio,
           prescripcionActiva: prescripcion,
+          consentimientoFirmado: consentimiento,
           coverageId,
           confirmar: true,
         });
@@ -828,6 +830,23 @@ function PanelReserva({
             checked={prescripcion}
             onChange={(e) => setPrescripcion(e.currentTarget.checked)}
           />
+        )}
+
+        {servicio?.categoria === 'TERAPIA_BIOLOGICA' && (
+          <>
+            <Switch
+              label="Consentimiento informado FIRMADO (requerido para Terapias Biológicas)"
+              description="Responsable principal: el médico que indica; luego el Director Médico. El documento firmado se archiva en la historia clínica."
+              checked={consentimiento}
+              onChange={(e) => setConsentimiento(e.currentTarget.checked)}
+            />
+            <Text size="xs" c="dimmed">
+              Estas terapias siempre requieren evaluación e indicación médica previas. Info para el paciente:{' '}
+              <Anchor href="https://info.biowellness.ar/terapias-biologicas.html" target="_blank" size="xs">
+                info.biowellness.ar/terapias-biologicas
+              </Anchor>
+            </Text>
+          </>
         )}
 
         {plan && (
