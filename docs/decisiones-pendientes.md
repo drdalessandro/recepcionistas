@@ -35,7 +35,7 @@ Esferoides dado de baja).
 
 | Tema | Detalle | Estado |
 |---|---|---|
-| Tabla de contraindicaciones | Ni v8 ni v9 la incluyen. Se cargó un **borrador estándar HBOT/IHHT** (`src/config/contraindicaciones.ts`, todas `borradorPendienteRevision`). | ⚠️ Validar con Director Médico |
+| Tabla de contraindicaciones | Ni v8 ni v9 la incluían; se cargó un borrador estándar HBOT/IHHT (`src/config/contraindicaciones.ts`). **Validada tal cual por el Dr. Conrado López Alonso (Director Médico) el 2026-08-09**; CodeSystem `active`. Una entrada nueva sin validar lo vuelve a `draft`. Cubre HBOT e IHHT: si el DM quiere codificar contraindicaciones de otras terapias (Crio, IV/TB), entran como borrador. | ✅ Resuelto (2026-08-09) |
 | Rol/alcance Dr. López Alonso | Pendiente de reunión. No frena la recepción. | A confirmar |
 | Precio consulta Dr. Conrado (Director) | **PROVISORIO: ARS 150.000** en `src/config/medicos.ts` (`precioProvisorio`). Dalessandro y Dos Santos = ARS 120.000 (confirmados). | ⚠️ Confirmar monto |
 | Split / honorario de consultas | Hoy la consulta se cobra entera (split `BW_100`). Falta definir cómo se reparte el honorario del médico. | A definir |

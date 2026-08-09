@@ -74,7 +74,8 @@ está cerrado**: dashboard de saldo, pre-agenda de membresías y recordatorios
 (ver [`docs/app-recepcion.md`](docs/app-recepcion.md) y [`docs/bots.md`](docs/bots.md)).
 
 Twilio y SES ya están **operativos** (Project Secrets cargados y verificados,
-2026-07: los WhatsApp y emails salen de verdad). Lo que queda hoy **no frena el
-desarrollo**: configurar los `cronTiming` de los bots (recordatorios/cobros/demo),
-aprobar la plantilla de WhatsApp para producción y validar los pendientes
-clínicos/catálogo (contraindicaciones, precio del Dr. Conrado).
+2026-07: los WhatsApp y emails salen de verdad). La tabla de contraindicaciones
+está **validada** por el Director Médico (Dr. Conrado López Alonso, 2026-08-09).
+Lo que queda hoy **no frena el desarrollo**: configurar los `cronTiming` de los
+bots (recordatorios/cobros/demo), aprobar la plantilla de WhatsApp para
+producción y confirmar el precio de consulta del Dr. Conrado.

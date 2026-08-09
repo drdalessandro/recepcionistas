@@ -152,15 +152,23 @@ export function buildContraindicacionesCodeSystem(): CodeSystem {
     property: [
       { code: 'severidad', valueString: c.severidad },
       { code: 'aplicaA', valueString: c.aplicaA.join(',') },
-      { code: 'borrador', valueBoolean: c.borradorPendienteRevision },
+      { code: 'borrador', valueBoolean: c.borradorPendienteRevision ?? false },
     ],
   }));
+  // El estado sale de la tabla: si TODA entrada está validada, el CodeSystem es
+  // `active`; una sola entrada nueva sin validar lo vuelve a `draft` (y el seed
+  // avisa). Validación vigente: Dr. Conrado López Alonso, 2026-08-09.
+  const hayBorrador = CONTRAINDICACIONES.some((c) => c.borradorPendienteRevision);
   return {
     resourceType: 'CodeSystem',
     url: SYSTEM.contraindicacion,
     name: 'Contraindicaciones',
-    title: 'Contraindicaciones (BORRADOR — validación médica pendiente)',
-    status: 'draft',
+    title: hayBorrador
+      ? 'Contraindicaciones (BORRADOR — validación médica pendiente)'
+      : 'Contraindicaciones (validadas por el Director Médico)',
+    status: hayBorrador ? 'draft' : 'active',
+    date: '2026-08-09',
+    publisher: 'Biowellness San Isidro — validación: Dr. Conrado López Alonso (Director Médico)',
     content: 'complete',
     property: [
       { code: 'severidad', type: 'string' },
