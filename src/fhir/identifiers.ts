@@ -112,6 +112,13 @@ export const SYSTEM = {
   communication: `${BASE}/Identifier/communication`,
   /** Documento (DNI) del paciente, para deduplicar altas. */
   dni: `${BASE}/Identifier/dni`,
+  /**
+   * Número de Founding Member (R-09): "1".."100". El value ubica la cohorte
+   * (1–50 el 1 a 1 de Andrés, 51–100 la Web founding.html). Es un Identifier
+   * y no solo la extensión tag-fm porque los identifiers SÍ son buscables:
+   * `Patient?identifier=<system>|` trae el padrón completo para contar cupos.
+   */
+  fm: `${BASE}/Identifier/fm`,
   /** Tag de datos de demostración (se autodestruyen a las 48 h). */
   demo: `${BASE}/demo`,
   /** Bloqueos administrativos (R-11: pago rechazado → no se reserva). */

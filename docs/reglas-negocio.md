@@ -30,7 +30,7 @@ implementada y su caso de aceptación (AC) cuando aplica. Fuente de precios: Man
 
 | Regla | Descripción | Implementación |
 |---|---|---|
-| **R-09** | Founding Members: 50 cupos, 20% off lifetime en sueltas y paquetes (no combos/membresías/TB), precio bloqueado en USD, ventana 7 días, alerta a 40 / bloqueo a 50. | `src/config/reglas.ts` (`FM`), `precioSueltoUSD` (flag `fm`) |
+| **R-09** | Founding Members — programa FM-100 en dos cohortes (Andrés, 2026-08-09): números 1–50 el 1 a 1 personal, 51–100 la Web (founding.html). 20% off lifetime en sueltas y paquetes (no combos/membresías/TB), precio bloqueado en USD, ventana 7 días. El cupo AVISA (alerta desde el 40, aviso de cohorte al 51, programa completo al 101) y nunca bloquea. La marca se pone en la ficha (extensión `tag-fm` + identifier `SYSTEM.fm` con el número). | `src/config/reglas.ts` (`FM`), `src/lib/fm.ts`, `src/fhir/founding.ts`, `precioSueltoUSD` (flag `fm`) |
 | **R-11** | Cobro adelantado de membresías días 1-5 (MercadoPago); si falla, alerta + bloqueo de reservas. | `src/config/reglas.ts` (`MEMBRESIA`); bot de cobro recurrente (próximo) |
 | **R-12** | Compromiso mínimo 3 meses; renovación automática; baja avisando 15 días antes; 1 pausa de 30 días/año. | `src/config/reglas.ts` (`MEMBRESIA`) |
 

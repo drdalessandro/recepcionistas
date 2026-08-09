@@ -4,9 +4,18 @@
  * compartan exactamente los mismos valores. Cada constante referencia su regla R-xx.
  */
 
-/** Founding Members (R-09). */
+/**
+ * Founding Members (R-09). Programa FM-100 (Andrés, 2026-08-09): dos cohortes
+ * consecutivas — el 1 a 1 personal (números 1–50) y la Web founding.html
+ * (51–100). El cupo AVISA, nunca bloquea: marcar el 51 o el 101 es una
+ * decisión de Andrés y el sistema la deja pasar con la advertencia a la vista.
+ */
 export const FM = {
-  cupos: 50,
+  /** Cupo 1 a 1 (lista personal de Andrés, boca en boca, Friends & Family). */
+  cupos1a1: 50,
+  /** Programa completo: 1 a 1 + cohorte Web. */
+  cuposTotales: 100,
+  /** Aviso temprano: el cupo 1 a 1 se está agotando. */
   alertaEnCupo: 40,
   /** 20% OFF lifetime en sueltas y paquetes (NO en combos, membresías ni TB). */
   descuento: 0.2,

@@ -131,7 +131,20 @@ export const POLICY_PACIENTE_PORTAL: AccessPolicy = {
   name: NOMBRE_POLICY_PACIENTE,
   resource: [
     // Compartimento propio — autogestión (lectura/escritura).
-    { resourceType: 'Patient', criteria: 'Patient?_id=%patient.id' },
+    // readonlyFields: el paciente edita sus datos de contacto, pero NO los
+    // campos con impacto en dinero o identidad — sin esto podría automarcarse
+    // Founding Member (tag-fm → 20% off + ventana de 7 días), cambiarse el
+    // tipo de cliente o tocar su DNI / número de fundador (identifier).
+    {
+      resourceType: 'Patient',
+      criteria: 'Patient?_id=%patient.id',
+      readonlyFields: [
+        'Patient.identifier',
+        `Patient.extension('${EXT.tagFm}')`,
+        `Patient.extension('${EXT.tipoCliente}')`,
+        `Patient.extension('${EXT.tcBloqueoFm}')`,
+      ],
+    },
     { resourceType: 'Observation', criteria: 'Observation?subject=%patient' },
     { resourceType: 'QuestionnaireResponse', criteria: 'QuestionnaireResponse?subject=%patient' },
     { resourceType: 'DocumentReference', criteria: 'DocumentReference?subject=%patient' },
