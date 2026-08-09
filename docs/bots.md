@@ -2,9 +2,16 @@
 
 > ⚠️ **Deploy SOLO con `npm run deploy:bots`.** El editor de bots del admin de
 > Medplum (botón Deploy) y el CLI `medplum bot deploy` NO bundlean los imports
-> relativos (`./_shared.js`): el bot deployado así rompe en runtime con
-> `Cannot find module '/var/task/_shared.js' imported from /var/task/user.mjs`.
-> Si aparece ese error, re-deployar con `npm run deploy:bots` lo arregla.
+> relativos (`./_shared.js`, `../fhir/...`): el bot deployado así rompe en
+> runtime con `Cannot find module '/var/... .js' imported from /var/task/user.mjs`.
+> Si aparece ese error, re-deployar con `npm run deploy:bots` suele arreglarlo.
+> **Si el error persiste aunque el deploy diga ✓** (pasó el 2026-08-09 con
+> `bw-enviar-whatsapp`, envenenado alguna vez desde el editor web): **borrar el
+> recurso Bot en Medplum y re-correr `npm run deploy:bots`** — lo recrea limpio
+> con otro id (la app resuelve por nombre, no pasa nada)… **EXCEPTO**
+> `bw-whatsapp-entrante` y `bw-webhook-mercadopago`: sus ids están en los
+> bloques `/webhooks/*` de nginx — si se recrean, actualizar el id ahí y
+> recargar nginx. En el editor web: mirar sí, Save/Deploy jamás.
 
 
 Los Bots concentran la inteligencia: el front solo orquesta. Son funciones
