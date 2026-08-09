@@ -54,26 +54,19 @@ const PLANTILLAS: DefPlantilla[] = [
     body: 'Hola: {{1}} Podés responder por acá.',
     ejemplos: { '1': 'Sí, tu turno de mañana sigue confirmado a las 16:00.' },
   },
-  {
-    // FAMILIA NUEVA tras 6 rechazos de 'biowellness_reserva_tentativa_*'
-    // (v3→v9, en UTILITY y en MARKETING): el contenido nunca fue el problema —
-    // sena_recordatorio_v3, con monto + link + deadline + '¡Último aviso!',
-    // fue APROBADA como UTILITY. Meta penaliza plantillas parecidas a
-    // rechazadas previas ('similar body to a rejected template'), y esa
-    // familia quedó envenenada por sus antepasados. Nombre sin linaje +
-    // cuerpo transaccional. ⚠️ Borrar TODAS las reserva_tentativa_* del
-    // Console antes de crear esta.
-    nombre: 'biowellness_sena_pendiente',
-    secret: 'TWILIO_CONTENT_SID_RESERVA_TENTATIVA',
-    body: 'Registramos tu reserva de {{1}} para el {{2}}. Para confirmarla, aboná la seña de {{3}} en este enlace: {{4}}. Si el pago no se acredita antes de las {{5}}, la reserva se libera automáticamente.',
-    ejemplos: {
-      '1': 'Cámara Hiperbárica (HBOT) — Monoplaza',
-      '2': '31/07 16:00',
-      '3': '$119.708',
-      '4': 'https://www.mercadopago.com.ar/checkout/v1/redirect?pref_id=202607-2ab3cd4',
-      '5': '14:30',
-    },
-  },
+  // ── reserva-tentativa: SIN plantilla propia, A PROPÓSITO (2026-08-09) ──
+  // Historia: 10 rechazos de Meta — reserva_tentativa_* v3→v9 (UTILITY y
+  // MARKETING) y después biowellness_sena_pendiente, renombrada y todo. El
+  // contenido nunca fue el problema (sena_recordatorio_v3, con monto + link +
+  // deadline, fue APROBADA): Meta penaliza cuerpos parecidos a rechazados
+  // previos Y a aprobados existentes, y este mensaje quedó atrapado entre las
+  // dos reglas. Decisión: NO se le pide más plantilla a Meta. El mensaje viaja
+  // por la GENÉRICA aprobada (biowellness_generico_v4, {{1}} = cuerpo entero),
+  // que es business-initiated y llega fuera de la ventana de 24 h.
+  // ⚠️ Para que funcione: (1) borrar biowellness_sena_pendiente del Twilio
+  // Console; (2) BORRAR el secret TWILIO_CONTENT_SID_RESERVA_TENTATIVA de
+  // Medplum si está cargado — un SID rechazado ahí rompe el envío (los bots
+  // caen a la genérica solo cuando ese secret NO existe).
   {
     nombre: 'biowellness_sena_recordatorio_v3',
     secret: 'TWILIO_CONTENT_SID_SENA_RECORDATORIO',

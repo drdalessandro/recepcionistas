@@ -288,23 +288,18 @@ export async function handler(
   } else {
     // Seña autoservicio (R-19): monto + link de pago + vencimiento en el mismo
     // mensaje. Si MP no está configurado, el mensaje sale igual sin link.
+    // SIN variables a propósito: este mensaje viaja por la plantilla GENÉRICA
+    // aprobada ({{1}} = cuerpo entero) tras 10 rechazos de Meta a una propia.
+    // No cargar nunca el secret TWILIO_CONTENT_SID_RESERVA_TENTATIVA
+    // (ver src/seed/crear-plantillas.ts).
     const link = await linkSena(medplum, event.secrets, appointment).catch(() => undefined);
     const monto = link ? `$${link.senaARS.toLocaleString('es-AR')}` : 'del 50%';
     await enviarWhatsApp(medplum, event.secrets, {
       template: 'reserva-tentativa',
       pacienteRef: e.pacienteRef,
-      // Plantilla v3: {{1}} servicio · {{2}} fecha/hora · {{3}} monto seña ·
-      // {{4}} link de pago · {{5}} hora límite (docs/whatsapp-plantillas.md).
-      variables: [
-        nombreServicioRecepcion(servicio),
-        fmtFechaHora.format(inicio),
-        monto,
-        link?.url ?? 'coordinándolo con recepción',
-        fmtHoraCorta.format(vence),
-      ],
-      body: `Biowellness: reservamos tu turno de ${nombreServicioRecepcion(servicio)} para el ${fmtFechaHora.format(inicio)}. Para confirmarlo aboná la seña de ${monto}${
+      body: `Reservamos tu turno de ${nombreServicioRecepcion(servicio)} para el ${fmtFechaHora.format(inicio)}. Para confirmarlo aboná la seña de ${monto}${
         link?.url ? ` acá: ${link.url}` : ' (recepción te pasa el medio de pago)'
-      } — tenés tiempo hasta las ${fmtHoraCorta.format(vence)}, después el lugar se libera.`,
+      } — tenés tiempo hasta las ${fmtHoraCorta.format(vence)}; después el lugar se libera.`,
     });
   }
 
