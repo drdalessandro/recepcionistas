@@ -131,6 +131,19 @@ describe('Seed — AccessPolicy Paciente — Portal (los dos usos de Coverage)',
     expect(bot.readonly).toBe(true);
     expect(bot.criteria).toBe('Bot?name=bw-solicitar-turno,bw-disponibilidad');
   });
+
+  it('El paciente NO puede automarcarse Founding ni tocar su identidad (readonlyFields)', () => {
+    // Sin esto, un paciente con su token podría escribirse tag-fm en su propio
+    // Patient y darse el 20% off + ventana de 7 días (R-09), o cambiarse el DNI.
+    const portal = seed.accessPolicies.find((p) => p.name === 'Paciente — Portal')!;
+    const propio = (portal.resource ?? []).find(
+      (r) => r.resourceType === 'Patient' && r.criteria === 'Patient?_id=%patient.id',
+    )!;
+    expect(propio.readonlyFields).toContain('Patient.identifier');
+    expect(propio.readonlyFields?.some((f) => f.includes('tag-fm'))).toBe(true);
+    expect(propio.readonlyFields?.some((f) => f.includes('tipo-cliente'))).toBe(true);
+    expect(propio.readonlyFields?.some((f) => f.includes('tc-bloqueo-fm'))).toBe(true);
+  });
 });
 
 describe('Seed — AccessPolicy de recepción (privacidad por diseño)', () => {

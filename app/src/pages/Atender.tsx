@@ -47,6 +47,8 @@ import { SYSTEM } from '@bw/fhir/identifiers';
 import { PreAgendaModal } from '../components/PreAgendaModal';
 import { InvitarPortal } from '../components/InvitarPortal';
 import { NuevoPacienteModal } from '../components/NuevoPacienteModal';
+import { FoundingMember } from '../components/FoundingMember';
+import { esFm } from '@bw/fhir/founding';
 import { SERVICIOS, nombreServicioRecepcion } from '@bw/config/catalogo';
 import { COMBOS } from '@bw/config/combos';
 import { MEMBRESIAS } from '@bw/config/membresias';
@@ -200,6 +202,12 @@ function FichaPaciente({
 }): JSX.Element {
   const [planes, setPlanes] = useState<PlanPaciente[]>([]);
   const [versionPagos, setVersionPagos] = useState(0);
+  // Copia viva del Patient: marcar/quitar Founding lo actualiza sin re-buscar.
+  const [pacienteActual, setPacienteActual] = useState(paciente);
+
+  useEffect(() => {
+    setPacienteActual(paciente);
+  }, [paciente]);
 
   const recargarPlanes = useCallback(async (): Promise<void> => {
     try {
@@ -216,7 +224,10 @@ function FichaPaciente({
   return (
     <Stack gap="md">
       <Group justify="space-between">
-        <Title order={3}>{getDisplayString(paciente)}</Title>
+        <Group gap="sm">
+          <Title order={3}>{getDisplayString(pacienteActual)}</Title>
+          <FoundingMember paciente={pacienteActual} onCambio={setPacienteActual} />
+        </Group>
         <Button variant="subtle" onClick={onVolver}>
           ← Volver a la búsqueda
         </Button>
@@ -224,7 +235,7 @@ function FichaPaciente({
       <BannerSeguridad pacienteId={paciente.id!} version={versionPagos} />
       <PagosPendientes paciente={paciente} version={versionPagos} onCobrado={() => setVersionPagos((v) => v + 1)} />
       <InvitarPortal paciente={paciente} />
-      <PanelPlanes paciente={paciente} planes={planes} onCambio={recargarPlanes} />
+      <PanelPlanes paciente={paciente} planes={planes} onCambio={recargarPlanes} esFm={esFm(pacienteActual)} />
       <PanelReserva
         paciente={paciente}
         planes={planes}
@@ -242,14 +253,23 @@ function PanelPlanes({
   paciente,
   planes,
   onCambio,
+  esFm,
 }: {
   paciente: Patient;
   planes: PlanPaciente[];
   onCambio: () => Promise<void>;
+  /** Marca Founding de la ficha: precarga el 20% en paquetes (R-09). */
+  esFm: boolean;
 }): JSX.Element {
   const [tipo, setTipo] = useState<'membresia' | 'paquete'>('membresia');
   const [planCodigo, setPlanCodigo] = useState<string | null>(null);
-  const [fm, setFm] = useState(false);
+  const [fm, setFm] = useState(esFm);
+
+  // El descuento sale de la FICHA, no de la memoria de la recepcionista: si la
+  // marca cambia (o se abre otro paciente), el switch se realinea solo.
+  useEffect(() => {
+    setFm(esFm);
+  }, [esFm, paciente.id]);
   const [medioPago, setMedioPago] = useState<string>('efectivo');
   const [asignando, setAsignando] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -383,7 +403,17 @@ function PanelPlanes({
       </Group>
 
       {tipo === 'paquete' && (
-        <Switch mt="sm" label="Founding Member (20% OFF)" checked={fm} onChange={(e) => setFm(e.currentTarget.checked)} />
+        <Switch
+          mt="sm"
+          label="Founding Member (20% OFF)"
+          description={
+            esFm
+              ? 'Precargado de la ficha: el paciente es Founding.'
+              : 'El paciente NO está marcado Founding en la ficha. Si corresponde, marcalo arriba en vez de prender esto a mano.'
+          }
+          checked={fm}
+          onChange={(e) => setFm(e.currentTarget.checked)}
+        />
       )}
 
       <Group mt="md">
