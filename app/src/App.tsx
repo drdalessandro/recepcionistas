@@ -9,6 +9,7 @@ import { Mensajes } from './pages/Mensajes';
 import { PlanesSesiones } from './pages/PlanesSesiones';
 import { Atender, type ReservaPrefill } from './pages/Atender';
 import { Reportes } from './pages/Reportes';
+import { Caja } from './pages/Caja';
 
 export function App(): JSX.Element {
   const profile = useMedplumProfile();
@@ -45,6 +46,7 @@ export function App(): JSX.Element {
         />
       )}
       {vista === 'reportes' && <Reportes />}
+      {vista === 'caja' && <Caja />}
     </Shell>
   );
 }

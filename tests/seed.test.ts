@@ -166,6 +166,14 @@ describe('Seed — AccessPolicy de recepción (privacidad por diseño)', () => {
     expect(tipos).toContain('Appointment');
     expect(tipos).toContain('Invoice');
   });
+
+  it('Caja chica: Basic SOLO con el code de caja (el config del TC no se toca del mostrador)', () => {
+    const recep = seed.accessPolicies.find((p) => p.name === 'Recepción — Operativo')!;
+    const basicos = (recep.resource ?? []).filter((r) => r.resourceType === 'Basic');
+    expect(basicos).toHaveLength(1);
+    expect(basicos[0]?.criteria).toBe('Basic?code=https://biowellness.ar/fhir/CodeSystem/caja|');
+    expect(basicos[0]?.readonly).toBeUndefined();
+  });
 });
 
 describe('Seed — agenda publicada del Director Médico (miércoles 17-20)', () => {

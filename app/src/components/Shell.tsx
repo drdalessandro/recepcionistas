@@ -11,12 +11,12 @@ import {
   useMantineColorScheme,
   useComputedColorScheme,
 } from '@mantine/core';
-import { IconCalendarEvent, IconUserHeart, IconChartBar, IconLicense, IconLogout, IconSun, IconMoon, IconInbox, IconMessages, IconUsersGroup } from '@tabler/icons-react';
+import { IconCalendarEvent, IconUserHeart, IconChartBar, IconCashBanknote, IconLicense, IconLogout, IconSun, IconMoon, IconInbox, IconMessages, IconUsersGroup } from '@tabler/icons-react';
 import { useMedplum, useMedplumProfile } from '@medplum/react';
 import { getDisplayString } from '@medplum/core';
 import { CampanitaNovedades } from './CampanitaNovedades';
 
-export type Vista = 'agenda' | 'solicitudes' | 'duplicados' | 'mensajes' | 'planes' | 'atender' | 'reportes';
+export type Vista = 'agenda' | 'solicitudes' | 'duplicados' | 'mensajes' | 'planes' | 'atender' | 'reportes' | 'caja';
 
 interface ShellProps {
   vista: Vista;
@@ -62,6 +62,7 @@ export function Shell({ vista, onVista, children }: ShellProps): JSX.Element {
               { value: 'planes', label: segLabel(<IconLicense size={15} />, 'Planes') },
               { value: 'duplicados', label: segLabel(<IconUsersGroup size={15} />, 'Duplicados') },
               { value: 'reportes', label: segLabel(<IconChartBar size={15} />, 'Reportes') },
+              { value: 'caja', label: segLabel(<IconCashBanknote size={15} />, 'Caja') },
             ]}
           />
 
