@@ -53,7 +53,7 @@ git pull && npm run build:app     # nginx no se toca: sirve el dist nuevo al ins
 | **Planes y sesiones** | `PlanesSesiones` | Dashboard de saldo de planes (ver abajo). |
 | **Atender paciente** | `Atender` | Busca al paciente y abre su ficha: banner de seguridad, planes (asignar / **pre-agendar**), reserva de turno/combo y cobro. |
 | **Reportes** | `Reportes` | Indicadores de gestión. |
-| **Caja** | `Caja` | Caja chica: registrar gastos (lista cerrada de categorías + tope con autorización), reposiciones y ajustes, y **cerrar caja** (arqueo). El saldo esperado se DERIVA (contado del último arqueo + Invoices en efectivo − egresos): los ingresos nunca se re-registran. Diferencia de arqueo ≠ 0 → alerta urgente a Administración (Task). Movimientos = `Basic` (code `CodeSystem/caja`), arqueos = `PaymentReconciliation`; parámetros provisorios en `src/config/caja.ts`. |
+| **Caja** | `Caja` | Caja chica: registrar gastos (lista cerrada de categorías + tope con autorización), reposiciones y ajustes, y **cerrar caja** (arqueo). El saldo esperado se DERIVA (contado del último arqueo + Invoices en efectivo − egresos): los ingresos nunca se re-registran. Diferencia de arqueo ≠ 0 → alerta urgente a Administración (Task). Movimientos = `Basic` (code `CodeSystem/caja`), arqueos = `PaymentReconciliation`; parámetros provisorios en `src/config/caja.ts`. Contrato para Administración: [`handoff-caja-administracion.md`](handoff-caja-administracion.md). |
 
 El botón **"Atender"** del dashboard abre `Atender` con ese paciente ya cargado
 (`pacienteInicialId`).
