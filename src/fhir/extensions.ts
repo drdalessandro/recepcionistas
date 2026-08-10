@@ -59,6 +59,12 @@ const SPECS: SpecExtension[] = [
   // Communication
   { url: EXT.canal, nombre: 'canal', contexto: ['Communication'], tipoValor: 'code', descripcion: 'Canal de la comunicación (whatsapp/email).' },
   { url: EXT.templateUsado, nombre: 'template-usado', contexto: ['Communication'], tipoValor: 'string', descripcion: 'Template usado para el mensaje.' },
+  // Caja chica (Basic movimiento / PaymentReconciliation arqueo)
+  { url: EXT.cajaMontoArs, nombre: 'caja-monto-ars', contexto: ['Basic'], tipoValor: 'decimal', descripcion: 'Monto del movimiento de caja en ARS.' },
+  { url: EXT.cajaCategoria, nombre: 'caja-categoria', contexto: ['Basic'], tipoValor: 'code', descripcion: 'Categoría del gasto (lista cerrada CATEGORIAS_GASTO).' },
+  { url: EXT.cajaAutorizado, nombre: 'caja-autorizado', contexto: ['Basic'], tipoValor: 'boolean', descripcion: 'Gasto sobre el tope autorizado por Administración.' },
+  { url: EXT.cajaEsperado, nombre: 'caja-esperado', contexto: ['PaymentReconciliation'], tipoValor: 'decimal', descripcion: 'Arqueo: saldo esperado en ARS.' },
+  { url: EXT.cajaDiferencia, nombre: 'caja-diferencia', contexto: ['PaymentReconciliation'], tipoValor: 'decimal', descripcion: 'Arqueo: diferencia contado − esperado en ARS.' },
 ];
 
 function buildStructureDefinition(spec: SpecExtension): StructureDefinition {

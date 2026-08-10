@@ -8,7 +8,7 @@
  * (Flag), nunca el detalle clínico.
  */
 import type { AccessPolicy } from '@medplum/fhirtypes';
-import { EXT } from './identifiers.js';
+import { EXT, SYSTEM } from './identifiers.js';
 
 /** Recepcionista — acceso Operativo: agenda, check-in/out, pagos, comunicación, CRM. */
 export const POLICY_RECEPCIONISTA: AccessPolicy = {
@@ -26,6 +26,10 @@ export const POLICY_RECEPCIONISTA: AccessPolicy = {
     { resourceType: 'ChargeItem' },
     { resourceType: 'PaymentReconciliation' },
     { resourceType: 'Account' },
+    // Caja chica: movimientos (egreso/reposición/ajuste) como Basic, SOLO con
+    // el code de caja — el config del TC también es Basic y desde el mostrador
+    // no se toca. El arqueo va en PaymentReconciliation (ya listado arriba).
+    { resourceType: 'Basic', criteria: `Basic?code=${SYSTEM.caja}|` },
     // Membresía / sesiones del mes (sólo lectura)
     { resourceType: 'Coverage', readonly: true },
     { resourceType: 'Contract', readonly: true },

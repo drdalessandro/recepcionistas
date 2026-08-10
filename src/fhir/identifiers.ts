@@ -83,6 +83,19 @@ export const EXT = {
   // Onboarding / invitación al portal
   /** Canal elegido para invitar al paciente al portal (whatsapp / email / qr). */
   canalInvitacion: `${BASE}/StructureDefinition/canal-invitacion`,
+  // Caja chica (Basic movimiento / PaymentReconciliation arqueo)
+  /** Monto del movimiento en ARS (valueDecimal, siempre positivo). */
+  cajaMontoArs: `${BASE}/StructureDefinition/caja-monto-ars`,
+  /** Categoría del gasto (valueCode de CATEGORIAS_GASTO). */
+  cajaCategoria: `${BASE}/StructureDefinition/caja-categoria`,
+  /** Foto/PDF del comprobante (valueAttachment → Binary). */
+  cajaComprobante: `${BASE}/StructureDefinition/caja-comprobante`,
+  /** Gasto sobre el tope: marcado como autorizado por Administración (valueBoolean). */
+  cajaAutorizado: `${BASE}/StructureDefinition/caja-autorizado`,
+  /** Arqueo: saldo esperado en ARS (valueDecimal). */
+  cajaEsperado: `${BASE}/StructureDefinition/caja-esperado`,
+  /** Arqueo: diferencia contado − esperado en ARS (valueDecimal). */
+  cajaDiferencia: `${BASE}/StructureDefinition/caja-diferencia`,
 } as const;
 
 /** Sistemas de codificación / identificadores de negocio. */
@@ -124,6 +137,14 @@ export const SYSTEM = {
   /** Bloqueos administrativos (R-11: pago rechazado → no se reserva). */
   bloqueo: `${BASE}/CodeSystem/bloqueo`,
   config: `${BASE}/Identifier/config`,
+  /**
+   * Caja chica de recepción: código de los movimientos (`Basic.code`:
+   * egreso/reposicion/ajuste) e identifier de los arqueos
+   * (`PaymentReconciliation.identifier`: arqueo-YYYY-MM-DD…). La AccessPolicy
+   * de recepción da escritura de Basic SOLO con este code (el config del TC
+   * también es Basic y no debe ser tocable desde el mostrador).
+   */
+  caja: `${BASE}/CodeSystem/caja`,
   /** Tipo de Task (p. ej. solicitud de turno desde el portal). */
   taskTipo: `${BASE}/CodeSystem/task-tipo`,
   /** Identifier de Task (para deduplicar alertas automáticas a Recepción). */
