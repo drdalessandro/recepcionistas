@@ -107,12 +107,12 @@ en `description`. Si quieren enterarse en el momento, una `Subscription` sobre
 - Un arqueo cerrado no se edita: correcciones = movimiento `ajuste`, que deja
   rastro propio.
 
-## 5. Parámetros PROVISORIOS — Andrés tiene que confirmar 4 números
+## 5. Parámetros — ✅ CONFIRMADOS por Andrés (2026-08-10, sin cambios)
 
 Viven en un solo archivo de este repo
 ([`src/config/caja.ts`](../src/config/caja.ts)); cambiarlos no toca nada más:
 
-| Parámetro | Valor provisorio |
+| Parámetro | Valor confirmado |
 | --- | --- |
 | Fondo fijo de la caja | **$200.000** |
 | Tope por gasto sin autorización previa | **$25.000** |
@@ -121,13 +121,18 @@ Viven en un solo archivo de este repo
 
 ## 6. Resumen para su backlog
 
-1. **Leer**: las dos queries de §1 y §2 alcanzan para un tablero de caja
+> Estado 2026-08-10 (respuesta de Administración): tablero de caja **leyendo
+> en producción** (Día a día) y alerta de diferencia **activa en pantalla**.
+> La `Subscription` en tiempo real (punto 2) queda para cuando definan
+> endpoint. Los 4 valores de §5 fueron confirmados sin cambios.
+
+1. ✅ **Leer**: las dos queries de §1 y §2 alcanzan para un tablero de caja
    (saldo, egresos por rubro, historial de arqueos y diferencias).
-2. **Alertar**: `Subscription` sobre el `Task` de §3 si quieren la diferencia
-   en tiempo real.
+2. ⏳ **Alertar**: `Subscription` sobre el `Task` de §3 si quieren la
+   diferencia en tiempo real (hoy la ven en pantalla; falta definir endpoint).
 3. **No hacer**: no re-registren ingresos en efectivo como movimientos de
    caja — ya están en los `Invoice` que consumen hoy; duplicarían.
 4. **Si escriben** (p. ej. registrar una reposición desde su panel): usen el
    mismo shape de §1 (`Basic` + code `reposicion` + `caja-monto-ars`); la
    vista de recepción lo levanta sin cambios.
-5. **Confirmar** los 4 valores de §5 y avisarnos: es un edit de un archivo.
+5. ✅ **Confirmar** los 4 valores de §5 — hecho (2026-08-10, sin cambios).

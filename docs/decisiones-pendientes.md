@@ -30,7 +30,7 @@ Esferoides dado de baja).
 | Prioridad de reserva Pareja | v9: "Miembros PAREJA tienen prioridad de reserva en Membresías Prime y Healthspan". Es cualitativo (sin ventana ni número). ¿Cómo se operativiza? (¿más días de anticipación? ¿prioridad en lista de espera?) | ⚠️ Preguntar a Andrés |
 | FM en masajes/osteopatía | ¿El 20% FM aplica a masajes/osteopatía sueltos? Hoy `fmAplica = false` para ellos. | A confirmar |
 | Insumos Regenerar (cascada TB) | La cascada de IV/TB (R-08) necesita el costo de insumo por terapia (lista Regenerar) para el neto real de BW. Hoy se pasa como parámetro. | A confirmar |
-| Parámetros de caja chica | Diseño aprobado (opción 2, 2026-08-09) e implementado (vista **Caja**). PROVISORIOS en `src/config/caja.ts`: fondo fijo **$200.000**, tope por gasto sin autorización **$25.000**, arqueo **diario**, reposición registrable por recepción (queda auditada por `meta.author`). Confirmar los 4 valores con Andrés; se cambian en un solo archivo. | ⚠️ Confirmar montos |
+| Parámetros de caja chica | Diseño aprobado (opción 2, 2026-08-09) e implementado (vista **Caja**). **Confirmados por Andrés vía Administración el 2026-08-10, sin cambios**: fondo fijo **$200.000**, tope por gasto sin autorización **$25.000**, arqueo **diario al cierre**, reposición la registra recepción (auditada por `meta.author`). El tablero de Admin ya lee la caja y la alerta de diferencia está activa en pantalla (la `Subscription` en tiempo real queda para cuando definan endpoint). Valores en `src/config/caja.ts`. | ✅ Resuelto (2026-08-10) |
 
 ## Clínico
 

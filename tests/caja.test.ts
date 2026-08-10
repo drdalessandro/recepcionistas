@@ -1,7 +1,7 @@
 /**
  * Caja chica (opción 2, aprobada 2026-08-09): saldo DERIVADO (nunca doble
  * registro de ingresos), gastos con lista cerrada + tope, arqueo con
- * diferencia explícita. Parámetros PROVISORIOS en src/config/caja.ts.
+ * diferencia explícita. Parámetros confirmados (2026-08-10) en src/config/caja.ts.
  */
 import { describe, expect, it } from 'vitest';
 import { armarArqueo, efectoEnSaldo, saldoEsperado, validarGasto, type MovimientoCaja } from '../src/lib/caja.js';

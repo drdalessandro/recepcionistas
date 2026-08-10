@@ -1,22 +1,23 @@
 /**
  * Caja chica de recepción — parámetros de gestión.
  *
- * ⚠️ PROVISORIOS (2026-08-09): Andrés aprobó el diseño (opción 2: movimientos
- * en `Basic` + arqueo en `PaymentReconciliation`) pero los montos y la
- * frecuencia quedaron con estos defaults hasta su confirmación
- * (docs/decisiones-pendientes.md). Cambiarlos acá no toca ninguna otra pieza.
+ * ✅ CONFIRMADOS por Andrés vía Administración (2026-08-10, sin cambios):
+ * fondo $200.000 · tope $25.000 · arqueo diario al cierre · reposiciones las
+ * registra recepción. El diseño (opción 2: movimientos en `Basic` + arqueo en
+ * `PaymentReconciliation`) ya estaba aprobado del 2026-08-09. Si algún valor
+ * cambia a futuro, se toca solo acá — ninguna otra pieza depende de ellos.
  *
  * Principio: los INGRESOS en efectivo no se registran acá — ya existen como
  * Invoice balanced con medio-pago=efectivo. La caja solo agrega lo que no
  * existía: egresos, reposiciones y arqueos. El saldo esperado se DERIVA.
  */
 
-/** Fondo fijo de la caja (ARS). Arranque del primer arqueo. PROVISORIO. */
+/** Fondo fijo de la caja (ARS). Arranque del primer arqueo. Confirmado 2026-08-10. */
 export const CAJA_FONDO_FIJO_ARS = 200_000;
 
 /**
  * Tope por gasto individual sin autorización previa de Administración (ARS).
- * Por encima, la UI exige marcar "autorizado por Andrés". PROVISORIO.
+ * Por encima, la UI exige marcar "autorizado por Andrés". Confirmado 2026-08-10.
  */
 export const CAJA_TOPE_GASTO_ARS = 25_000;
 
