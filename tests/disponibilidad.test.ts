@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { calcularDisponibilidad, perfilDeReserva, type DiaDisponible } from '../src/lib/disponibilidad.js';
+import { calcularDisponibilidad, horarioOfrecido, perfilDeReserva, type DiaDisponible } from '../src/lib/disponibilidad.js';
 import { getServicio } from '../src/config/catalogo.js';
 import type { ReservaRecurso } from '../src/lib/reglas-turno.js';
 
@@ -240,5 +240,44 @@ describe('calcularDisponibilidad — solicitudes pendientes (decisión 2026-07-2
       solicitudes: [sol('2026-07-22T15:00:00-03:00', 'CONSULTA_MED_DALESSANDRO')],
     });
     expect(horarios(chequeo.dias)).not.toContain('2026-07-22T15:00:00-03:00');
+  });
+});
+
+describe('horarioOfrecido — defensa en profundidad de bw-solicitar-turno (feedback recepción 2026-08-12)', () => {
+  const servicio = getServicio('HBOT_MONO');
+
+  it('solo la monoplaza ocupada: el horario SIGUE ofrecido — la sesión HBOT puede ir a la biplaza (la sala la elige Recepción)', () => {
+    // Miércoles 22/07 10:00 "ahora" → jueves 23/07 en ventana pública (48 h).
+    const monoOcupada = reserva('R_HBOT_MONO', '2026-07-23T09:00:00-03:00', '2026-07-23T10:00:00-03:00');
+    const disp = calcularDisponibilidad({ servicio, perfil: 'PUBLICO', ahora: AHORA, reservas: [monoOcupada] });
+    // Esto NO es un bug: es el mismo criterio que usa Recepción a mano. El
+    // horario recién desaparece cuando TODAS las salas de la categoría están
+    // tomadas (caso siguiente).
+    expect(horarioOfrecido(disp.dias, new Date('2026-07-23T08:30:00-03:00'))).toBe(true);
+  });
+
+  it('el caso reportado, con TODAS las salas HBOT tomadas 9:00–10:00: 8:30 (solapa), 9:00 y 9:30 NO se ofrecen; 10:00 sí', () => {
+    const reservas = [
+      reserva('R_HBOT_MONO', '2026-07-23T09:00:00-03:00', '2026-07-23T10:00:00-03:00'),
+      reserva('R_HBOT_BIPLAZA', '2026-07-23T09:00:00-03:00', '2026-07-23T10:00:00-03:00', 2),
+    ];
+    const disp = calcularDisponibilidad({ servicio, perfil: 'PUBLICO', ahora: AHORA, reservas });
+    expect(horarioOfrecido(disp.dias, new Date('2026-07-23T08:30:00-03:00'))).toBe(false);
+    expect(horarioOfrecido(disp.dias, new Date('2026-07-23T09:00:00-03:00'))).toBe(false);
+    expect(horarioOfrecido(disp.dias, new Date('2026-07-23T09:30:00-03:00'))).toBe(false);
+    expect(horarioOfrecido(disp.dias, new Date('2026-07-23T10:00:00-03:00'))).toBe(true);
+  });
+
+  it('sin reservas, el mismo horario SÍ está ofrecido (el chequeo no inventa rechazos)', () => {
+    const disp = calcularDisponibilidad({ servicio, perfil: 'PUBLICO', ahora: AHORA, reservas: [] });
+    expect(horarioOfrecido(disp.dias, new Date('2026-07-23T08:30:00-03:00'))).toBe(true);
+  });
+
+  it('fuera de la ventana R-13 o desalineado de la grilla => no ofrecido', () => {
+    const disp = calcularDisponibilidad({ servicio, perfil: 'PUBLICO', ahora: AHORA, reservas: [] });
+    // Público = 48 h: la semana siguiente queda afuera.
+    expect(horarioOfrecido(disp.dias, new Date('2026-07-29T09:00:00-03:00'))).toBe(false);
+    // 9:10 no es un arranque de la grilla de 30'.
+    expect(horarioOfrecido(disp.dias, new Date('2026-07-23T09:10:00-03:00'))).toBe(false);
   });
 });

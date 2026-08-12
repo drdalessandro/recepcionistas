@@ -14,9 +14,11 @@
  */
 import type { BotEvent, MedplumClient } from '@medplum/core';
 import type { Task, TaskInput } from '@medplum/fhirtypes';
+import { getServicio } from '../config/catalogo.js';
 import { COD, SYSTEM } from '../fhir/identifiers.js';
+import { horarioOfrecido, type DiaDisponible } from '../lib/disponibilidad.js';
 import { mensajeWhatsAppRecepcion, resumenSolicitud, validarSolicitud, type SolicitudTurno } from '../lib/solicitudes.js';
-import { enviarWhatsApp } from './_shared.js';
+import { disponibilidadDePaciente, enviarWhatsApp } from './_shared.js';
 
 export interface ResultadoSolicitud {
   ok: boolean;
@@ -24,6 +26,10 @@ export interface ResultadoSolicitud {
   taskId?: string;
   /** true si el WhatsApp de aviso a Recepción salió de verdad. */
   avisada?: boolean;
+  /** 'horario-ocupado' cuando el horario pedido ya no está disponible. */
+  motivo?: 'horario-ocupado';
+  /** Chips frescos para re-elegir (mismo formato que bw-disponibilidad). */
+  alternativas?: DiaDisponible[];
 }
 
 export async function handler(medplum: MedplumClient, event: BotEvent<SolicitudTurno>): Promise<ResultadoSolicitud> {
@@ -31,6 +37,37 @@ export async function handler(medplum: MedplumClient, event: BotEvent<SolicitudT
   const v = validarSolicitud(e);
   if (!v.ok) {
     return { ok: false, mensaje: v.error };
+  }
+
+  // Defensa en profundidad (feedback de recepción 2026-08-12): si la solicitud
+  // trae horario exacto y un código de SERVICIO resoluble, se verifica contra
+  // la MISMA disponibilidad que pinta los chips del portal (ocupación R-07,
+  // ventana R-13, horario del centro, solicitudes pendientes de otros). Un
+  // horario tomado se rechaza acá aunque el portal lo haya mostrado libre.
+  // Best-effort: si el chequeo falla o el código es una categoría ("HBOT"),
+  // la solicitud pasa como siempre — la última palabra la tiene Recepción.
+  if (e.preferenciaInicio && e.terapiaCodigo) {
+    let servicio;
+    try {
+      servicio = getServicio(e.terapiaCodigo);
+    } catch {
+      servicio = undefined; // categoría o código desconocido: sin chequeo
+    }
+    if (servicio) {
+      try {
+        const { disp } = await disponibilidadDePaciente(medplum, e.pacienteRef, servicio);
+        if (!horarioOfrecido(disp.dias, new Date(e.preferenciaInicio))) {
+          return {
+            ok: false,
+            motivo: 'horario-ocupado',
+            mensaje: 'Ese horario acaba de ocuparse o ya no está disponible. Elegí otro de los horarios libres.',
+            alternativas: disp.dias,
+          };
+        }
+      } catch {
+        // chequeo caído: no bloqueamos al paciente por un error nuestro
+      }
+    }
   }
 
   // Nombre del paciente (best-effort, para el aviso a Recepción).

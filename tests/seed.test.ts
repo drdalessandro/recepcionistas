@@ -167,6 +167,16 @@ describe('Seed — AccessPolicy de recepción (privacidad por diseño)', () => {
     expect(tipos).toContain('Invoice');
   });
 
+  it('Portal: la policy del paciente permite Subscription websocket (campanita de mensajes, ya estaba)', () => {
+    // Regresión del feedback 2026-08-12: la campanita del portal necesita esta
+    // entrada. YA EXISTÍA (entrada "Chat en tiempo real"); este test evita que
+    // se pierda — y que se duplique.
+    const paciente = seed.accessPolicies.find((p) => p.name === 'Paciente — Portal')!;
+    const subs = (paciente.resource ?? []).filter((r) => r.resourceType === 'Subscription');
+    expect(subs).toHaveLength(1);
+    expect(subs[0]?.criteria).toBe('Subscription?type=websocket');
+  });
+
   it('Caja chica: Basic SOLO con el code de caja (el config del TC no se toca del mostrador)', () => {
     const recep = seed.accessPolicies.find((p) => p.name === 'Recepción — Operativo')!;
     const basicos = (recep.resource ?? []).filter((r) => r.resourceType === 'Basic');
