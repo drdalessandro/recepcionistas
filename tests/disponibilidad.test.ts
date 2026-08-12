@@ -243,6 +243,146 @@ describe('calcularDisponibilidad — solicitudes pendientes (decisión 2026-07-2
   });
 });
 
+describe('calcularDisponibilidad — ocupados por día (handoff portal: tachados en Reservas)', () => {
+  const servicio = getServicio('HBOT_MONO');
+
+  function ocupados(dias: DiaDisponible[]): string[] {
+    return dias.flatMap((d) => (d.ocupados ?? []).map((o) => o.inicio));
+  }
+
+  it('franja tomada en TODAS las salas: sale de horarios y entra en ocupados, con su fin', () => {
+    const r = calcularDisponibilidad({
+      servicio,
+      perfil: 'PUBLICO',
+      ahora: AHORA,
+      reservas: [
+        reserva('R_HBOT_MONO', '2026-07-22T15:00:00-03:00', '2026-07-22T16:00:00-03:00'),
+        reserva('R_HBOT_BIPLAZA', '2026-07-22T15:00:00-03:00', '2026-07-22T16:00:00-03:00', 2),
+      ],
+    });
+    expect(horarios(r.dias)).not.toContain('2026-07-22T15:00:00-03:00');
+    const dia = r.dias.find((d) => d.fecha === '2026-07-22')!;
+    // La sesión de 60' choca con la reserva arrancando 14:30, 15:00 y 15:30.
+    expect((dia.ocupados ?? []).map((o) => o.inicio)).toEqual([
+      '2026-07-22T14:30:00-03:00',
+      '2026-07-22T15:00:00-03:00',
+      '2026-07-22T15:30:00-03:00',
+    ]);
+    expect(dia.ocupados?.find((o) => o.inicio === '2026-07-22T15:00:00-03:00')?.fin).toBe('2026-07-22T16:00:00-03:00');
+    // Los vecinos libres no se tachan.
+    expect(ocupados(r.dias)).not.toContain('2026-07-22T16:00:00-03:00');
+  });
+
+  it('tomada en UNA sola sala (queda otra libre): sigue ofrecido y NO se tacha', () => {
+    const r = calcularDisponibilidad({
+      servicio,
+      perfil: 'PUBLICO',
+      ahora: AHORA,
+      reservas: [reserva('R_HBOT_MONO', '2026-07-22T15:00:00-03:00', '2026-07-22T16:00:00-03:00')],
+    });
+    expect(horarios(r.dias)).toContain('2026-07-22T15:00:00-03:00');
+    expect(ocupados(r.dias)).not.toContain('2026-07-22T15:00:00-03:00');
+  });
+
+  it('solicitud pendiente individual: el horario pedido aparece tachado', () => {
+    const r = calcularDisponibilidad({
+      servicio,
+      perfil: 'PUBLICO',
+      ahora: AHORA,
+      reservas: [],
+      solicitudes: [{ inicio: new Date('2026-07-22T15:00:00-03:00'), servicioCodigo: 'HBOT_MONO', pedidaEn: AHORA }],
+    });
+    // El pedido de 15:00 (60') tacha 14:30, 15:00 y 15:30; 16:00 sigue libre.
+    expect(ocupados(r.dias)).toContain('2026-07-22T15:00:00-03:00');
+    expect(ocupados(r.dias)).toContain('2026-07-22T15:30:00-03:00');
+    expect(horarios(r.dias)).toContain('2026-07-22T16:00:00-03:00');
+    expect(r.excluidosPorSolicitudes).toBeGreaterThan(0);
+  });
+
+  it('grupal: cupo agotado (confirmados 6/6, o confirmados + pendientes) => tachado', () => {
+    const multi = getServicio('HBOT_MULTIPLAZA');
+    const llena = calcularDisponibilidad({
+      servicio: multi,
+      perfil: 'PUBLICO',
+      ahora: AHORA,
+      reservas: [reserva('R_HBOT_MULTIPLAZA', '2026-07-22T15:00:00-03:00', '2026-07-22T16:00:00-03:00', 6)],
+    });
+    expect(ocupados(llena.dias)).toContain('2026-07-22T15:00:00-03:00');
+    const mixta = calcularDisponibilidad({
+      servicio: multi,
+      perfil: 'PUBLICO',
+      ahora: AHORA,
+      reservas: [reserva('R_HBOT_MULTIPLAZA', '2026-07-22T15:00:00-03:00', '2026-07-22T16:00:00-03:00', 2)],
+      solicitudes: Array.from({ length: 4 }, () => ({
+        inicio: new Date('2026-07-22T15:00:00-03:00'),
+        servicioCodigo: 'HBOT_MULTIPLAZA',
+        pedidaEn: AHORA,
+      })),
+    });
+    expect(horarios(mixta.dias)).not.toContain('2026-07-22T15:00:00-03:00');
+    expect(ocupados(mixta.dias)).toContain('2026-07-22T15:00:00-03:00');
+  });
+
+  it('lo que no es parte de la grilla visible NO se tacha: pasado y fuera de ventana R-13', () => {
+    const r = calcularDisponibilidad({
+      servicio,
+      perfil: 'PUBLICO',
+      ahora: AHORA,
+      reservas: [
+        // Ya pasó (AHORA = miércoles 10:00): no es un chip, no se tacha.
+        reserva('R_HBOT_MONO', '2026-07-22T08:00:00-03:00', '2026-07-22T09:00:00-03:00'),
+        reserva('R_HBOT_BIPLAZA', '2026-07-22T08:00:00-03:00', '2026-07-22T09:00:00-03:00', 2),
+        // Viernes 15:00 queda fuera de la ventana pública (48 h => viernes 10:00).
+        reserva('R_HBOT_MONO', '2026-07-24T15:00:00-03:00', '2026-07-24T16:00:00-03:00'),
+        reserva('R_HBOT_BIPLAZA', '2026-07-24T15:00:00-03:00', '2026-07-24T16:00:00-03:00', 2),
+      ],
+    });
+    expect(ocupados(r.dias)).not.toContain('2026-07-22T08:00:00-03:00');
+    expect(ocupados(r.dias)).not.toContain('2026-07-24T15:00:00-03:00');
+  });
+
+  it('día completamente tomado: aparece igual, con horarios [] y todo en ocupados', () => {
+    const r = calcularDisponibilidad({
+      servicio,
+      perfil: 'PUBLICO',
+      ahora: AHORA,
+      reservas: [
+        reserva('R_HBOT_MONO', '2026-07-23T08:00:00-03:00', '2026-07-23T22:00:00-03:00'),
+        reserva('R_HBOT_BIPLAZA', '2026-07-23T08:00:00-03:00', '2026-07-23T22:00:00-03:00', 2),
+      ],
+    });
+    const jueves = r.dias.find((d) => d.fecha === '2026-07-23')!;
+    expect(jueves).toBeDefined();
+    expect(jueves.horarios).toEqual([]);
+    // Todos los arranques del día (08:00 a 21:00, el último donde caben los 60').
+    expect(jueves.ocupados?.[0]?.inicio).toBe('2026-07-23T08:00:00-03:00');
+    expect(jueves.ocupados?.[jueves.ocupados.length - 1]?.inicio).toBe('2026-07-23T21:00:00-03:00');
+    expect(jueves.ocupados).toHaveLength(27);
+  });
+
+  it('sin nada tomado, los días viajan sin la clave ocupados (payload limpio)', () => {
+    const r = calcularDisponibilidad({ servicio, perfil: 'PUBLICO', ahora: AHORA, reservas: [] });
+    expect(r.dias.length).toBeGreaterThan(0);
+    for (const d of r.dias) {
+      expect(d.ocupados).toBeUndefined();
+    }
+  });
+
+  it('un ocupado NO cuenta como ofrecido (horarioOfrecido sigue mirando solo horarios)', () => {
+    const disp = calcularDisponibilidad({
+      servicio,
+      perfil: 'PUBLICO',
+      ahora: AHORA,
+      reservas: [
+        reserva('R_HBOT_MONO', '2026-07-23T09:00:00-03:00', '2026-07-23T10:00:00-03:00'),
+        reserva('R_HBOT_BIPLAZA', '2026-07-23T09:00:00-03:00', '2026-07-23T10:00:00-03:00', 2),
+      ],
+    });
+    expect(ocupados(disp.dias)).toContain('2026-07-23T09:00:00-03:00');
+    expect(horarioOfrecido(disp.dias, new Date('2026-07-23T09:00:00-03:00'))).toBe(false);
+  });
+});
+
 describe('horarioOfrecido — defensa en profundidad de bw-solicitar-turno (feedback recepción 2026-08-12)', () => {
   const servicio = getServicio('HBOT_MONO');
 

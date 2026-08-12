@@ -9,7 +9,10 @@
  *
  * El contrato de salida lo consume el portal tal cual (no renombrar campos):
  * { ok, perfil, ventanaHoras, grupal, dias: [{ fecha, horarios: [{ inicio, fin,
- * lugares?, ocupantes? }] }], mensaje? }.
+ * lugares?, ocupantes? }], ocupados?: [{ inicio, fin }] }], mensaje? }.
+ * `ocupados` (handoff 2026-08-12): horarios de la grilla ya tomados, que el
+ * portal pinta tachados y no deja elegir. Un día puede venir con horarios
+ * vacíos y solo ocupados (día completamente tomado).
  *
  * Seguridad (nota consciente, docs/portal-integracion.md): `pacienteRef` viene
  * del input, como en bw-solicitar-turno. Solo expone disponibilidad + ventana,
@@ -57,13 +60,15 @@ export async function handler(
   // contra ESTA misma disponibilidad — si divergieran, el portal ofrecería
   // horarios que después se rechazan).
   const { perfil, disp } = await disponibilidadDePaciente(medplum, e.pacienteRef, servicio);
-  const sinOpciones =
-    disp.dias.length === 0
-      ? disp.excluidosPorSolicitudes > 0
-        ? // La única razón son horarios ya pedidos: que el paciente lo entienda.
-          'Los horarios de este servicio están pedidos y esperando confirmación. Escribinos y te avisamos apenas se libere alguno.'
-        : `Por ahora no hay horarios libres de ${servicio.nombre} dentro de tu ventana de reserva (${disp.ventanaHoras} h). Escribinos y lo resolvemos juntos.`
-      : undefined;
+  // "Sin opciones" = sin horarios ELEGIBLES. Con `ocupados`, un día puede venir
+  // solo con tachados: se muestran igual, pero el mensaje explica que no hay
+  // nada para elegir.
+  const sinOpciones = disp.dias.every((d) => d.horarios.length === 0)
+    ? disp.excluidosPorSolicitudes > 0
+      ? // La única razón son horarios ya pedidos: que el paciente lo entienda.
+        'Los horarios de este servicio están pedidos y esperando confirmación. Escribinos y te avisamos apenas se libere alguno.'
+      : `Por ahora no hay horarios libres de ${servicio.nombre} dentro de tu ventana de reserva (${disp.ventanaHoras} h). Escribinos y lo resolvemos juntos.`
+    : undefined;
   return {
     ok: true,
     perfil,

@@ -55,10 +55,25 @@ export interface HorarioDisponible {
   ocupantes?: number;
 }
 
+/** Horario de la grilla que ya está tomado (el portal lo pinta tachado). */
+export interface HorarioOcupado {
+  /** ISO con offset -03:00 (mismo formato que HorarioDisponible). */
+  inicio: string;
+  fin: string;
+}
+
 export interface DiaDisponible {
   /** YYYY-MM-DD (fecha argentina). */
   fecha: string;
   horarios: HorarioDisponible[];
+  /**
+   * Horarios tomados del día (handoff portal 2026-08-12): arranques que SÍ son
+   * parte de la grilla visible (a futuro, dentro de la ventana R-13 y del
+   * horario del centro) pero no se ofrecen porque la agenda, una solicitud
+   * pendiente o el cupo grupal los toman. Un hueco mudo no le dice nada al
+   * paciente; un horario tachado explica por qué no está. Ausente si no hay.
+   */
+  ocupados?: HorarioOcupado[];
 }
 
 /**
@@ -126,6 +141,10 @@ function candidatosPara(servicio: Servicio): RecursoFisico[] {
  * Sesión grupal (Multiplaza): el horario se ofrece mientras queden asientos
  * (`lugares` ≥ 1) y suma `ocupantes` ("ya somos N"). El mínimo operativo de 3
  * es advertencia, no bloqueo: el horario se devuelve igual.
+ *
+ * Los horarios de la grilla que NO pasan (agenda llena, solicitud pendiente o
+ * cupo grupal agotado) no se pierden: van en `ocupados` del día, para que el
+ * portal los tache en vez de dejar un hueco mudo (handoff 2026-08-12).
  */
 export function calcularDisponibilidad(opts: OpcionesDisponibilidad): Disponibilidad {
   const { servicio, perfil, ahora } = opts;
@@ -177,6 +196,7 @@ export function calcularDisponibilidad(opts: OpcionesDisponibilidad): Disponibil
   const gran = SLOT_GRANULARIDAD_MIN;
   const subSlots = Math.ceil(servicio.duracionMin / gran);
   const porDia = new Map<string, HorarioDisponible[]>();
+  const ocupadosPorDia = new Map<string, HorarioOcupado[]>();
 
   for (const inicioISO of [...arranques].sort()) {
     const inicio = new Date(inicioISO);
@@ -188,31 +208,44 @@ export function calcularDisponibilidad(opts: OpcionesDisponibilidad): Disponibil
     }
     const fin = new Date(inicio.getTime() + servicio.duracionMin * 60_000);
 
+    // Salas donde el turno completo cabe dentro del horario del centro: todos
+    // los sub-slots de la duración deben existir en la grilla del recurso. Si
+    // no cabe en ninguna (p. ej. arranques pegados al cierre), el horario no es
+    // parte de la grilla visible: ni libre ni ocupado.
+    const salas = candidatos.filter((recurso) => {
+      const set = slotsPorRecurso.get(recurso.codigo);
+      if (!set) {
+        return false;
+      }
+      for (let k = 0; k < subSlots; k++) {
+        if (!set.has(isoArgentina(new Date(inicio.getTime() + k * gran * 60_000)))) {
+          return false;
+        }
+      }
+      return true;
+    });
+    if (salas.length === 0) {
+      continue;
+    }
+    const marcarOcupado = (): void => {
+      const fecha = inicioISO.slice(0, 10);
+      const arr = ocupadosPorDia.get(fecha) ?? [];
+      arr.push({ inicio: inicioISO, fin: isoArgentina(fin) });
+      ocupadosPorDia.set(fecha, arr);
+    };
+
     // Solicitudes pendientes que solapan esta franja.
     const pendientesSolapadas = pendientes.filter((p) => p.desde < fin.getTime() && inicio.getTime() < p.hasta).length;
     if (!grupal && pendientesSolapadas > 0) {
       // Individual: el horario ya está pedido — no se ofrece, como si estuviera
       // ocupado (aunque otra sala de la categoría siga libre: ofrecer de menos).
       excluidosPorSolicitudes++;
+      marcarOcupado();
       continue;
     }
 
     let horarioOfrecible: HorarioDisponible | undefined;
-    for (const recurso of candidatos) {
-      // El turno completo tiene que caber en la misma franja del centro: todos
-      // los sub-slots de la duración deben existir en la grilla del recurso.
-      const set = slotsPorRecurso.get(recurso.codigo);
-      let cabe = Boolean(set);
-      for (let k = 0; cabe && k < subSlots; k++) {
-        const sub = new Date(inicio.getTime() + k * gran * 60_000);
-        if (!set!.has(isoArgentina(sub))) {
-          cabe = false;
-        }
-      }
-      if (!cabe) {
-        continue;
-      }
-
+    for (const recurso of salas) {
       // R-07 sobre la agenda real: capacidad del recurso + desfasaje Recovery.
       // Solo las reservas de ESTE recurso y de los que comparten equipo (el
       // gabinete Recovery hermano): un problema preexistente en otra sala no
@@ -252,12 +285,19 @@ export function calcularDisponibilidad(opts: OpcionesDisponibilidad): Disponibil
       const arr = porDia.get(fecha) ?? [];
       arr.push(horarioOfrecible);
       porDia.set(fecha, arr);
+    } else {
+      // Cabía en el horario del centro pero todas las salas están tomadas (o el
+      // cupo grupal se llenó): tachado en el portal, no elegible.
+      marcarOcupado();
     }
   }
 
-  const dias: DiaDisponible[] = [...porDia.entries()]
-    .sort(([a], [b]) => a.localeCompare(b))
-    .map(([fecha, horarios]) => ({ fecha, horarios }));
+  // Un día entra si tiene ALGO que mostrar: horarios libres u ocupados (un día
+  // completamente tomado se muestra todo tachado, no desaparece).
+  const dias: DiaDisponible[] = [...new Set([...porDia.keys(), ...ocupadosPorDia.keys()])].sort().map((fecha) => {
+    const ocupados = ocupadosPorDia.get(fecha);
+    return { fecha, horarios: porDia.get(fecha) ?? [], ...(ocupados?.length ? { ocupados } : {}) };
+  });
   return { ventanaHoras, grupal, dias, excluidosPorSolicitudes };
 }
 
@@ -265,7 +305,8 @@ export function calcularDisponibilidad(opts: OpcionesDisponibilidad): Disponibil
  * ¿El horario pedido está entre los ofrecidos? Chequeo de membresía exacta
  * contra los chips (defensa en profundidad de `bw-solicitar-turno`, feedback
  * de recepción 2026-08-12): un horario ocupado, fuera de ventana R-13, fuera
- * del horario del centro o desalineado de la grilla NO está ofrecido.
+ * del horario del centro o desalineado de la grilla NO está ofrecido. Los
+ * `ocupados` del día tampoco cuentan: se muestran, pero no son elegibles.
  */
 export function horarioOfrecido(dias: readonly DiaDisponible[], inicio: Date): boolean {
   const buscado = isoArgentina(inicio);
