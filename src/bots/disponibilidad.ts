@@ -18,18 +18,9 @@
  */
 import type { BotEvent, MedplumClient } from '@medplum/core';
 import { getServicio } from '../config/catalogo.js';
-import { getMembresia } from '../config/membresias.js';
 import type { PerfilReserva } from '../config/reglas.js';
-import type { IntensidadMembresia } from '../domain/types.js';
-import { COD, EXT } from '../fhir/identifiers.js';
-import { esPlanBW, estadoDeCoverage, planCodigoDeCoverage } from '../fhir/coverage.js';
-import {
-  calcularDisponibilidad,
-  perfilDeReserva,
-  type DiaDisponible,
-  type SolicitudPendiente,
-} from '../lib/disponibilidad.js';
-import { cargarReservasEnRango } from './_shared.js';
+import type { DiaDisponible } from '../lib/disponibilidad.js';
+import { disponibilidadDePaciente } from './_shared.js';
 
 export interface EntradaDisponibilidad {
   pacienteRef: string; // "Patient/<id>"
@@ -61,69 +52,11 @@ export async function handler(
     return { ok: false, mensaje: `Servicio desconocido: ${e.servicioCodigo}.` };
   }
 
-  // Perfil R-13 (derivado en el server, nunca client-side): tag-fm → FM;
-  // si no, la intensidad de la membresía activa; si no, público.
-  let tagFm = false;
-  const intensidades: IntensidadMembresia[] = [];
-  try {
-    const pacienteId = e.pacienteRef.split('/')[1]!;
-    const paciente = await medplum.readResource('Patient', pacienteId);
-    tagFm = paciente.extension?.find((x) => x.url === EXT.tagFm)?.valueBoolean === true;
-  } catch {
-    // ficha ilegible: se degrada a público (la ventana más corta)
-  }
-  const coberturas = await medplum.searchResources('Coverage', {
-    beneficiary: e.pacienteRef,
-    status: 'active',
-    _count: 20,
-  });
-  for (const c of coberturas) {
-    if (!esPlanBW(c) || estadoDeCoverage(c).tipo !== 'membresia') {
-      continue;
-    }
-    const codigo = planCodigoDeCoverage(c);
-    if (!codigo) {
-      continue;
-    }
-    try {
-      intensidades.push(getMembresia(codigo).intensidad);
-    } catch {
-      // plan desconocido: no cambia la ventana
-    }
-  }
-  const perfil = perfilDeReserva(tagFm, intensidades);
-
-  // Agenda ocupada de toda la ventana, en una sola búsqueda. Desde las 00:00
-  // de hoy: una sesión EN CURSO (arrancó antes de "ahora") también pesa contra
-  // la capacidad de los próximos horarios.
-  const ahora = new Date();
-  const inicioHoy = new Date(ahora);
-  inicioHoy.setHours(0, 0, 0, 0);
-  const limite = new Date(ahora.getTime() + 7 * 24 * 60 * 60 * 1000); // techo FM
-  const reservas = await cargarReservasEnRango(medplum, inicioHoy, limite);
-
-  // Solicitudes pendientes (decisión 2026-07-26): un horario ya pedido desde el
-  // portal deja de ofrecerse mientras Recepción no lo resuelva. Solo cuentan
-  // los Task sin resolver Y con horario exacto elegido de los chips; el
-  // vencimiento y el filtro por sala los aplica la lógica pura.
-  const tasksPendientes = await medplum
-    .searchResources('Task', `code=${COD.solicitudTurno}&status=requested,received,accepted,in-progress&_count=200`)
-    .catch(() => []);
-  const solicitudes = tasksPendientes
-    .map((t): SolicitudPendiente | undefined => {
-      const inicio = t.input?.find((i) => i.type?.text === 'preferencia-inicio')?.valueDateTime;
-      if (!inicio) {
-        return undefined; // preferencia en texto libre: no bloquea nada
-      }
-      return {
-        inicio: new Date(inicio),
-        servicioCodigo: t.input?.find((i) => i.type?.text === 'terapia-codigo')?.valueString,
-        pedidaEn: t.authoredOn ? new Date(t.authoredOn) : undefined,
-      };
-    })
-    .filter((s): s is SolicitudPendiente => Boolean(s));
-
-  const disp = calcularDisponibilidad({ servicio, perfil, ahora, reservas, solicitudes });
+  // Perfil R-13 + agenda ocupada + solicitudes pendientes: todo lo arma
+  // `disponibilidadDePaciente` (compartido con bw-solicitar-turno, que valida
+  // contra ESTA misma disponibilidad — si divergieran, el portal ofrecería
+  // horarios que después se rechazan).
+  const { perfil, disp } = await disponibilidadDePaciente(medplum, e.pacienteRef, servicio);
   const sinOpciones =
     disp.dias.length === 0
       ? disp.excluidosPorSolicitudes > 0

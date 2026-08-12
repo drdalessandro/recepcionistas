@@ -48,6 +48,13 @@ ve **solo lo suyo** vía la AccessPolicy **"Paciente — Portal"**
 El link de invitación apunta al portal vía el secret **`PORTAL_BASE_URL`**
 (default `https://app.biowellness.ar`).
 
+> **2026-08-12 — Handoff nuevo para el portal:**
+> [`handoff-portal-reservas-notificaciones.md`](handoff-portal-reservas-notificaciones.md)
+> (feedback de recepción): Reservas debe pintar los chips de
+> `bw-disponibilidad` (sin grilla fija de fallback), manejar el rechazo
+> `horario-ocupado` de `bw-solicitar-turno` (nuevo), e implementar la
+> campanita de mensajes (la policy ya lo permite).
+
 ## Checklist de revisión del repo del portal
 
 1. **Mismo proyecto Medplum.** El portal debe registrar/loguear contra el mismo

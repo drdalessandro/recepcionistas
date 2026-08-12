@@ -261,6 +261,17 @@ export function calcularDisponibilidad(opts: OpcionesDisponibilidad): Disponibil
   return { ventanaHoras, grupal, dias, excluidosPorSolicitudes };
 }
 
+/**
+ * ¿El horario pedido está entre los ofrecidos? Chequeo de membresía exacta
+ * contra los chips (defensa en profundidad de `bw-solicitar-turno`, feedback
+ * de recepción 2026-08-12): un horario ocupado, fuera de ventana R-13, fuera
+ * del horario del centro o desalineado de la grilla NO está ofrecido.
+ */
+export function horarioOfrecido(dias: readonly DiaDisponible[], inicio: Date): boolean {
+  const buscado = isoArgentina(inicio);
+  return dias.some((d) => d.horarios.some((h) => h.inicio === buscado));
+}
+
 /** ISO con offset fijo de Argentina (mismo formato que generarSlots). */
 function isoArgentina(d: Date): string {
   const local = new Date(d.getTime() - 3 * 60 * 60 * 1000);
