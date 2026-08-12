@@ -10,8 +10,8 @@
 import type { OrigenLead } from '../fhir/identifiers.js';
 import { PORTAL_URL } from './onboarding.js';
 
-/** Número productivo de WhatsApp (E.164 sin '+'; el de wa.me). */
-export const WHATSAPP_NUMERO = '5491162470002';
+/** Número productivo de WhatsApp (E.164 sin '+'; el de wa.me). Cambiado 2026-08-12 (antes +5491162470002). */
+export const WHATSAPP_NUMERO = '5491172509550';
 
 /** URL base del portal (fuente de verdad: onboarding.ts — una sola, sin deriva). */
 export { PORTAL_URL };

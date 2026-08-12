@@ -20,7 +20,13 @@ sistema pueda calcular o decidir.
 
 ## Canales, uno por uno
 
-### 1. WhatsApp directo — `wa.me/5491162470002` ✅ operativo
+> ⚠️ **Cambio de número (2026-08-12):** el WhatsApp pasó de +54 9 11 6247-0002
+> a **+54 9 11 7250-9550**. QRs y links de este repo ya regenerados — pero
+> TODO lo publicado con el número viejo hay que reemplazarlo a mano: QRs
+> impresos en el local/flyers, link de la bio de Instagram, botón del sitio,
+> ficha de Google. Un QR viejo escaneado abre un chat que nadie atiende.
+
+### 1. WhatsApp directo — `wa.me/5491172509550` ✅ operativo
 El canal estrella: cualquier pieza (bio de Instagram, post de LinkedIn, QR,
 Google) puede apuntar al link `wa.me`. El mensaje entra **solo** a la bandeja.
 
@@ -141,7 +147,7 @@ Paquetes para equipos (p. ej. vía LinkedIn). Requiere definición comercial
 
 1. **Destino canónico del enlace público: WhatsApp para todo; el portal para
    autogestión.** Toda pieza pública (bio de IG, posts, QRs, ficha de Google)
-   apunta al `wa.me` del +54 9 11 6247-0002; el portal queda como segundo
+   apunta al `wa.me` del +54 9 11 7250-9550; el portal queda como segundo
    botón para quien prefiere autogestionarse.
 2. **Instagram DM: se deriva a WhatsApp** (respuesta corta en el DM + link
    `wa.me`). La integración del DM a la bandeja queda como mejora futura.

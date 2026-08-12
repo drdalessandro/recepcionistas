@@ -1,6 +1,10 @@
 # WhatsApp en producción — plantillas de Meta (Twilio Content API)
 
-Número productivo: **+54 9 11 6247-0002**. Fuera de la ventana de 24 h (desde el
+Número productivo: **+54 9 11 7250-9550** (desde 2026-08-12; antes 6247-0002 —
+al cambiar de sender hay que re-verificar: Project Secret `TWILIO_WHATSAPP_FROM`,
+webhook de entrada del número nuevo apuntando a `bw-whatsapp-entrante`, y estado
+de aprobación de las plantillas sobre el sender nuevo con `npm run whatsapp:plantilla`).
+Fuera de la ventana de 24 h (desde el
 último mensaje del cliente), WhatsApp solo permite mensajes iniciados por el
 negocio si usan una **plantilla aprobada por Meta**. En Twilio, cada plantilla
 aprobada tiene un **Content SID** (`HX...`).
@@ -23,7 +27,7 @@ carga como secret se activa solo.
 
 1. Registrar el número como WhatsApp sender: Twilio → Messaging → Senders →
    WhatsApp senders (requiere verificación del negocio en Meta).
-2. Actualizar el Project Secret `TWILIO_WHATSAPP_FROM` → `+5491162470002`.
+2. Actualizar el Project Secret `TWILIO_WHATSAPP_FROM` → `+5491172509550`.
 3. Crear las plantillas en Twilio → Messaging → Content Template Builder
    (tipo *Text*), enviarlas a aprobación de WhatsApp, y cargar cada `HX...`
    como Project Secret con el nombre indicado abajo.
