@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Alert, Button, Group, Modal, Select, Stack, TextInput } from '@mantine/core';
 import { IconInfoCircle, IconUserPlus } from '@tabler/icons-react';
 import { ORIGENES_LEAD, ORIGENES_LEAD_LABELS } from '@bw/fhir/identifiers';
@@ -16,10 +16,16 @@ export function NuevoPacienteModal({
   abierto,
   onCerrar,
   onCreado,
+  telefonoInicial,
+  nombreInicial,
 }: {
   abierto: boolean;
   onCerrar: () => void;
   onCreado: (patientId: string) => void;
+  /** Prellenado (vista Avisos): teléfono del WhatsApp desconocido, ya en E.164. */
+  telefonoInicial?: string;
+  /** Prellenado: nombre de perfil de WhatsApp (la recepcionista lo corrige). */
+  nombreInicial?: string;
 }): JSX.Element {
   const [nombre, setNombre] = useState('');
   const [dni, setDni] = useState('');
@@ -28,6 +34,20 @@ export function NuevoPacienteModal({
   const [origen, setOrigen] = useState<string | null>(null);
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Al abrirse con prellenado (desde Avisos), sembrar los campos una vez: el
+  // teléfono viene en E.164 de Twilio, que es justo el formato con el que el
+  // WhatsApp entrante después encuentra la ficha.
+  useEffect(() => {
+    if (abierto) {
+      if (telefonoInicial) {
+        setTelefono(telefonoInicial);
+      }
+      if (nombreInicial) {
+        setNombre(nombreInicial);
+      }
+    }
+  }, [abierto, telefonoInicial, nombreInicial]);
 
   function limpiar(): void {
     setNombre('');

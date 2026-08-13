@@ -11,14 +11,17 @@
  *  3. Agrega el mensaje al hilo ACTIVO más reciente del paciente (o abre uno
  *     nuevo "WhatsApp") → aparece al instante en Recepción → Mensajes, con el
  *     badge verde y la campanita (el mensaje queda sender=Patient, sin received).
- *  4. Número desconocido → alerta a Recepción (Task) con el texto: no se pierde.
+ *  4. Número desconocido → aviso a Recepción (Task `aviso-recepcion`, tipo
+ *     `whatsapp-desconocido`) con teléfono y texto en `input`: aparece en la
+ *     vista **Avisos**, desde donde se le responde por WhatsApp o se le crea
+ *     la ficha. El contacto no se pierde ni queda invisible.
  *
  * Idempotente por MessageSid (Twilio reintenta). Nunca lanza: si algo falla,
  * responde ok:false y Twilio reintenta después.
  */
 import type { BotEvent, MedplumClient } from '@medplum/core';
 import type { Attachment, Communication, Patient } from '@medplum/fhirtypes';
-import { EXT, SYSTEM } from '../fhir/identifiers.js';
+import { EXT, SYSTEM, TIPO_AVISO } from '../fhir/identifiers.js';
 import { extensionDeMime, mediosTwilio, validarFirmaTwilio, variantesTelefono } from '../lib/whatsapp.js';
 import { crearAlertaRecepcion } from './_shared.js';
 
@@ -150,11 +153,19 @@ export async function handler(medplum: MedplumClient, event: BotEvent): Promise<
     }
 
     if (!paciente?.id) {
+      // El contacto NO se pierde: queda como aviso en la vista Avisos, con el
+      // número y el texto en `datos` para poder responderle por WhatsApp o
+      // crearle la ficha de un click (sin volver a la consola de Twilio).
+      // Idempotente por MessageSid: si Twilio reintenta, no duplica el aviso.
+      const telefono = (e.From ?? '').replace(/^whatsapp:/i, '').trim();
       await crearAlertaRecepcion(medplum, {
         titulo: 'WhatsApp de número desconocido',
-        detalle: `${e.From}${e.ProfileName ? ` (${e.ProfileName})` : ''} escribió: "${texto.slice(0, 300)}"${
-          conAdjunto ? ' [con adjunto]' : ''
-        }. El número no coincide con ninguna ficha: crear el paciente o responder desde Twilio.`,
+        clave: `wa-desconocido-${e.MessageSid}`,
+        tipo: TIPO_AVISO.whatsappDesconocido,
+        detalle: `${telefono}${e.ProfileName ? ` (${e.ProfileName})` : ''} escribió: "${texto.slice(0, 300)}"${
+          conAdjunto ? ' [con adjunto: verlo en la consola de Twilio]' : ''
+        }. El número no coincide con ninguna ficha.`,
+        datos: { telefono, texto: texto.slice(0, 1000), perfil: e.ProfileName },
       });
       return respuestaTwiml({ ok: true, motivo: 'número desconocido: alerta a Recepción creada' });
     }

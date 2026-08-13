@@ -226,6 +226,40 @@ export function Mensajes(): JSX.Element {
     return (id && nombres.get(id)) || t.subject?.display || 'Paciente';
   };
 
+  /**
+   * Manda la respuesta por WhatsApp y deja el resultado a la vista: en éxito
+   * marca la burbuja con el canal (mismo tilde que usan los entrantes), y si
+   * no salió lo dice con la causa. El mensaje ya está en el hilo pase lo que
+   * pase: esto solo informa si además llegó al celular.
+   */
+  const marcarEnvioWhatsApp = async (pacienteRef: string, texto: string, msg: Communication): Promise<void> => {
+    try {
+      const envio = await espejarWhatsApp(pacienteRef, texto, msg.id);
+      if (envio.status === 'completed') {
+        const marcado = await medplum.updateResource<Communication>({
+          ...msg,
+          extension: [...(msg.extension ?? []), { url: EXT.canal, valueCode: 'whatsapp' }],
+        });
+        setMensajes((prev) => prev?.map((m) => (m.id === marcado.id ? marcado : m)));
+        return;
+      }
+      notifications.show({
+        color: 'orange',
+        title: 'Quedó en el chat, pero NO salió por WhatsApp',
+        message:
+          envio.status === 'preparation'
+            ? 'El paciente no tiene teléfono cargado (o faltan credenciales de Twilio).'
+            : 'Twilio lo rechazó. Si pasaron más de 24 h desde su último mensaje, WhatsApp solo permite plantillas.',
+      });
+    } catch (err) {
+      notifications.show({
+        color: 'orange',
+        title: 'Quedó en el chat, pero NO salió por WhatsApp',
+        message: String((err as Error)?.message ?? err),
+      });
+    }
+  };
+
   const responder = async (): Promise<void> => {
     if (!hilo || !profile || (!respuesta.trim() && archivos.length === 0)) {
       return;
@@ -259,9 +293,12 @@ export function Mensajes(): JSX.Element {
       setRespuesta('');
       setArchivos([]);
       // Espejo a WhatsApp (texto + adjuntos): el paciente se entera aunque no
-      // entre al portal. Fire-and-forget: no bloquea el chat si Twilio falla.
+      // entre al portal. El resultado NO se traga (antes era fire-and-forget):
+      // si salió, la burbuja queda marcada "por WhatsApp"; si no, se avisa —
+      // creer que contestaste cuando el mensaje nunca salió es lo peor que
+      // puede pasar en una bandeja.
       if (hilo.subject?.reference?.startsWith('Patient/')) {
-        espejarWhatsApp(hilo.subject.reference, texto, msg.id).catch(() => undefined);
+        void marcarEnvioWhatsApp(hilo.subject.reference, texto, msg);
       }
     } catch (err) {
       notifications.show({ color: 'red', title: 'No se pudo enviar', message: String((err as Error)?.message ?? err) });

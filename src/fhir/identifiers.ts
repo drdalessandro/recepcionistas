@@ -157,6 +157,23 @@ export const COD = {
   solicitudTurno: 'solicitud-turno',
   /** Task de revisión de fichas duplicadas (bw-dedup-paciente → vista Duplicados). */
   posibleDuplicado: 'posible-duplicado',
+  /**
+   * Task de aviso automático a Recepción (vista Avisos). Antes estas alertas
+   * se creaban SOLO con `code.text`, y como las búsquedas FHIR por token no
+   * miran el texto, ninguna pantalla las listaba: el aviso existía en la base
+   * y nadie lo veía (WhatsApp de número desconocido, pagos duplicados, seña de
+   * reserva vencida, diferencia de arqueo…). El code las hace encontrables.
+   */
+  avisoRecepcion: 'aviso-recepcion',
+} as const;
+
+/**
+ * Subtipo del aviso (input `tipo` del Task): habilita acciones específicas en
+ * la vista Avisos. Sin subtipo, el aviso se muestra igual con "Resolver".
+ */
+export const TIPO_AVISO = {
+  /** WhatsApp entrante cuyo número no coincide con ninguna ficha. */
+  whatsappDesconocido: 'whatsapp-desconocido',
 } as const;
 
 /**

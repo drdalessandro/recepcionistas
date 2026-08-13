@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import type { BotEvent, MedplumClient } from '@medplum/core';
-import { enviarWhatsApp, enviarEmail, notificarPortal, NOTIFICACION_SYSTEM } from '../src/bots/_shared.js';
+import { crearAlertaRecepcion, enviarWhatsApp, enviarEmail, notificarPortal, NOTIFICACION_SYSTEM } from '../src/bots/_shared.js';
+import { COD, SYSTEM, TIPO_AVISO } from '../src/fhir/identifiers.js';
 
 /** MedplumClient falso: captura las Communication creadas y espía sendEmail. */
 function fakeMedplum(opts: { telefono?: string; email?: string; existente?: Record<string, unknown> } = {}) {
@@ -196,5 +197,47 @@ describe('notificarPortal · campanita del portal', () => {
 
     expect(comm).toBeUndefined();
     expect(spy).toHaveBeenCalled();
+  });
+});
+
+describe('crearAlertaRecepcion · los avisos tienen que ser ENCONTRABLES', () => {
+  /** Medplum falso mínimo: captura los Task creados. */
+  function fake() {
+    const creados: Record<string, any>[] = [];
+    const medplum = {
+      searchOne: async () => undefined,
+      createResource: async (r: Record<string, any>) => {
+        creados.push(r);
+        return { ...r, id: `t${creados.length}` };
+      },
+    } as unknown as MedplumClient;
+    return { medplum, creados };
+  }
+
+  it('lleva el code aviso-recepcion: sin él, la búsqueda por token no lo encuentra y el aviso queda invisible', async () => {
+    const { medplum, creados } = fake();
+    await crearAlertaRecepcion(medplum, { titulo: 'Pago DUPLICADO', detalle: 'Devolver desde MercadoPago.' });
+    const coding = creados[0]?.code?.coding?.[0];
+    expect(coding?.code).toBe(COD.avisoRecepcion);
+    expect(coding?.system).toBe(SYSTEM.taskTipo);
+    // El título sigue en text (es lo que muestra la card).
+    expect(creados[0]?.code?.text).toBe('Pago DUPLICADO');
+    expect(creados[0]?.status).toBe('requested');
+  });
+
+  it('WhatsApp desconocido: teléfono y texto viajan en input (para responder sin parsear el detalle)', async () => {
+    const { medplum, creados } = fake();
+    await crearAlertaRecepcion(medplum, {
+      titulo: 'WhatsApp de número desconocido',
+      detalle: 'escribió: "Hola!"',
+      tipo: TIPO_AVISO.whatsappDesconocido,
+      datos: { telefono: '+5491134278858', texto: 'Hola!', perfil: undefined },
+    });
+    const input = creados[0]?.input as Array<{ type: { text: string }; valueString: string }>;
+    expect(input.find((i) => i.type.text === 'tipo')?.valueString).toBe(TIPO_AVISO.whatsappDesconocido);
+    expect(input.find((i) => i.type.text === 'telefono')?.valueString).toBe('+5491134278858');
+    expect(input.find((i) => i.type.text === 'texto')?.valueString).toBe('Hola!');
+    // Los datos vacíos no ensucian el Task.
+    expect(input.some((i) => i.type.text === 'perfil')).toBe(false);
   });
 });

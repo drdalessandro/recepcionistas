@@ -1,4 +1,4 @@
-import type { Invoice } from '@medplum/fhirtypes';
+import type { Communication, Invoice } from '@medplum/fhirtypes';
 import { medplum } from '../medplum';
 
 /**
@@ -121,10 +121,26 @@ export async function reservarCombo(input: ComboInput): Promise<ResultadoCombo> 
   return (await medplum.executeBot(id, input)) as ResultadoCombo;
 }
 
-/** Envía un WhatsApp (y registra Communication). Best-effort: usado para el resumen de la pre-agenda. */
-export async function enviarWhatsApp(input: { pacienteRef: string; template: string; body: string }): Promise<void> {
+/**
+ * Envía un WhatsApp (y registra Communication).
+ *
+ * - `pacienteRef` → el teléfono sale de la ficha; `to` → número suelto (E.164),
+ *   para responderle a un WhatsApp de número desconocido desde Avisos.
+ * - `mensajeId` espeja un mensaje de la bandeja (texto + adjuntos) al WhatsApp:
+ *   es lo que hace que responder desde Mensajes llegue al celular del paciente.
+ *
+ * Devuelve la Communication del envío: `status: 'completed'` = Twilio lo tomó;
+ * 'preparation' = faltan credenciales/teléfono; 'entered-in-error' = rechazo.
+ */
+export async function enviarWhatsApp(input: {
+  template: string;
+  body: string;
+  pacienteRef?: string;
+  to?: string;
+  mensajeId?: string;
+}): Promise<Communication> {
   const id = await botIdPorNombre('bw-enviar-whatsapp');
-  await medplum.executeBot(id, input);
+  return (await medplum.executeBot(id, input)) as Communication;
 }
 
 export type EstadoTurno = 'arrived' | 'checked-in' | 'fulfilled' | 'cancelled';
@@ -304,10 +320,12 @@ export async function fusionarPaciente(entrada: EntradaFusion): Promise<Resultad
  * Espeja un mensaje de la bandeja al WhatsApp del paciente (bw-enviar-whatsapp).
  * Con `mensajeId`, el bot lee esa Communication y espeja también sus adjuntos
  * (las URLs Binary salen presignadas y Twilio las descarga como MediaUrl).
- * Fire-and-forget: la respuesta ya quedó en el hilo; si el WhatsApp falla, la
- * Communication del bot queda en preparation/entered-in-error para diagnóstico.
+ *
+ * Devuelve la Communication del envío para que quien llame sepa si SALIÓ:
+ * antes esto era fire-and-forget con `.catch(() => undefined)` y un WhatsApp
+ * caído se veía igual que uno entregado — la recepcionista creía haber
+ * contestado y el paciente nunca recibía nada.
  */
-export async function espejarWhatsApp(pacienteRef: string, body: string, mensajeId?: string): Promise<void> {
-  const id = await botIdPorNombre('bw-enviar-whatsapp');
-  await medplum.executeBot(id, { pacienteRef, template: 'mensaje-recepcion', body, mensajeId });
+export async function espejarWhatsApp(pacienteRef: string, body: string, mensajeId?: string): Promise<Communication> {
+  return enviarWhatsApp({ pacienteRef, template: 'mensaje-recepcion', body, mensajeId });
 }
