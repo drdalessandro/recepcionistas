@@ -273,6 +273,21 @@ export function buildSlotMedico(m: Medico, descriptor: SlotDescriptor, scheduleR
   };
 }
 
+/**
+ * ¿Es el Schedule de la agenda publicada de un médico?
+ *
+ * Los Schedule de médicos NO llevan la extensión `recurso-fisico` (su actor es
+ * el Practitioner, no una sala), así que las auditorías que definen "canónico"
+ * por esa extensión los daban por ajenos — y `npm run limpiar -- --apply`
+ * los habría BORRADO con todos sus Slots, tumbando la agenda del portal.
+ * Se reconocen por su identifier canónico `SCH_<codigo del médico>`.
+ */
+export function esScheduleDeMedico(sch: Schedule): boolean {
+  return (sch.identifier ?? []).some(
+    (i) => i.system === SYSTEM.recursoCodigo && MEDICOS.some((m) => i.value === `SCH_${m.codigo}`),
+  );
+}
+
 /** Horario semanal (shape de HORARIO_SEMANAL) armado desde la agenda del médico. */
 export function horarioDeAgendaMedico(m: Medico): HorarioDia[] {
   return Array.from({ length: 7 }, (_, dia) => {

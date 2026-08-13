@@ -18,6 +18,7 @@ import { buildSeed, buildSlot, buildSlotMedico, horarioDeAgendaMedico } from './
 import { HORARIO_ES_PLACEHOLDER, HORARIO_SEMANAL } from '../config/horario.js';
 import { RECURSOS } from '../config/recursos.js';
 import { MEDICOS, codigoConsulta } from '../config/medicos.js';
+import { solapamientosDeAgendas } from '../lib/agenda-medicos.js';
 import { getServicio } from '../config/catalogo.js';
 import { CONTRAINDICACIONES } from '../config/contraindicaciones.js';
 import { generarSlots } from '../lib/slots.js';
@@ -72,6 +73,10 @@ async function main(): Promise<void> {
     }
     if (HORARIO_ES_PLACEHOLDER) {
       console.log('   ⚠️  Usando horario PLACEHOLDER: los Slot serán provisionales.');
+    }
+    // Un solo consultorio: dos médicos en la misma franja compiten por él.
+    for (const c of solapamientosDeAgendas(MEDICOS)) {
+      console.log(`   ⚠️  ${c.detalle}`);
     }
   }
 

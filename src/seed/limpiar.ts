@@ -5,8 +5,13 @@
  *   npm run limpiar -- --apply → elimina los Schedule no canónicos y sus Slots.
  *
  * "Canónico" = Schedule cuya extensión recurso-fisico apunta a un recurso del
- * catálogo (src/config/recursos.ts). Todo lo demás (otra convención de nombres,
- * la sede como recurso, duplicados de otro origen) se considera ajeno.
+ * catálogo (src/config/recursos.ts) **o** la agenda publicada de un médico
+ * (identifier `SCH_MED_*`). Todo lo demás (otra convención de nombres, la sede
+ * como recurso, duplicados de otro origen) se considera ajeno.
+ *
+ * Las agendas de médicos se protegen explícitamente: su Schedule no lleva la
+ * extensión recurso-fisico (el actor es el Practitioner), así que sin esta
+ * salvedad `--apply` borraba la agenda del portal con todos sus Slots.
  *
  * Solo toca Schedule + Slot (datos de agenda). No borra Location ni Patient.
  */
@@ -15,10 +20,11 @@ import { MedplumClient } from '@medplum/core';
 import type { Schedule } from '@medplum/fhirtypes';
 import { RECURSOS_POR_CODIGO } from '../config/recursos.js';
 import { EXT } from '../fhir/identifiers.js';
+import { esScheduleDeMedico } from './builders.js';
 
 function esCanonica(sch: Schedule): boolean {
   const code = sch.extension?.find((e) => e.url === EXT.recursoFisico)?.valueString;
-  return Boolean(code && RECURSOS_POR_CODIGO.has(code));
+  return Boolean(code && RECURSOS_POR_CODIGO.has(code)) || esScheduleDeMedico(sch);
 }
 
 function requireEnv(nombre: string): string {

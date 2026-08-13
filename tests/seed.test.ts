@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { buildSeed, buildSlotMedico, horarioDeAgendaMedico } from '../src/seed/builders.js';
+import { buildScheduleMedico, buildSeed, buildSlotMedico, esScheduleDeMedico, horarioDeAgendaMedico } from '../src/seed/builders.js';
 import { generarSlots } from '../src/lib/slots.js';
 import { getServicio } from '../src/config/catalogo.js';
 import { MEDICOS } from '../src/config/medicos.js';
@@ -17,7 +17,8 @@ describe('Seed — composición', () => {
     expect(seed.membresias.length).toBe(10);
     expect(seed.paquetes.length).toBe(18);
     expect(seed.locations.length).toBe(14); // 13 + Puesto IV 2 (handoff v9)
-    expect(seed.schedules.length).toBe(15); // 14 salas + agenda publicada del Director Médico
+    // 14 salas + las 3 agendas médicas publicadas (Conrado, D'Alessandro, Dos Santos).
+    expect(seed.schedules.length).toBe(17);
     expect(seed.practitioners.length).toBe(3);
   });
 });
@@ -218,5 +219,30 @@ describe('Seed — agenda publicada del Director Médico (miércoles 17-20)', ()
     const slot = buildSlotMedico(conrado, slots[0]!, 'Schedule/xyz');
     expect(slot.status).toBe('free');
     expect(slot.identifier?.some((i) => i.system === SYSTEM.sidRecurso && i.value === 'bw-slot-conrado-2026-07-22T17:00:00-03:00')).toBe(true);
+  });
+});
+
+describe('Seed — agendas de médicos (portal → Consulta médica)', () => {
+  it('El Schedule de un médico NO es "ajeno": limpiar --apply no puede borrar su agenda', () => {
+    const conAgenda = MEDICOS.filter((m) => (m.agenda?.length ?? 0) > 0);
+    expect(conAgenda.length).toBeGreaterThan(0);
+    for (const m of conAgenda) {
+      expect(esScheduleDeMedico(buildScheduleMedico(m))).toBe(true);
+    }
+    // Un Schedule cualquiera (o uno hecho a mano sin el identifier canónico) sí lo es.
+    expect(esScheduleDeMedico({ resourceType: 'Schedule', actor: [] })).toBe(false);
+  });
+
+  it('La agenda declarada se traduce a horario semanal (solo los días con franjas quedan abiertos)', () => {
+    const conrado = MEDICOS.find((m) => m.codigo === 'MED_CONRADO')!;
+    const horario = horarioDeAgendaMedico(conrado);
+    expect(horario).toHaveLength(7);
+    const abiertos = horario.filter((h) => h.abierto).map((h) => h.dia);
+    expect(abiertos).toEqual(conrado.agenda!.map((f) => f.dia));
+  });
+
+  it('El seed solo publica Schedule de los médicos CON agenda declarada', () => {
+    const publicados = seed.schedules.filter((s) => esScheduleDeMedico(s));
+    expect(publicados).toHaveLength(MEDICOS.filter((m) => (m.agenda?.length ?? 0) > 0).length);
   });
 });
