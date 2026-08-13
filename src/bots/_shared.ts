@@ -2,7 +2,7 @@
  * Helpers compartidos por los bots de agenda (acceden a FHIR; no son "lib pura").
  */
 import type { BotEvent, MedplumClient } from '@medplum/core';
-import type { Appointment, ChargeItem, Communication, Coverage, Flag, Invoice, Task } from '@medplum/fhirtypes';
+import type { Appointment, ChargeItem, Communication, Coverage, Flag, Invoice, Task, TaskInput } from '@medplum/fhirtypes';
 import { COD, 
   CONFIG_TC_ID,
   EXT,
@@ -592,13 +592,34 @@ export async function quitarBloqueoPago(medplum: MedplumClient, pacienteRef: str
 }
 
 /**
- * Alerta operativa para recepción (aparece como Task / Solicitudes).
+ * Alerta operativa para recepción → **vista Avisos**.
+ *
+ * El `code.coding` con `COD.avisoRecepcion` es lo que la hace encontrable: sin
+ * él (como estaba hasta 2026-08-12) el Task se creaba con el título solo en
+ * `code.text`, y como las búsquedas FHIR por token no miran el texto, ninguna
+ * pantalla lo listaba — el aviso quedaba en la base sin que nadie lo viera.
+ *
+ * `datos` viaja como `Task.input` (mismo patrón que la solicitud de turno):
+ * son los campos que la vista necesita en formato máquina para ofrecer
+ * acciones (p. ej. responder por WhatsApp a un número desconocido), en vez de
+ * tener que parsear el texto del detalle.
+ *
  * Con `clave` es idempotente: si ya existe la alerta con ese identifier no se
  * duplica (p. ej. reintentos del webhook de MercadoPago).
  */
 export async function crearAlertaRecepcion(
   medplum: MedplumClient,
-  opts: { titulo: string; detalle: string; pacienteRef?: string; focusRef?: string; clave?: string },
+  opts: {
+    titulo: string;
+    detalle: string;
+    pacienteRef?: string;
+    focusRef?: string;
+    clave?: string;
+    /** Subtipo (TIPO_AVISO) para habilitar acciones específicas en la vista. */
+    tipo?: string;
+    /** Datos estructurados del aviso: {telefono, texto, perfil, …}. */
+    datos?: Record<string, string | undefined>;
+  },
 ): Promise<Task> {
   if (opts.clave) {
     const existente = await medplum.searchOne('Task', `identifier=${SYSTEM.task}|${opts.clave}`);
@@ -606,14 +627,21 @@ export async function crearAlertaRecepcion(
       return existente;
     }
   }
+  const input: TaskInput[] = [
+    ...(opts.tipo ? [{ type: { text: 'tipo' }, valueString: opts.tipo }] : []),
+    ...Object.entries(opts.datos ?? {})
+      .filter(([, v]) => Boolean(v))
+      .map(([k, v]) => ({ type: { text: k }, valueString: v as string })),
+  ];
   return medplum.createResource<Task>({
     resourceType: 'Task',
     status: 'requested',
     intent: 'order',
     priority: 'urgent',
-    code: { text: opts.titulo },
+    code: { coding: [{ system: SYSTEM.taskTipo, code: COD.avisoRecepcion }], text: opts.titulo },
     description: opts.detalle,
     authoredOn: new Date().toISOString(),
+    ...(input.length ? { input } : {}),
     ...(opts.clave ? { identifier: [{ system: SYSTEM.task, value: opts.clave }] } : {}),
     ...(opts.pacienteRef ? { for: { reference: opts.pacienteRef } } : {}),
     ...(opts.focusRef ? { focus: { reference: opts.focusRef } } : {}),

@@ -11,12 +11,12 @@ import {
   useMantineColorScheme,
   useComputedColorScheme,
 } from '@mantine/core';
-import { IconCalendarEvent, IconUserHeart, IconChartBar, IconCashBanknote, IconLicense, IconLogout, IconSun, IconMoon, IconInbox, IconMessages, IconUsersGroup } from '@tabler/icons-react';
+import { IconCalendarEvent, IconUserHeart, IconChartBar, IconCashBanknote, IconLicense, IconLogout, IconSun, IconMoon, IconInbox, IconMessages, IconUsersGroup, IconAlertTriangle } from '@tabler/icons-react';
 import { useMedplum, useMedplumProfile } from '@medplum/react';
 import { getDisplayString } from '@medplum/core';
 import { CampanitaNovedades } from './CampanitaNovedades';
 
-export type Vista = 'agenda' | 'solicitudes' | 'duplicados' | 'mensajes' | 'planes' | 'atender' | 'reportes' | 'caja';
+export type Vista = 'agenda' | 'solicitudes' | 'avisos' | 'duplicados' | 'mensajes' | 'planes' | 'atender' | 'reportes' | 'caja';
 
 interface ShellProps {
   vista: Vista;
@@ -32,6 +32,7 @@ export function Shell({ vista, onVista, children }: ShellProps): JSX.Element {
   const oscuro = esquema === 'dark';
   const [mensajesSinLeer, setMensajesSinLeer] = useState(0);
   const [solicitudesPendientes, setSolicitudesPendientes] = useState(0);
+  const [avisosPendientes, setAvisosPendientes] = useState(0);
 
   return (
     <AppShell header={{ height: 64 }} padding="md">
@@ -59,6 +60,7 @@ export function Shell({ vista, onVista, children }: ShellProps): JSX.Element {
               { value: 'agenda', label: segLabel(<IconCalendarEvent size={15} />, 'Agenda') },
               { value: 'solicitudes', label: segLabel(<IconInbox size={15} />, 'Solicitudes', solicitudesPendientes, 'red') },
               { value: 'mensajes', label: segLabel(<IconMessages size={15} />, 'Mensajes', mensajesSinLeer) },
+              { value: 'avisos', label: segLabel(<IconAlertTriangle size={15} />, 'Avisos', avisosPendientes, 'red') },
               { value: 'planes', label: segLabel(<IconLicense size={15} />, 'Planes') },
               { value: 'duplicados', label: segLabel(<IconUsersGroup size={15} />, 'Duplicados') },
               { value: 'reportes', label: segLabel(<IconChartBar size={15} />, 'Reportes') },
@@ -74,6 +76,7 @@ export function Shell({ vista, onVista, children }: ShellProps): JSX.Element {
               onVista={onVista}
               onMensajesSinLeer={setMensajesSinLeer}
               onSolicitudesPendientes={setSolicitudesPendientes}
+              onAvisosPendientes={setAvisosPendientes}
             />
             <ActionIcon
               variant="default"

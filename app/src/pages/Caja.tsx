@@ -19,7 +19,7 @@ import { IconCashBanknote, IconInfoCircle, IconLock } from '@tabler/icons-react'
 import type { Basic, Invoice, PaymentReconciliation, Task } from '@medplum/fhirtypes';
 import { medplum } from '../medplum';
 import { mensajeError } from '../lib/bots';
-import { EXT, SYSTEM } from '@bw/fhir/identifiers';
+import { COD, EXT, SYSTEM } from '@bw/fhir/identifiers';
 import {
   CAJA_FONDO_FIJO_ARS,
   CAJA_TOPE_GASTO_ARS,
@@ -356,13 +356,15 @@ function CerrarCaja({
         arqueoAPaymentReconciliation(r, { desdeISO: estado.desdeISO, hastaISO: new Date().toISOString() }),
       );
       if (!r.cuadra) {
-        // Alerta a Administración: la diferencia no puede pasar en silencio.
+        // Alerta: la diferencia no puede pasar en silencio. Con el code de
+        // aviso aparece en la vista Avisos y en la campanita (antes se creaba
+        // solo con code.text y no la veía nadie).
         await medplum.createResource<Task>({
           resourceType: 'Task',
           status: 'requested',
           intent: 'order',
           priority: 'urgent',
-          code: { text: 'Diferencia en arqueo de caja' },
+          code: { coding: [{ system: SYSTEM.taskTipo, code: COD.avisoRecepcion }], text: 'Diferencia en arqueo de caja' },
           description: `Arqueo con diferencia de ${ars(r.diferenciaARS)}: contado ${ars(r.contadoARS)} vs esperado ${ars(r.esperadoARS)}. Revisar con Administración.`,
         });
       }

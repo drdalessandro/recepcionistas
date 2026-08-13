@@ -1,13 +1,15 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActionIcon, Badge, Group, Indicator, Popover, Stack, Text, UnstyledButton } from '@mantine/core';
-import { IconBell, IconInbox, IconMessages } from '@tabler/icons-react';
+import { IconAlertTriangle, IconBell, IconInbox, IconMessages } from '@tabler/icons-react';
 import { useMedplum, useSubscription } from '@medplum/react';
 import type { Bundle, Communication } from '@medplum/fhirtypes';
+import { COD } from '@bw/fhir/identifiers';
 import type { Vista } from './Shell';
 
 /**
- * Campanita de novedades de Recepción: solicitudes de turno pendientes y mensajes
- * de pacientes sin leer. Tiempo real por WebSocket (useSubscription; requiere la
+ * Campanita de novedades de Recepción: solicitudes de turno pendientes, avisos
+ * del sistema (WhatsApp de números desconocidos, pagos a revisar, diferencias de
+ * caja) y mensajes de pacientes sin leer. Tiempo real por WebSocket (useSubscription; requiere la
  * entrada Subscription websocket en la policy "Recepción — Operativo") con polling
  * de respaldo (montar / foco / cada 60 s), igual que la campanita del portal.
  * Tocar una fila navega a la vista correspondiente.
@@ -24,16 +26,20 @@ export function CampanitaNovedades({
   onVista,
   onMensajesSinLeer,
   onSolicitudesPendientes,
+  onAvisosPendientes,
 }: {
   onVista: (v: Vista) => void;
   /** Avisa al Shell cuántos mensajes de pacientes hay sin leer (badge de la pestaña Mensajes). */
   onMensajesSinLeer?: (n: number) => void;
   /** Avisa al Shell cuántas solicitudes de turno hay pendientes (badge rojo de la pestaña Solicitudes). */
   onSolicitudesPendientes?: (n: number) => void;
+  /** Avisa al Shell cuántos avisos del sistema hay sin resolver (badge rojo de la pestaña Avisos). */
+  onAvisosPendientes?: (n: number) => void;
 }): JSX.Element {
   const medplum = useMedplum();
   const [abierta, setAbierta] = useState(false);
   const [solicitudes, setSolicitudes] = useState(0);
+  const [avisos, setAvisos] = useState(0);
   const [mensajes, setMensajes] = useState(0);
 
   const abiertaRef = useRef(false);
@@ -52,6 +58,14 @@ export function CampanitaNovedades({
       })
       .catch(() => undefined);
     medplum
+      .get(`fhir/R4/Task?code=${COD.avisoRecepcion}&status=requested&_count=0&_total=accurate`, { cache: 'no-cache' })
+      .then((b) => {
+        const n = (b as Bundle).total ?? 0;
+        setAvisos(n);
+        onAvisosPendientes?.(n);
+      })
+      .catch(() => undefined);
+    medplum
       .searchResources(
         'Communication',
         // _elements=sender: solo necesitamos saber QUIÉN mandó cada mensaje sin
@@ -66,7 +80,7 @@ export function CampanitaNovedades({
         onMensajesSinLeer?.(n);
       })
       .catch(() => undefined);
-  }, [medplum, onMensajesSinLeer, onSolicitudesPendientes]);
+  }, [medplum, onMensajesSinLeer, onSolicitudesPendientes, onAvisosPendientes]);
 
   useEffect(() => {
     refrescar();
@@ -85,12 +99,16 @@ export function CampanitaNovedades({
     onError: () => undefined,
     onWebSocketClose: () => undefined,
   });
+  useSubscription(`Task?code=${COD.avisoRecepcion}`, refrescar, {
+    onError: () => undefined,
+    onWebSocketClose: () => undefined,
+  });
   useSubscription('Communication?sent:missing=false', refrescar, {
     onError: () => undefined,
     onWebSocketClose: () => undefined,
   });
 
-  const total = solicitudes + mensajes;
+  const total = solicitudes + avisos + mensajes;
 
   const ir = (v: Vista): void => {
     setAbierta(false);
@@ -128,6 +146,17 @@ export function CampanitaNovedades({
               </Group>
               <Badge color={solicitudes > 0 ? 'red' : 'gray'} variant={solicitudes > 0 ? 'filled' : 'light'}>
                 {solicitudes}
+              </Badge>
+            </Group>
+          </UnstyledButton>
+          <UnstyledButton onClick={() => ir('avisos')} p="sm">
+            <Group justify="space-between" wrap="nowrap">
+              <Group gap="xs" wrap="nowrap">
+                <IconAlertTriangle size={18} />
+                <Text size="sm">Avisos del sistema sin resolver</Text>
+              </Group>
+              <Badge color={avisos > 0 ? 'red' : 'gray'} variant={avisos > 0 ? 'filled' : 'light'}>
+                {avisos}
               </Badge>
             </Group>
           </UnstyledButton>

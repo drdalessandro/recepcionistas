@@ -10,6 +10,7 @@ import { PlanesSesiones } from './pages/PlanesSesiones';
 import { Atender, type ReservaPrefill } from './pages/Atender';
 import { Reportes } from './pages/Reportes';
 import { Caja } from './pages/Caja';
+import { Avisos } from './pages/Avisos';
 
 export function App(): JSX.Element {
   const profile = useMedplumProfile();
@@ -34,6 +35,7 @@ export function App(): JSX.Element {
     <Shell vista={vista} onVista={setVista}>
       {vista === 'agenda' && <AgendaDelDia />}
       {vista === 'solicitudes' && <Solicitudes onAtender={irAtender} />}
+      {vista === 'avisos' && <Avisos onAtender={irAtender} />}
       {vista === 'duplicados' && <Duplicados />}
       {vista === 'mensajes' && <Mensajes />}
       {vista === 'planes' && <PlanesSesiones onAtender={irAtender} />}
