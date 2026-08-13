@@ -135,6 +135,19 @@ describe('Seed — AccessPolicy Paciente — Portal (los dos usos de Coverage)',
     ).toBe(true);
   });
 
+  it('Estudios de laboratorio: lee todos los suyos, pero solo puede CREAR propuestas', () => {
+    const portal = seed.accessPolicies.find((p) => p.name === 'Paciente — Portal')!;
+    const srs = (portal.resource ?? []).filter((r) => r.resourceType === 'ServiceRequest');
+    // Sin ninguna entrada, hasta la búsqueda del portal daba 403 (2026-08-13).
+    expect(srs).toHaveLength(2);
+    // Lectura amplia: también las órdenes que le indica el médico.
+    expect(srs.some((r) => r.readonly === true && r.criteria === 'ServiceRequest?subject=%patient')).toBe(true);
+    // Escritura acotada: jamás una orden médica autorizada.
+    const escribible = srs.find((r) => !r.readonly)!;
+    expect(escribible.criteria).toBe('ServiceRequest?subject=%patient&intent=proposal,plan');
+    expect(escribible.criteria).not.toContain('intent=order');
+  });
+
   it('El paciente solo puede ejecutar los bots del portal (solicitar-turno y disponibilidad)', () => {
     const portal = seed.accessPolicies.find((p) => p.name === 'Paciente — Portal')!;
     const bot = (portal.resource ?? []).find((r) => r.resourceType === 'Bot')!;

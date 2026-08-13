@@ -168,6 +168,19 @@ export const POLICY_PACIENTE_PORTAL: AccessPolicy = {
     },
     { resourceType: 'Invoice', readonly: true, criteria: 'Invoice?subject=%patient' },
     { resourceType: 'DiagnosticReport', readonly: true, criteria: 'DiagnosticReport?subject=%patient' },
+    // Estudios de laboratorio (portal → "Mis estudios"). Mismo patrón de dos
+    // entradas que Coverage: lectura amplia de lo propio + escritura ACOTADA.
+    //  - Lee TODAS sus ServiceRequest: las que pide él y las que le indica el
+    //    médico (si la lectura se acotara a `proposal`, el paciente dejaría de
+    //    ver sus órdenes reales).
+    //  - Solo puede CREAR propuestas: una solicitud del portal es un pedido,
+    //    nunca una orden médica autorizada. `intent=order` queda fuera de su
+    //    alcance, así que no puede auto-indicarse estudios.
+    // Sin estas entradas ServiceRequest no existía en la policy y hasta la
+    // BÚSQUEDA daba 403 (2026-08-13: el portal no podía ni listar los pedidos,
+    // y mostraba "No pudimos registrar tu solicitud").
+    { resourceType: 'ServiceRequest', readonly: true, criteria: 'ServiceRequest?subject=%patient' },
+    { resourceType: 'ServiceRequest', criteria: 'ServiceRequest?subject=%patient&intent=proposal,plan' },
     // CarePlan escribible: "Mi plan" del portal marca acciones (Empezar/Lograda)
     // con updateResource (portal/src/pages/care-plan/ActionItems.tsx).
     { resourceType: 'CarePlan', criteria: 'CarePlan?subject=%patient' },
