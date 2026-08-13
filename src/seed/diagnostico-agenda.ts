@@ -18,7 +18,12 @@ import 'dotenv/config';
 import { MedplumClient } from '@medplum/core';
 import type { Bundle, Schedule, Slot } from '@medplum/fhirtypes';
 import { RECURSOS, RECURSOS_POR_CODIGO } from '../config/recursos.js';
+import { MEDICOS } from '../config/medicos.js';
 import { EXT, SYSTEM } from '../fhir/identifiers.js';
+import { esScheduleDeMedico } from './builders.js';
+
+/** Nombre corto del día para imprimir la agenda declarada (0=domingo). */
+const DIAS = ['dom', 'lun', 'mar', 'mié', 'jue', 'vie', 'sáb'];
 
 function requireEnv(nombre: string): string {
   const v = process.env[nombre];
@@ -58,11 +63,35 @@ async function main(): Promise<void> {
     );
   }
 
-  // 2) Todo lo demás que haya en el servidor (duplicados / convenciones viejas).
+  // 2) Agendas PUBLICADAS de médicos (las que el portal ofrece en "Consulta
+  //    médica"). Sin Schedule canónico o sin slots libres, el portal muestra
+  //    "no tiene horarios libres publicados" aunque el médico atienda.
+  console.log('\n=== Agendas de médicos (portal → Consulta médica) ===');
+  for (const m of MEDICOS) {
+    const franjas = m.agenda ?? [];
+    const declarada = franjas.length
+      ? franjas.map((f) => `${DIAS[f.dia] ?? f.dia} ${f.desde}-${f.hasta}`).join(', ')
+      : 'SIN agenda en src/config/medicos.ts';
+    const sch = await medplum.searchOne('Schedule', `identifier=${SYSTEM.recursoCodigo}|SCH_${m.codigo}`);
+    if (!sch?.id) {
+      console.log(`  ${franjas.length ? '✗' : '·'} ${m.nombre.padEnd(28)} ${declarada} · sin Schedule canónico`);
+      continue;
+    }
+    const libres = await contar(medplum, 'Slot', `schedule=Schedule/${sch.id}&status=free&start=ge${ahora}`);
+    const ocupados = await contar(medplum, 'Slot', `schedule=Schedule/${sch.id}&status=busy&start=ge${ahora}`);
+    const marca = libres > 0 ? '✓' : '✗';
+    console.log(
+      `  ${marca} ${m.nombre.padEnd(28)} ${declarada} · Schedule/${sch.id} · ${libres} libres, ${ocupados} ocupados`,
+    );
+  }
+  console.log('  (0 libres con agenda declarada => falta materializar: npm run seed -- --with-slots --dias=30)');
+
+  // 3) Todo lo demás que haya en el servidor (duplicados / convenciones viejas).
+  //    Las agendas de médicos NO son ajenas aunque no tengan recurso-fisico.
   const todos = await medplum.searchResources('Schedule', { _count: 200 });
   const ajenos = (todos as Schedule[]).filter((s) => {
     const code = s.extension?.find((e) => e.url === EXT.recursoFisico)?.valueString;
-    return !(code && RECURSOS_POR_CODIGO.has(code));
+    return !(code && RECURSOS_POR_CODIGO.has(code)) && !esScheduleDeMedico(s);
   });
   console.log(`\n=== Schedules en el servidor: ${todos.length} (ajenos/no canónicos: ${ajenos.length}) ===`);
   for (const s of ajenos) {
@@ -73,7 +102,7 @@ async function main(): Promise<void> {
     console.log('  (estos son los que borra `npm run limpiar -- --apply`; el bot de reserva NO los usa)');
   }
 
-  // 3) Veredicto.
+  // 4) Veredicto.
   console.log('\n=== Veredicto ===');
   if (faltantes === 0) {
     console.log('✓ Los 13 Schedules canónicos están. Si la reserva igual falla, revisá los permisos del bot.');
