@@ -26,6 +26,17 @@ ve **solo lo suyo** vía la AccessPolicy **"Paciente — Portal"**
   idéntico. `Coverage`/`Invoice`/`Appointment` son de **solo lectura** para el
   paciente; escribe solo su autogestión (perfil, vitales, cuestionarios,
   consentimientos, mensajes).
+- **`ServiceRequest` — estudios de laboratorio (2026-08-13).** `ServiceRequest`
+  no estaba en la policy: el portal ni siquiera podía **buscar** los pedidos del
+  paciente (403 en `GET ServiceRequest?subject=Patient/…`, con el cartel *"No
+  pudimos registrar tu solicitud"* en "Mis estudios"). Se agregaron dos entradas,
+  el mismo patrón de Coverage: **lectura** amplia de lo propio
+  (`ServiceRequest?subject=%patient`, incluidas las órdenes que le indica el
+  médico) y **escritura acotada a propuestas**
+  (`…&intent=proposal,plan`) — una solicitud del portal es un pedido, nunca una
+  orden médica autorizada, así que el paciente no puede auto-indicarse estudios.
+  ⚠️ Si el portal crea la solicitud con `intent=order`, el 403 sigue: lo correcto
+  es que mande `proposal`. Actualizar el espejo del portal con estas entradas.
 - **Reserva por *solicitud* (implementada).** El paciente pide desde el portal y se
   crea un `Task` (`code=solicitud-turno`) vía el bot **`bw-solicitar-turno`**
   (lógica pura en `src/lib/solicitudes.ts`), que avisa a Recepción por WhatsApp
