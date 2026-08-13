@@ -19,6 +19,7 @@ import { MedplumClient } from '@medplum/core';
 import type { Bundle, Schedule, Slot } from '@medplum/fhirtypes';
 import { RECURSOS, RECURSOS_POR_CODIGO } from '../config/recursos.js';
 import { MEDICOS } from '../config/medicos.js';
+import { solapamientosDeAgendas } from '../lib/agenda-medicos.js';
 import { EXT, SYSTEM } from '../fhir/identifiers.js';
 import { esScheduleDeMedico } from './builders.js';
 
@@ -85,6 +86,16 @@ async function main(): Promise<void> {
     );
   }
   console.log('  (0 libres con agenda declarada => falta materializar: npm run seed -- --with-slots --dias=30)');
+
+  // Superposiciones: hay UN consultorio, así que dos médicos en la misma
+  // franja compiten por él (el portal ofrece las dos, R-07 deja reservar una).
+  const cruces = solapamientosDeAgendas(MEDICOS);
+  if (cruces.length > 0) {
+    console.log(`\n  ⚠️  ${cruces.length} superposición(es) de agenda:`);
+    for (const c of cruces) {
+      console.log(`     - ${c.detalle}`);
+    }
+  }
 
   // 3) Todo lo demás que haya en el servidor (duplicados / convenciones viejas).
   //    Las agendas de médicos NO son ajenas aunque no tengan recurso-fisico.

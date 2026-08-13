@@ -32,8 +32,29 @@ export interface Medico {
 }
 
 export const MEDICOS: Medico[] = [
-  { codigo: 'MED_DALESSANDRO', nombre: "Dr. Alejandro D'Alessandro", esDirector: false, precioConsultaARS: 120_000 },
-  { codigo: 'MED_DOS_SANTOS', nombre: 'Dra. Stephanie Dos Santos', esDirector: false, precioConsultaARS: 120_000 },
+  {
+    codigo: 'MED_DALESSANDRO',
+    nombre: "Dr. Alejandro D'Alessandro",
+    esDirector: false,
+    precioConsultaARS: 120_000,
+    // Definido por Andrés (2026-08-13).
+    agenda: [
+      { dia: 2, desde: '16:00', hasta: '20:00' }, // Martes
+      { dia: 3, desde: '08:00', hasta: '12:00' }, // Miércoles
+      { dia: 4, desde: '16:00', hasta: '20:00' }, // Jueves
+    ],
+  },
+  {
+    codigo: 'MED_DOS_SANTOS',
+    nombre: 'Dra. Stephanie Dos Santos',
+    esDirector: false,
+    precioConsultaARS: 120_000,
+    // Definido por Andrés (2026-08-13). ⚠️ SE SUPERPONE con la agenda del Dr.
+    // Conrado (miércoles 17-20) y hay UN solo consultorio: el portal ofrece
+    // los dos horarios, pero la regla R-07 deja reservar solo uno por franja
+    // (el segundo paciente se rechaza). `npm run agenda:check` lo reporta.
+    agenda: [{ dia: 3, desde: '17:00', hasta: '20:00' }], // Miércoles
+  },
   {
     codigo: 'MED_CONRADO',
     nombre: 'Dr. Conrado López Alonso',

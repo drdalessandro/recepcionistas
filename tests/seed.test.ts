@@ -17,7 +17,8 @@ describe('Seed — composición', () => {
     expect(seed.membresias.length).toBe(10);
     expect(seed.paquetes.length).toBe(18);
     expect(seed.locations.length).toBe(14); // 13 + Puesto IV 2 (handoff v9)
-    expect(seed.schedules.length).toBe(15); // 14 salas + agenda publicada del Director Médico
+    // 14 salas + las 3 agendas médicas publicadas (Conrado, D'Alessandro, Dos Santos).
+    expect(seed.schedules.length).toBe(17);
     expect(seed.practitioners.length).toBe(3);
   });
 });
