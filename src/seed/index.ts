@@ -18,7 +18,7 @@ import { buildSeed, buildSlot, buildSlotMedico, horarioDeAgendaMedico } from './
 import { HORARIO_ES_PLACEHOLDER, HORARIO_SEMANAL } from '../config/horario.js';
 import { RECURSOS } from '../config/recursos.js';
 import { MEDICOS, codigoConsulta } from '../config/medicos.js';
-import { solapamientosDeAgendas } from '../lib/agenda-medicos.js';
+import { reconciliarSlots, solapamientosDeAgendas } from '../lib/agenda-medicos.js';
 import { getServicio } from '../config/catalogo.js';
 import { CONTRAINDICACIONES } from '../config/contraindicaciones.js';
 import { generarSlots } from '../lib/slots.js';
@@ -109,6 +109,12 @@ async function main(): Promise<void> {
 
 /** Genera y carga los Slot de cada recurso, referenciando su Schedule. */
 async function generarYCargarSlots(medplum: MedplumClient, dias: number): Promise<void> {
+  // Ventana que este seed regenera: desde ahora hasta `dias` días. Solo dentro
+  // de ella se reconcilian las agendas de médicos (más allá no hay nada
+  // generado con qué comparar, así que nada se juzga ni se borra).
+  const desde = new Date();
+  const horizonte = new Date(desde.getTime() + dias * 24 * 60 * 60 * 1000);
+
   // Mapa recursoCodigo -> id del Schedule (ya creado en la fase anterior).
   const scheduleId = new Map<string, string>();
   for (const r of RECURSOS) {
@@ -141,13 +147,42 @@ async function generarYCargarSlots(medplum: MedplumClient, dias: number): Promis
     const deMedico = generarSlots(
       [{ codigo: m.codigo, nombre: m.nombre, tipo: 'CONSULTORIO', capacidad: 1 }],
       horarioDeAgendaMedico(m),
-      { desde: new Date(), dias, granularidadMin: dur },
+      { desde, dias, granularidadMin: dur },
     );
     const rm = await crearSlotsEnLotes(
       medplum,
       deMedico.map((desc) => buildSlotMedico(m, desc, `Schedule/${sch.id}`)),
     );
     console.log(`  ✓ Agenda ${m.nombre}: ${rm.creados} slots nuevos (${rm.existentes} ya existían)`);
+
+    // Reconciliación: si la agenda CAMBIÓ (una franja se movió de día u hora),
+    // los slots libres viejos seguirían publicados y el portal ofrecería un
+    // horario en el que el médico ya no atiende. Se borran los libres que ya
+    // no corresponden, dentro de la ventana regenerada. Los `busy` son turnos
+    // dados: no se tocan, se reportan para que Recepción los reubique.
+    const publicados = await withRetry(() =>
+      medplum.searchResources('Slot', {
+        schedule: `Schedule/${sch.id}`,
+        start: `ge${desde.toISOString()}`,
+        _count: 2000,
+      }),
+    );
+    const { aBorrar, ocupadosFuera } = reconciliarSlots(
+      publicados,
+      deMedico.map((d) => d.inicio),
+      { desde, hasta: horizonte },
+    );
+    for (const id of aBorrar) {
+      await withRetry(() => medplum.deleteResource('Slot', id));
+    }
+    if (aBorrar.length > 0) {
+      console.log(`     ↳ ${aBorrar.length} slot(s) libre(s) de la agenda anterior eliminados.`);
+    }
+    for (const s of ocupadosFuera) {
+      console.log(
+        `     ⚠️  Turno RESERVADO fuera de la agenda nueva: ${s.start} (Slot/${s.id}). No se tocó: reubicalo con el paciente.`,
+      );
+    }
   }
 }
 

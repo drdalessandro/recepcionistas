@@ -4,7 +4,7 @@
  * 2026-08-13.
  */
 import { describe, it, expect } from 'vitest';
-import { solapamientosDeAgendas } from '../src/lib/agenda-medicos.js';
+import { reconciliarSlots, solapamientosDeAgendas } from '../src/lib/agenda-medicos.js';
 import { MEDICOS, MEDICOS_POR_CODIGO, codigoConsulta } from '../src/config/medicos.js';
 import { getServicio } from '../src/config/catalogo.js';
 import { horarioDeAgendaMedico } from '../src/seed/builders.js';
@@ -41,6 +41,16 @@ describe('Agenda publicada — franjas declaradas', () => {
     expect(inicios).toHaveLength(12); // 3 días × 4 turnos
   });
 
+  it('Conrado: viernes 17-20 (3 turnos), ya no el miércoles', () => {
+    const inicios = slotsDeUnaSemana('MED_CONRADO');
+    expect(inicios).toEqual([
+      '2026-08-21T17:00:00-03:00',
+      '2026-08-21T18:00:00-03:00',
+      '2026-08-21T19:00:00-03:00',
+    ]);
+    expect(inicios.some((i) => i.startsWith('2026-08-19'))).toBe(false); // miércoles: liberado
+  });
+
   it('Dos Santos: miércoles 17-20 (3 turnos)', () => {
     const inicios = slotsDeUnaSemana('MED_DOS_SANTOS');
     expect(inicios).toEqual([
@@ -63,19 +73,30 @@ describe('Agenda publicada — franjas declaradas', () => {
 });
 
 describe('solapamientosDeAgendas — un solo consultorio', () => {
-  it('Detecta el cruce real: Dos Santos y Conrado comparten miércoles 17-20', () => {
-    const cruces = solapamientosDeAgendas(MEDICOS);
-    const miercoles = cruces.find((c) => c.dia === 3 && c.desde === '17:00' && c.hasta === '20:00');
-    expect(miercoles).toBeDefined();
-    expect([miercoles!.medicoA, miercoles!.medicoB].sort()).toEqual([
-      'Dr. Conrado López Alonso',
-      'Dra. Stephanie Dos Santos',
-    ]);
+  it('Las agendas reales NO se pisan: Conrado pasó a viernes y liberó el miércoles', () => {
+    // Andrés, 2026-08-13: Conrado miércoles 17-20 → viernes 17-20, justamente
+    // porque chocaba con Dos Santos. Este test es el que lo mantiene resuelto.
+    expect(solapamientosDeAgendas(MEDICOS)).toEqual([]);
+    expect(MEDICOS_POR_CODIGO.get('MED_CONRADO')!.agenda).toEqual([{ dia: 5, desde: '17:00', hasta: '20:00' }]);
   });
 
-  it("D'Alessandro no cruza con nadie (miércoles a la mañana, los otros a la tarde)", () => {
-    const cruces = solapamientosDeAgendas(MEDICOS);
-    expect(cruces.some((c) => c.medicoA.includes('Alessandro') || c.medicoB.includes('Alessandro'))).toBe(false);
+  it('Detecta un cruce cuando lo hay (el caso que había el 13/08)', () => {
+    const cruces = solapamientosDeAgendas([
+      { codigo: 'A', nombre: 'Dra. X', esDirector: false, precioConsultaARS: 1, agenda: [{ dia: 3, desde: '17:00', hasta: '20:00' }] },
+      { codigo: 'B', nombre: 'Dr. Y', esDirector: true, precioConsultaARS: 1, agenda: [{ dia: 3, desde: '17:00', hasta: '20:00' }] },
+    ]);
+    expect(cruces).toHaveLength(1);
+    expect(cruces[0]).toMatchObject({ dia: 3, desde: '17:00', hasta: '20:00' });
+    expect(cruces[0]!.detalle).toContain('un solo consultorio');
+  });
+
+  it('Cruce parcial: solo se reporta la franja compartida', () => {
+    const cruces = solapamientosDeAgendas([
+      { codigo: 'A', nombre: 'A', esDirector: false, precioConsultaARS: 1, agenda: [{ dia: 2, desde: '16:00', hasta: '20:00' }] },
+      { codigo: 'B', nombre: 'B', esDirector: false, precioConsultaARS: 1, agenda: [{ dia: 2, desde: '19:00', hasta: '22:00' }] },
+    ]);
+    expect(cruces).toHaveLength(1);
+    expect(cruces[0]).toMatchObject({ desde: '19:00', hasta: '20:00' });
   });
 
   it('Tocarse no es superponerse (una termina cuando la otra empieza)', () => {
@@ -92,5 +113,58 @@ describe('solapamientosDeAgendas — un solo consultorio', () => {
       { codigo: 'B', nombre: 'B', esDirector: false, precioConsultaARS: 1 },
     ]);
     expect(sinAgenda).toEqual([]);
+  });
+});
+
+describe('reconciliarSlots — cambiar una agenda no deja horarios fantasma', () => {
+  const desde = new Date('2026-08-17T00:00:00-03:00');
+  const hasta = new Date('2026-09-16T00:00:00-03:00');
+  // Conrado se movió de miércoles a viernes: lo esperado ahora es el viernes.
+  const esperados = ['2026-08-21T17:00:00-03:00', '2026-08-21T18:00:00-03:00'];
+
+  it('Borra los libres que ya no corresponden y conserva los vigentes', () => {
+    const r = reconciliarSlots(
+      [
+        { id: 'viejo1', start: '2026-08-19T17:00:00-03:00', status: 'free' }, // miércoles: sobra
+        { id: 'viejo2', start: '2026-08-19T18:00:00-03:00', status: 'free' },
+        { id: 'vigente', start: '2026-08-21T17:00:00-03:00', status: 'free' }, // viernes: queda
+      ],
+      esperados,
+      { desde, hasta },
+    );
+    expect(r.aBorrar).toEqual(['viejo1', 'viejo2']);
+    expect(r.ocupadosFuera).toEqual([]);
+  });
+
+  it('Un turno RESERVADO fuera de la agenda nueva no se borra: se reporta', () => {
+    const r = reconciliarSlots(
+      [{ id: 'conPaciente', start: '2026-08-19T17:00:00-03:00', status: 'busy' }],
+      esperados,
+      { desde, hasta },
+    );
+    expect(r.aBorrar).toEqual([]);
+    expect(r.ocupadosFuera.map((s) => s.id)).toEqual(['conPaciente']);
+  });
+
+  it('Compara instantes, no strings: el server devuelve UTC y el generador -03:00', () => {
+    const r = reconciliarSlots(
+      // Mismo momento que '2026-08-21T17:00:00-03:00', escrito en UTC.
+      [{ id: 'mismoMomento', start: '2026-08-21T20:00:00.000Z', status: 'free' }],
+      esperados,
+      { desde, hasta },
+    );
+    expect(r.aBorrar).toEqual([]);
+  });
+
+  it('Fuera de la ventana regenerada no se toca nada (ni antes ni después)', () => {
+    const r = reconciliarSlots(
+      [
+        { id: 'pasado', start: '2026-08-12T17:00:00-03:00', status: 'free' },
+        { id: 'lejano', start: '2026-10-14T17:00:00-03:00', status: 'free' },
+      ],
+      esperados,
+      { desde, hasta },
+    );
+    expect(r.aBorrar).toEqual([]);
   });
 });

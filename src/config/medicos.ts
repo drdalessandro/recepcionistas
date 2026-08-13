@@ -49,10 +49,7 @@ export const MEDICOS: Medico[] = [
     nombre: 'Dra. Stephanie Dos Santos',
     esDirector: false,
     precioConsultaARS: 120_000,
-    // Definido por Andrés (2026-08-13). ⚠️ SE SUPERPONE con la agenda del Dr.
-    // Conrado (miércoles 17-20) y hay UN solo consultorio: el portal ofrece
-    // los dos horarios, pero la regla R-07 deja reservar solo uno por franja
-    // (el segundo paciente se rechaza). `npm run agenda:check` lo reporta.
+    // Definido por Andrés (2026-08-13).
     agenda: [{ dia: 3, desde: '17:00', hasta: '20:00' }], // Miércoles
   },
   {
@@ -62,8 +59,11 @@ export const MEDICOS: Medico[] = [
     // PROVISORIO: el Director Médico cobra más; confirmar monto con Andrés.
     precioConsultaARS: 150_000,
     precioProvisorio: true,
-    // Definido por Alejandro (2026-07-26): atiende los miércoles de 17 a 20.
-    agenda: [{ dia: 3, desde: '17:00', hasta: '20:00' }],
+    // Andrés (2026-08-13): pasa a VIERNES 17-20. Antes era miércoles 17-20
+    // (Alejandro, 2026-07-26), que chocaba con la Dra. Dos Santos por el
+    // único consultorio. Al mover la franja, el seed borra los slots libres
+    // del miércoles que ya no corresponden (ver reconciliación en seed/index).
+    agenda: [{ dia: 5, desde: '17:00', hasta: '20:00' }],
   },
 ];
 

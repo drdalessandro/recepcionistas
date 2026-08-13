@@ -43,6 +43,13 @@ secretaria pueda, en el entorno de prueba:
       (`generarSlots`) y **semáforo** verde/amarillo/rojo (`estadoRecurso`) listos;
       horario (L-V 08-22, Sáb 08-20) y las 13 salas confirmados → la agenda real
       se carga con `npm run seed -- --with-slots`;
+- [x] **agendas de médicos publicadas al portal** (`agenda` en
+      `src/config/medicos.ts` → Schedule + Slots libres de 60 min): D'Alessandro
+      martes y jueves 16-20 + miércoles 8-12, Dos Santos miércoles 17-20,
+      Conrado viernes 17-20. Al cambiar una franja, el seed **reconcilia**:
+      borra los slots libres que ya no corresponden (nunca los reservados) para
+      que el portal no siga ofreciendo un horario viejo. Hay un solo
+      consultorio: si dos agendas se pisan, el seed y `agenda:check` lo avisan;
 - [x] ver el **banner de contraindicaciones** verde/rojo sin acceder a la historia
       clínica (`bannerSeguridad`, AccessPolicy de recepción);
 - [x] que el sistema **calcule el monto a cobrar** incluido USD→ARS
@@ -62,4 +69,5 @@ Andrés (horario de atención y lista definitiva de salas). Ver
 npm run verify                          # typecheck + 62 tests (casos AC del Anexo A)
 npm run seed -- --dry-run               # construye 131 recursos FHIR sin Medplum
 npm run seed -- --dry-run --with-slots  # + cuenta los Slot de la agenda (7 días)
+npm run agenda:check                    # estado real: Schedules, slots y agendas médicas
 ```
