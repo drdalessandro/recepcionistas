@@ -187,7 +187,7 @@ describe('Seed — AccessPolicy de recepción (privacidad por diseño)', () => {
   });
 });
 
-describe('Seed — agenda publicada del Director Médico (miércoles 17-20)', () => {
+describe('Seed — agenda publicada del Director Médico (viernes 17-20)', () => {
   const conrado = MEDICOS.find((m) => m.codigo === 'MED_CONRADO')!;
 
   it('El Schedule lleva el identifier canónico Y el del contrato del portal, con el Practitioner como actor', () => {
@@ -203,22 +203,23 @@ describe('Seed — agenda publicada del Director Médico (miércoles 17-20)', ()
     expect(sch.actor?.[0]?.reference).toContain('MED_CONRADO');
   });
 
-  it('Su agenda genera exactamente 3 slots de 60 min los miércoles (17, 18 y 19) y nada otros días', () => {
+  it('Su agenda genera exactamente 3 slots de 60 min los viernes (17, 18 y 19) y nada otros días', () => {
     const dur = getServicio('CONSULTA_MED_CONRADO').duracionMin;
     const slots = generarSlots(
       [{ codigo: conrado.codigo, nombre: conrado.nombre, tipo: 'CONSULTORIO', capacidad: 1 }],
       horarioDeAgendaMedico(conrado),
       { desde: new Date('2026-07-20T12:00:00-03:00'), dias: 7, granularidadMin: dur },
     );
+    // Viernes 24/07 (antes era miércoles 22/07: Andrés lo movió el 2026-08-13).
     expect(slots.map((s) => s.inicio)).toEqual([
-      '2026-07-22T17:00:00-03:00',
-      '2026-07-22T18:00:00-03:00',
-      '2026-07-22T19:00:00-03:00',
+      '2026-07-24T17:00:00-03:00',
+      '2026-07-24T18:00:00-03:00',
+      '2026-07-24T19:00:00-03:00',
     ]);
     // El Slot que persiste el seed lleva la convención bw-slot-* del portal.
     const slot = buildSlotMedico(conrado, slots[0]!, 'Schedule/xyz');
     expect(slot.status).toBe('free');
-    expect(slot.identifier?.some((i) => i.system === SYSTEM.sidRecurso && i.value === 'bw-slot-conrado-2026-07-22T17:00:00-03:00')).toBe(true);
+    expect(slot.identifier?.some((i) => i.system === SYSTEM.sidRecurso && i.value === 'bw-slot-conrado-2026-07-24T17:00:00-03:00')).toBe(true);
   });
 });
 

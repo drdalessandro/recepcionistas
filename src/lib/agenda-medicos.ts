@@ -19,6 +19,70 @@ function aMinutos(hhmm: string): number {
   return (h ?? 0) * 60 + (m ?? 0);
 }
 
+/** Slot ya existente en el servidor (lo mínimo que necesita la reconciliación). */
+export interface SlotPublicado {
+  id?: string;
+  start?: string;
+  status?: string;
+}
+
+export interface Reconciliacion {
+  /** Ids de slots LIBRES que ya no corresponden a la agenda: hay que borrarlos. */
+  aBorrar: string[];
+  /**
+   * Slots RESERVADOS que quedaron fuera de la agenda nueva. No se tocan (hay un
+   * paciente con turno dado): se reportan para que Recepción los reubique.
+   */
+  ocupadosFuera: SlotPublicado[];
+}
+
+/**
+ * Qué hacer con los slots ya publicados cuando cambia la agenda de un médico.
+ *
+ * El seed solo CREA slots (nunca pisa uno existente, porque uno reservado está
+ * `busy`). Eso está bien para extender la agenda, pero al MOVER una franja
+ * —Conrado de miércoles a viernes— los slots libres viejos se quedaban
+ * publicados para siempre y el portal seguía ofreciendo un horario en el que
+ * el médico ya no atiende.
+ *
+ * Reglas:
+ *  - Solo dentro de la ventana que el seed acaba de regenerar (`desde`/`hasta`):
+ *    lo que está más allá del horizonte no se juzga, no se toca.
+ *  - Solo slots LIBRES. Uno `busy` es un turno dado: jamás se borra.
+ *  - Se comparan instantes, no strings: el server puede devolver el mismo
+ *    momento en UTC ("...T20:00:00.000Z") y el generador en hora argentina
+ *    ("...T17:00:00-03:00").
+ */
+export function reconciliarSlots(
+  existentes: readonly SlotPublicado[],
+  esperadosISO: readonly string[],
+  opts: { desde: Date; hasta: Date },
+): Reconciliacion {
+  const esperados = new Set(esperadosISO.map((i) => new Date(i).getTime()));
+  const aBorrar: string[] = [];
+  const ocupadosFuera: SlotPublicado[] = [];
+  for (const s of existentes) {
+    if (!s.start) {
+      continue;
+    }
+    const t = new Date(s.start).getTime();
+    if (Number.isNaN(t) || t < opts.desde.getTime() || t > opts.hasta.getTime()) {
+      continue; // fuera de la ventana regenerada: no se juzga
+    }
+    if (esperados.has(t)) {
+      continue; // sigue vigente
+    }
+    if (s.status === 'busy') {
+      ocupadosFuera.push(s);
+      continue; // turno dado: se reporta, no se toca
+    }
+    if (s.id) {
+      aBorrar.push(s.id);
+    }
+  }
+  return { aBorrar, ocupadosFuera };
+}
+
 export interface SolapamientoAgenda {
   medicoA: string;
   medicoB: string;
