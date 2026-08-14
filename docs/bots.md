@@ -33,13 +33,13 @@ deployan al runtime **`awslambda`** de Medplum (configurable con la env
 | `bw-pagar-sena` | Registra la seña (50%), confirma el turno (pending→booked), **emite el Invoice pendiente del saldo restante** (`saldo-{turno}`, `issued`) y envía WhatsApp de confirmación (informa el saldo). Si la tentativa ya venció/canceló, NO confirma (R-19). | `executeBot` (clic en turno tentativo). |
 | `bw-link-mercadopago` | Genera un link de MercadoPago por la seña (`concepto:'sena'`, default; expira con la tentativa, R-19) o por el **saldo restante** (`concepto:'saldo'`, lee el Invoice pendiente). | `executeBot` (turno tentativo → seña · turno confirmado → saldo). |
 | `bw-webhook-mercadopago` | Webhook de MP: verifica el pago contra la API de MP y confirma el turno automáticamente al acreditarse. Un pago tardío sobre una tentativa vencida NO confirma: alerta a Recepción (devolver o reagendar). | URL pública que llama MercadoPago. |
-| `bw-vencer-tentativas` | **Cron R-19 (seña autoservicio):** a los 60 min del vencimiento manda el último recordatorio con el mismo link; al vencer (2 h de la reserva, nunca después del inicio del turno) cancela el/los turno(s), libera las salas y avisa al paciente (WhatsApp + portal). Antes de cancelar relee el turno (no pisa una seña que entró en el medio). El lugar liberado se ofrece a la **lista de espera** por la misma vía que una cancelación. | `cronTimer` del Bot (cada ~10 min). |
+| `bw-vencer-tentativas` | **Cron R-19 (seña autoservicio):** a los 60 min del vencimiento manda el último recordatorio con el mismo link; al vencer (2 h de la reserva, nunca después del inicio del turno) cancela el/los turno(s), libera las salas y avisa al paciente (WhatsApp + portal). Antes de cancelar relee el turno (no pisa una seña que entró en el medio). El lugar liberado se ofrece a la **lista de espera** por la misma vía que una cancelación. | `cronString` del Bot (cada ~10 min). |
 | `bw-asignar-plan` | Asigna una membresía/paquete. **Presencial** (efectivo/tarjeta/transferencia): Coverage `active` + Invoice `balanced` + bienvenida. **MercadoPago**: Coverage `draft` (PENDIENTE, sin sesiones por R-10) + Invoice `issued` sin ChargeItem + link de pago por WhatsApp; la activación, la bienvenida y el ChargeItem salen recién cuando el webhook acredita el pago (`resolverInvoicePlan`). Anti-duplicado: si el mismo plan ya está pendiente, regenera el link en vez de crear otro. | `executeBot` desde el front (Atender → Planes). |
-| `bw-cobro-membresias` | **Cron días 1-5:** renueva cada membresía activa (reset de sesiones + cobro mensual + WhatsApp). | `cronTimer` del Bot (a diario). |
-| `bw-recordatorios` | **Cron:** recuerda los turnos confirmados a 48 h y 2 h por WhatsApp. | `cronTimer` del Bot (cada ~30 min). |
+| `bw-cobro-membresias` | **Cron días 1-5:** renueva cada membresía activa (reset de sesiones + cobro mensual + WhatsApp). | `cronString` del Bot (a diario). |
+| `bw-recordatorios` | **Cron:** recuerda los turnos confirmados a 48 h y 2 h por WhatsApp. | `cronString` del Bot (cada ~30 min). |
 | `bw-alta-paciente` | Alta de cliente: crea/actualiza el `Patient` (dedupe por DNI/email/teléfono). Con `cicloVida:'lead'` registra además la consulta del mostrador (tarjeta en el kanban del CRM + `Provenance` de atribución). Si viene `pedido` —pidió algo que **no ofrecemos**— deja su propio `Basic` de demanda no cubierta, **también cuando el paciente ya existía**: la tarjeta de lead solo se crea para fichas nuevas y ese dato no puede depender de eso. | `executeBot` (Atender → Nuevo paciente / Registrar consulta). |
 | `bw-invitar-paciente` | Invita al paciente al **portal** (invite de Medplum) y entrega el link por WhatsApp/email/QR. **Requiere admin.** | `executeBot` (Atender → Invitar al portal). |
-| `bw-limpiar-demo` | **Cron:** borra los datos demo (tag `demo`) con más de 48 h. | `cronTimer` del Bot (cada ~1 h). |
+| `bw-limpiar-demo` | **Cron:** borra los datos demo (tag `demo`) con más de 48 h. | `cronString` del Bot (cada ~1 h). |
 | `bw-enviar-whatsapp` | Envía WhatsApp (Twilio) y registra `Communication`. | `executeBot` por evento o manual. |
 | `bw-solicitar-turno` | **Portal:** crea una solicitud de turno (`Task` `code=solicitud-turno`) del paciente y avisa a Recepción por WhatsApp (`RECEPCION_WHATSAPP_TO`). No reserva: Recepción confirma. **Desde 2026-08-12** (feedback de recepción): si la solicitud trae horario exacto + código de servicio, verifica contra la MISMA disponibilidad de `bw-disponibilidad` y un horario tomado se rechaza con `motivo:'horario-ocupado'` + `alternativas` (chips frescos) — defensa en profundidad aunque el portal muestre una grilla vieja (ver `docs/handoff-portal-reservas-notificaciones.md`). Best-effort: si el chequeo falla, la solicitud pasa como siempre. | `executeBot` desde el **portal** del paciente. |
 | `bw-disponibilidad` | **Portal, SOLO LECTURA:** horarios reservables para el paciente (chips de Reservas): ventana por perfil R-13 (`tag-fm` → FM · membresía → intensidad · si no, público), capacidad R-07, desfasaje Recovery y horario del centro. También descuenta las **solicitudes pendientes** (Task sin resolver con horario elegido: individual → el horario no se ofrece; Multiplaza → resta cupo), con vencimiento de 24 h para que un Task olvidado no bloquee. Multiplaza sale como sesión grupal con `lugares`/`ocupantes` (solo confirmados). Cada día trae además sus **`ocupados`** (horarios de la grilla ya tomados por agenda, solicitud pendiente o cupo grupal agotado): el portal los pinta tachados, no elegibles (misma UX que Consulta médica). No crea nada: la reserva sigue siendo solicitud. | `executeBot` desde el **portal** del paciente. |
@@ -49,7 +49,6 @@ deployan al runtime **`awslambda`** de Medplum (configurable con la env
 | `bw-dedup-paciente` | Subscription sobre `Patient` (create/update): detecta fichas duplicadas por email/DNI (variantes con/sin puntos)/teléfono y abre una Task `posible-duplicado`. El descarte es durable (candidatos ya revisados no se reabren). Nunca fusiona solo. | Subscription rest-hook (ver abajo). |
 | `bw-fusionar-paciente` | Fusiona un duplicado en la canónica: valida estados (no invierte fusiones viejas), inactiva+enlaza el duplicado PRIMERO (evita tareas espurias del propio dedup), completa datos sin pisar, reapunta el login, reasigna lo del interín paginando (incl. `recipient` de Communication y solicitudes de turno) y cierra la Task + cancela las espejo. **Requiere membership admin.** | `executeBot` (vista Duplicados). |
 | `bw-whatsapp-entrante` | Webhook de Twilio: un WhatsApp del paciente entra a su hilo activo de Mensajes (match por teléfono con variantes AR; número desconocido → aviso `Task code=aviso-recepcion` tipo `whatsapp-desconocido`, con teléfono y texto en `input`: aparece en la vista **Avisos**, desde donde se le responde por WhatsApp o se le crea la ficha). Los adjuntos (fotos, PDFs, audios) se descargan de Twilio y quedan como Binary en el hilo. Valida la firma X-Twilio-Signature. Idempotente por MessageSid. | nginx `/webhooks/twilio-whatsapp` (ver abajo). |
-| `bw-recordatorios` | **Cron horario:** recordatorios de turno (24h/1h) y de saldo en riesgo, por WhatsApp **y** email. | `cronTimer` del Bot (cada hora). |
 
 ## Lista de espera: qué pasa cuando se libera un lugar
 
@@ -208,8 +207,8 @@ vigencia en días); las membresías no vencen (se renuevan por ciclo).
 
 ### Cron de `bw-cobro-membresias`
 
-El reset/cobro mensual lo dispara el `cronTimer` del Bot en Medplum. Configurarlo
-**una vez** (Bot → propiedad `cronTimer`, p. ej. `0 9 * * *` = 09:00 a diario).
+El reset/cobro mensual lo dispara el `cronString` del Bot en Medplum. Configurarlo
+**una vez** (Bot → campo `cronString`, p. ej. `0 9 * * *` = 09:00 a diario).
 El propio bot decide si actúa (días 1-5 y ciclo no facturado), así que correrlo
 todos los días es seguro e idempotente.
 
@@ -229,7 +228,7 @@ una corrida del cron se saltea, el siguiente tick lo manda igual.
 
 ### Cron de `bw-recordatorios`
 
-Configurar el `cronTimer` del Bot **una vez** (p. ej. `*/30 * * * *` = cada 30
+Configurar el `cronString` del Bot **una vez** (p. ej. `*/30 * * * *` = cada 30
 min). Cuanto más seguido corra, más cerca de las 48 h / 2 h exactas sale el aviso;
 la idempotencia evita duplicados. Necesita los mismos secretos de Twilio que
 `bw-enviar-whatsapp`.
@@ -288,12 +287,12 @@ npm run datos-demo -- --limpiar          # borra TODOS los datos demo
 npm run datos-demo -- --limpiar-vencidos # borra solo los demo de > 48 h
 ```
 
-Todo lo creado lleva `meta.tag = demo` (system `https://biowellness.ar/demo`). La
+Todo lo creado lleva `meta.tag = demo` (system `https://biowellness.ar/fhir/demo`). La
 limpieza borra **solo** lo etiquetado demo (por `_tag` + `_lastUpdated`); **nunca**
 toca datos reales.
 
 **Autodestrucción:** el bot **`bw-limpiar-demo`** (cron, p. ej. `0 * * * *` cada
-hora) borra los demo cuyo `_lastUpdated` supere las 48 h. Configurar su `cronTimer`
+hora) borra los demo cuyo `_lastUpdated` supere las 48 h. Configurar su `cronString`
 una vez en Medplum. Sin el cron, igual podés limpiar a mano con `--limpiar`.
 
 > El bot que borra necesita permiso de borrado sobre esos tipos (admin de proyecto

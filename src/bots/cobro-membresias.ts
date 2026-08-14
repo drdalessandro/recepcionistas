@@ -1,7 +1,7 @@
 /**
  * Bot · Cobro recurrente de membresías (cron, días 1-5).
  *
- * Pensado para ejecutarse a diario (Bot con cronTimer). En los días 1-5 del mes
+ * Pensado para ejecutarse a diario (Bot con cronString). En los días 1-5 del mes
  * (R-11) renueva cada membresía activa cuyo ciclo aún no fue facturado:
  *   - resetea las sesiones del mes (sesiones-usadas → 0; no acumulables, R-09);
  *   - actualiza el ciclo facturado (ciclo-mes);
