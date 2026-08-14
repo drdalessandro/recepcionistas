@@ -18,6 +18,11 @@ function ctx(over: Partial<ContextoReserva> & { servicioCodigo: string; recursoC
     contraindicacionesActivas: over.contraindicacionesActivas ?? [],
     prescripcionActiva: over.prescripcionActiva ?? false,
     consentimientoFirmado: over.consentimientoFirmado ?? false,
+    // R-20: por default el paciente está en regla (firmó y completó el ingreso),
+    // para que estos casos prueben SU regla y no se choquen con la aptitud. Los
+    // casos de R-20 propiamente dichos la pisan explícitamente.
+    consentimientoGeneralFirmado: over.consentimientoGeneralFirmado ?? true,
+    screeningCompleto: over.screeningCompleto ?? true,
     autorizacionMedica: over.autorizacionMedica ?? false,
     reservasExistentes: over.reservasExistentes ?? [],
     perfil: over.perfil,
@@ -192,5 +197,64 @@ describe('validarReserva', () => {
     );
     expect(r.ok).toBe(false);
     expect(r.bloqueos.some((b) => b.regla === 'R-02')).toBe(true);
+  });
+
+  // R-20 · el hallazgo del recorrido del walk-in (2026-08-14): el portal exigía
+  // consentimiento y screening, y el mostrador no — y el walk-in ES el mostrador.
+  // Sin override: decisión de Andrés.
+  describe('R-20 · sin consentimiento general ni cuestionario de ingreso no se reserva', () => {
+    const base = {
+      servicioCodigo: 'HBOT_MONO',
+      recursoCodigo: 'R_HBOT_MONO',
+      inicio: new Date('2026-06-22T09:00:00-03:00'),
+    };
+
+    it('sin consentimiento general => bloqueo, aunque sea HBOT (no solo TB como R-03)', () => {
+      const r = validarReserva(ctx({ ...base, consentimientoGeneralFirmado: false }));
+      expect(r.ok).toBe(false);
+      expect(r.bloqueos.some((b) => b.regla === 'R-20' && /no firmó/i.test(b.mensaje))).toBe(true);
+    });
+
+    it('sin cuestionario de ingreso => bloqueo', () => {
+      const r = validarReserva(ctx({ ...base, screeningCompleto: false }));
+      expect(r.ok).toBe(false);
+      expect(r.bloqueos.some((b) => b.regla === 'R-20' && /cuestionario de ingreso/i.test(b.mensaje))).toBe(true);
+    });
+
+    it('FALLA CERRADO: si no se pudo verificar, bloquea igual que si faltara', () => {
+      for (const campo of ['consentimientoGeneralFirmado', 'screeningCompleto'] as const) {
+        // Se pisa DESPUÉS de ctx(): el helper usa `?? true` y no distingue
+        // "no lo pasaron" de "vino undefined", que es justo lo que se prueba acá.
+        const r = validarReserva({ ...ctx({ ...base }), [campo]: undefined });
+        expect(r.ok).toBe(false);
+        expect(r.bloqueos.some((b) => b.regla === 'R-20' && /no pudimos verificar/i.test(b.mensaje))).toBe(true);
+      }
+    });
+
+    it('el walk-in recién creado (sin nada) junta los dos bloqueos', () => {
+      const r = validarReserva(ctx({ ...base, consentimientoGeneralFirmado: false, screeningCompleto: false }));
+      expect(r.ok).toBe(false);
+      expect(r.bloqueos.filter((b) => b.regla === 'R-20')).toHaveLength(2);
+    });
+
+    it('NO hay override: la autorización médica levanta R-02 pero nunca R-20', () => {
+      const r = validarReserva(
+        ctx({
+          ...base,
+          consentimientoGeneralFirmado: false,
+          screeningCompleto: false,
+          autorizacionMedica: true,
+          prescripcionActiva: true,
+          consentimientoFirmado: true,
+        }),
+      );
+      expect(r.ok).toBe(false);
+      expect(r.bloqueos.some((b) => b.regla === 'R-20')).toBe(true);
+    });
+
+    it('con las dos cosas en regla, la reserva pasa', () => {
+      const r = validarReserva(ctx({ ...base, consentimientoGeneralFirmado: true, screeningCompleto: true }));
+      expect(r.ok).toBe(true);
+    });
   });
 });
