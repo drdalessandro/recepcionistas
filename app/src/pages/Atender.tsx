@@ -54,6 +54,7 @@ import { MEDIOS_SELECT } from '../lib/medios';
 import { SYSTEM } from '@bw/fhir/identifiers';
 import { PreAgendaModal } from '../components/PreAgendaModal';
 import { InvitarPortal } from '../components/InvitarPortal';
+import { KioscoIngreso } from '../components/KioscoIngreso';
 import { NuevoPacienteModal } from '../components/NuevoPacienteModal';
 import { FoundingMember } from '../components/FoundingMember';
 import { esFm } from '@bw/fhir/founding';
@@ -210,6 +211,9 @@ function FichaPaciente({
 }): JSX.Element {
   const [planes, setPlanes] = useState<PlanPaciente[]>([]);
   const [versionPagos, setVersionPagos] = useState(0);
+  // Se incrementa al volver del kiosco, para que el banner relea la señal.
+  const [versionSeguridad, setVersionSeguridad] = useState(0);
+  const [kiosco, setKiosco] = useState(false);
   // Copia viva del Patient: marcar/quitar Founding lo actualiza sin re-buscar.
   const [pacienteActual, setPacienteActual] = useState(paciente);
 
@@ -241,7 +245,24 @@ function FichaPaciente({
           ← Volver a la búsqueda
         </Button>
       </Group>
-      <BannerSeguridad pacienteId={paciente.id!} version={versionPagos} />
+      <BannerSeguridad pacienteId={paciente.id!} version={versionSeguridad} />
+      {/* Kiosco: se le presta la tablet al paciente para que firme y conteste.
+          Al volver se refresca el banner, que es donde se ve el resultado. */}
+      <Group>
+        <Button
+          variant="light"
+          leftSection={<IconShieldCheck size={16} />}
+          onClick={() => setKiosco(true)}
+        >
+          Consentimiento y cuestionario (darle la tablet al paciente)
+        </Button>
+      </Group>
+      <KioscoIngreso
+        paciente={paciente}
+        abierto={kiosco}
+        onCerrar={() => setKiosco(false)}
+        onListo={() => setVersionSeguridad((v) => v + 1)}
+      />
       <PagosPendientes paciente={paciente} version={versionPagos} onCobrado={() => setVersionPagos((v) => v + 1)} />
       <InvitarPortal paciente={paciente} />
       <PanelPlanes paciente={paciente} planes={planes} onCambio={recargarPlanes} esFm={esFm(pacienteActual)} />

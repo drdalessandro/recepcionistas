@@ -1,4 +1,4 @@
-import type { Communication, Invoice } from '@medplum/fhirtypes';
+import type { Communication, Invoice, QuestionnaireResponseItem } from '@medplum/fhirtypes';
 import type { EstadoConsentimiento } from '@bw/lib/consentimiento';
 import type { ColorSeguridad, EstadoSeguridad } from '@bw/lib/seguridad';
 import { medplum } from '../medplum';
@@ -360,6 +360,42 @@ export async function estadoConsentimientoPaciente(
     return r?.estado ? r : { ok: false, estado: 'no-verificable' };
   } catch (e) {
     return { ok: false, estado: 'no-verificable', mensaje: mensajeError(e) };
+  }
+}
+
+export interface IngresoPresencialInput {
+  pacienteRef: string;
+  nombreFirma: string;
+  dni: string;
+  email?: string;
+  usoDatosAceptado?: boolean;
+  respuestasScreening?: QuestionnaireResponseItem[];
+}
+
+export interface ResultadoIngresoPresencial {
+  ok: boolean;
+  consentId?: string;
+  documentReferenceId?: string;
+  questionnaireResponseId?: string;
+  mensaje?: string;
+}
+
+/**
+ * Registra el consentimiento firmado y el cuestionario de ingreso del paciente
+ * que está PRESENTE en el mostrador (bw-ingreso-presencial).
+ *
+ * Escribe el bot y no la app porque la policy de recepción no incluye `Consent`,
+ * `DocumentReference` ni `QuestionnaireResponse` — ni debe.
+ */
+export async function registrarIngresoPresencial(
+  input: IngresoPresencialInput,
+): Promise<ResultadoIngresoPresencial> {
+  try {
+    const id = await botIdPorNombre('bw-ingreso-presencial');
+    const r = (await medplum.executeBot(id, input)) as ResultadoIngresoPresencial;
+    return r?.ok ? r : { ok: false, mensaje: r?.mensaje ?? 'No se pudo registrar el ingreso.' };
+  } catch (e) {
+    return { ok: false, mensaje: mensajeError(e) };
   }
 }
 
