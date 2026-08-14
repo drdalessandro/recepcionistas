@@ -5,16 +5,22 @@
  *   npm run seed:prueba-recordatorios                → upsert en Medplum (.env)
  *
  * Crea/actualiza (idempotente) un paciente de prueba con:
- *   - un TURNO confirmado a ~20h (dispara el recordatorio de 24h), y
- *   - una MEMBRESÍA activa con saldo libre (dispara "saldo en riesgo" cerca del
- *     cierre de mes).
+ *   - un TURNO confirmado a ~20 h, que cae en la ventana de **48 h** (las
+ *     ventanas son 48 h y 2 h: `RECORDATORIO_HORAS`), y
+ *   - una MEMBRESÍA activa con saldo libre.
  * Además limpia las Communication previas de ese paciente, para que cada corrida
  * deje el recordatorio listo para volver a dispararse.
  *
- * Luego, para probar el bot:
- *   npx medplum bot execute bw-recordatorios '{}'
- *   # si hoy faltan >7 días para fin de mes, forzá la ventana de saldo:
- *   npx medplum bot execute bw-recordatorios '{"ventanaSaldoDias":15}'
+ * Luego, para probar el bot A MANO (el id sale de medplum.config.json):
+ *   npx medplum post 'Bot/<id-de-bw-recordatorios>/$execute' '{}'
+ *
+ * ⚠️ `medplum bot execute` NO existe en el CLI (solo save/deploy/create), y el
+ * bot solo acepta `ahora` como input — no hay ventana de saldo: `bw-recordatorios`
+ * avisa turnos, no saldo en riesgo (eso vive en el dashboard de la app).
+ *
+ * ⚠️ Ejecutarlo a mano MANDA EL WHATSAPP DE VERDAD al teléfono del paciente de
+ * prueba. Y para probar que el **cron** dispara solo, no hay que ejecutarlo:
+ * correr este seed (que borra las Communication previas) y esperar el tick.
  */
 import 'dotenv/config';
 import { MedplumClient } from '@medplum/core';
@@ -36,7 +42,7 @@ const TELEFONO = process.env.PRUEBA_TELEFONO ?? '+5491100000000';
 const EMAIL = process.env.PRUEBA_EMAIL ?? 'prueba@biowellness.ar';
 
 function construir(ahora: Date) {
-  const inicio = new Date(ahora.getTime() + 20 * 60 * 60_000); // +20h → ventana de 24h
+  const inicio = new Date(ahora.getTime() + 20 * 60 * 60_000); // +20 h → cae en la ventana de 48 h (RECORDATORIO_HORAS = [48, 2])
   const fin = new Date(inicio.getTime() + 90 * 60_000);
   const ciclo = cicloMes(ahora);
 
@@ -127,7 +133,7 @@ async function main(): Promise<void> {
   console.log('=== Seed de prueba · bw-recordatorios ===');
   console.log(`  • Patient ${PATIENT_ID} (tel/email de respaldo: ${TELEFONO} / ${EMAIL})`);
   console.log(`  • Membresía ${PLAN}: ${SESIONES_MES - SESIONES_USADAS} de ${SESIONES_MES} libres · ciclo ${ciclo}`);
-  console.log(`  • Turno BIO RECOVERY 'booked' a las ${inicio.toLocaleString('es-AR')} (~20h → ventana 24h)`);
+  console.log(`  • Turno BIO RECOVERY 'booked' a las ${inicio.toLocaleString('es-AR')} (~20 h → recordatorio de 48 h)`);
 
   if (dryRun) {
     console.log('\n[dry-run] No se conecta a Medplum. Recursos construidos OK.');
@@ -160,9 +166,11 @@ async function main(): Promise<void> {
   }
   console.log(`  ✓ Communication previas borradas (${previas.length})`);
 
-  console.log('\nListo. Probá el bot:');
-  console.log("  npx medplum bot execute bw-recordatorios '{}'");
-  console.log("  npx medplum bot execute bw-recordatorios '{\"ventanaSaldoDias\":15}'   # si faltan >7 días para fin de mes");
+  console.log('\nListo.');
+  console.log('  · Para probar que el CRON dispara solo: NO ejecutes nada más, esperá el tick');
+  console.log('    y buscá una Communication con identifier recordatorio-48h-…');
+  console.log('  · Para probar el bot a mano (manda el WhatsApp de verdad):');
+  console.log("      npx medplum post 'Bot/<id-de-bw-recordatorios>/$execute' '{}'");
 }
 
 function requireEnv(nombre: string): string {
