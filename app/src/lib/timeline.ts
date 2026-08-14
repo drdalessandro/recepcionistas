@@ -38,7 +38,10 @@ export interface TimelineData {
   ahoraMin: number;
 }
 
-const ESTADOS_OCULTOS = new Set(['cancelled', 'entered-in-error']);
+// 'waitlist' es una espera, no un turno: no tiene horario y no ocupa nada.
+// Las búsquedas por `date=ge…` ya la dejan afuera (no tiene `start`); esto
+// es el segundo cerrojo, para que un cambio de índice no la meta en la agenda.
+const ESTADOS_OCULTOS = new Set(['cancelled', 'entered-in-error', 'waitlist']);
 
 function hhmmAMin(hhmm: string): number {
   const [h, m] = hhmm.split(':').map(Number);

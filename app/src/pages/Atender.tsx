@@ -28,6 +28,7 @@ import {
   IconLicense,
   IconUserPlus,
   IconMessageQuestion,
+  IconHourglass,
 } from '@tabler/icons-react';
 import type { Invoice, Patient } from '@medplum/fhirtypes';
 import { COD_CONSENTIMIENTO } from '@bw/fhir/identifiers';
@@ -58,6 +59,9 @@ import { PreAgendaModal } from '../components/PreAgendaModal';
 import { InvitarPortal } from '../components/InvitarPortal';
 import { KioscoIngreso } from '../components/KioscoIngreso';
 import { NuevoPacienteModal } from '../components/NuevoPacienteModal';
+import { ListaEsperaModal } from '../components/ListaEsperaModal';
+import { cargarEsperas, quitarEspera } from '../lib/espera';
+import { resumenEspera, type EntradaEspera } from '@bw/lib/lista-espera';
 import { RegistrarConsulta } from '../components/RegistrarConsulta';
 import { FoundingMember } from '../components/FoundingMember';
 import { esFm } from '@bw/fhir/founding';
@@ -841,6 +845,23 @@ function PanelReserva({
   const [resultadoCombo, setResultadoCombo] = useState<ResultadoCombo | null>(null);
   const [reservando, setReservando] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Lista de espera: para cuando no hay lugar (que es cuando este panel falla).
+  const [esperaAbierta, setEsperaAbierta] = useState(false);
+  const [esperas, setEsperas] = useState<EntradaEspera[]>([]);
+  const [quitando, setQuitando] = useState<string>();
+
+  const recargarEsperas = useCallback((): void => {
+    if (!paciente.id) {
+      return;
+    }
+    cargarEsperas({ pacienteRef: `Patient/${paciente.id}` })
+      .then(setEsperas)
+      .catch(() => setEsperas([]));
+  }, [paciente.id]);
+
+  useEffect(() => {
+    recargarEsperas();
+  }, [recargarEsperas]);
 
   const esCombo = seleccion ? COMBOS.some((c) => c.codigo === seleccion) : false;
   const servicio = !esCombo && seleccion ? SERVICIOS.find((s) => s.codigo === seleccion) : undefined;
@@ -1067,7 +1088,58 @@ function PanelReserva({
           >
             {esCombo ? 'Reservar combo' : 'Reservar turno'}
           </Button>
+          {/* El momento en que hace falta es exactamente este: se quiso reservar
+              y no había lugar. Por eso el botón vive al lado del de reservar y
+              no en otra pantalla. */}
+          <Button
+            variant="subtle"
+            leftSection={<IconHourglass size={16} />}
+            onClick={() => setEsperaAbierta(true)}
+            disabled={esCombo}
+            title={esCombo ? 'La lista de espera es por terapia, no por combo' : undefined}
+          >
+            No hay lugar: anotar en la lista de espera
+          </Button>
         </Group>
+
+        {esperas.length > 0 && (
+          <Alert variant="light" color="gray" icon={<IconHourglass size={16} />} title="Está esperando lugar">
+            <Stack gap={4}>
+              {esperas.map((e) => (
+                <Group key={e.id} justify="space-between" wrap="nowrap" gap="xs">
+                  <Text size="sm">{resumenEspera(e, nombreDeServicio(e.servicioCodigo))}</Text>
+                  <Button
+                    size="compact-xs"
+                    variant="subtle"
+                    color="gray"
+                    loading={quitando === e.id}
+                    onClick={() => {
+                      if (!e.id) {
+                        return;
+                      }
+                      setQuitando(e.id);
+                      quitarEspera(e.id, 'Dada de baja en el mostrador')
+                        .then(recargarEsperas)
+                        .catch(() => undefined)
+                        .finally(() => setQuitando(undefined));
+                    }}
+                  >
+                    Quitar
+                  </Button>
+                </Group>
+              ))}
+            </Stack>
+          </Alert>
+        )}
+
+        <ListaEsperaModal
+          abierto={esperaAbierta}
+          pacienteRef={`Patient/${paciente.id}`}
+          pacienteNombre={getDisplayString(paciente)}
+          servicioInicial={esCombo ? null : seleccion}
+          onCerrar={() => setEsperaAbierta(false)}
+          onAnotado={recargarEsperas}
+        />
 
         {error && (
           <Alert color="orange" icon={<IconInfoCircle size={16} />}>
@@ -1091,6 +1163,11 @@ function PanelReserva({
                 </List.Item>
               ))}
             </List>
+            {/* Si el bloqueo fue por falta de lugar, este es el segundo mejor
+                resultado posible: que quede anotado y se le avise al liberarse. */}
+            <Button size="compact-xs" variant="light" mt="xs" onClick={() => setEsperaAbierta(true)}>
+              Anotarlo en la lista de espera
+            </Button>
           </Alert>
         )}
 
@@ -1124,6 +1201,12 @@ function PanelReserva({
       </Stack>
     </Card>
   );
+}
+
+/** Nombre de mostrador del servicio; si no está en el catálogo, el código crudo. */
+function nombreDeServicio(codigo: string): string {
+  const s = SERVICIOS.find((x) => x.codigo === codigo);
+  return s ? nombreServicioRecepcion(s) : codigo;
 }
 
 /**

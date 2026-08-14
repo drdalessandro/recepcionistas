@@ -117,6 +117,15 @@ export const EXT = {
   cancelacionFuerzaMayor: `${BASE}/StructureDefinition/cancelacion-fuerza-mayor`,
   /** R-14 · quién declaró la fuerza mayor (valueString con la referencia). */
   cancelacionDeclaradaPor: `${BASE}/StructureDefinition/cancelacion-declarada-por`,
+  /**
+   * Lista de espera · días de la semana que le sirven, CSV con la convención de
+   * `Date.getDay()` ("2,4" = martes y jueves). Vacío/ausente = cualquier día.
+   * FHIR R4 modela la ventana (`requestedPeriod`) pero no la preferencia dentro
+   * de la ventana, que es justo lo que evita avisar de un horario imposible.
+   */
+  esperaDias: `${BASE}/StructureDefinition/espera-dias`,
+  /** Lista de espera · franjas del día que le sirven (CSV: manana|tarde|noche). */
+  esperaFranjas: `${BASE}/StructureDefinition/espera-franjas`,
 } as const;
 
 /** Sistemas de codificación / identificadores de negocio. */
@@ -257,6 +266,12 @@ export const INTAKE_QUESTIONNAIRE_URL = 'https://biowellness.ar/Questionnaire/in
 export const TIPO_AVISO = {
   /** WhatsApp entrante cuyo número no coincide con ninguna ficha. */
   whatsappDesconocido: 'whatsapp-desconocido',
+  /**
+   * Se canceló un turno y hay gente en la lista de espera a la que le sirve.
+   * Trae los candidatos en orden de llegada, con teléfono, para ofrecerlo desde
+   * la vista Avisos sin tener que buscar cada ficha.
+   */
+  huecoLiberado: 'hueco-liberado',
 } as const;
 
 /**

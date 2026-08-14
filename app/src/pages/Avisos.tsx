@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Alert, Badge, Button, Card, Group, Loader, Stack, Text, Textarea, Title } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
-import { IconAlertTriangle, IconBrandWhatsapp, IconCheck, IconSend, IconUserPlus } from '@tabler/icons-react';
+import { IconAlertTriangle, IconBrandWhatsapp, IconCheck, IconHourglass, IconSend, IconUserPlus } from '@tabler/icons-react';
 import { useMedplum, useSubscription } from '@medplum/react';
 import type { Task } from '@medplum/fhirtypes';
 import { COD, TIPO_AVISO } from '@bw/fhir/identifiers';
@@ -43,6 +43,9 @@ export function Avisos({ onAtender }: { onAtender: (pacienteId: string) => void 
   const [borradores, setBorradores] = useState<Record<string, string>>({});
   const [enviando, setEnviando] = useState<string>();
   const [altaDe, setAltaDe] = useState<Task>();
+  // A quiénes ya se les ofreció el hueco liberado (clave aviso+candidato): el
+  // ofrecimiento se manda una vez, y quien lo mandó tiene que verlo.
+  const [ofrecidos, setOfrecidos] = useState<Set<string>>(new Set());
 
   const cargar = useCallback((): void => {
     medplum
@@ -118,6 +121,41 @@ export function Avisos({ onAtender }: { onAtender: (pacienteId: string) => void 
     }
   }
 
+  /**
+   * Ofrece el hueco liberado a uno de los que esperan. El texto ya viene escrito
+   * por el bot (`oferta`): la recepcionista decide a quién y con un clic sale.
+   *
+   * NO promete que el lugar quede guardado — no hay reserva provisoria y el
+   * turno se lo lleva quien confirme primero.
+   */
+  async function ofrecer(t: Task, telefono: string, clave: string): Promise<void> {
+    const texto = dato(t, 'oferta');
+    if (!texto) {
+      return;
+    }
+    setEnviando(clave);
+    try {
+      const comm = await enviarWhatsApp({ to: telefono, template: 'lista-espera-hueco', body: texto });
+      if (comm.status === 'completed') {
+        setOfrecidos((prev) => new Set(prev).add(clave));
+        notifications.show({ color: 'teal', title: 'Se lo ofrecimos', message: `WhatsApp enviado a ${telefono}.` });
+      } else {
+        notifications.show({
+          color: 'orange',
+          title: 'No salió',
+          message:
+            comm.status === 'preparation'
+              ? 'Faltan credenciales de Twilio o el número es inválido: llamalo.'
+              : 'Twilio rechazó el mensaje. Revisalo con npm run whatsapp:entregas.',
+        });
+      }
+    } catch (err) {
+      notifications.show({ color: 'red', title: 'Error al enviar', message: mensajeError(err) });
+    } finally {
+      setEnviando(undefined);
+    }
+  }
+
   if (tasks === undefined) {
     return (
       <Group justify="center" py="xl">
@@ -144,9 +182,21 @@ export function Avisos({ onAtender }: { onAtender: (pacienteId: string) => void 
       ) : (
         tasks.map((t) => {
           const esWhatsApp = dato(t, 'tipo') === TIPO_AVISO.whatsappDesconocido;
+          const esHueco = dato(t, 'tipo') === TIPO_AVISO.huecoLiberado;
           const telefono = dato(t, 'telefono');
           const perfil = dato(t, 'perfil');
           const id = t.id ?? '';
+          // Los que esperan ese lugar, ya en orden de llegada (los ordenó el bot).
+          const candidatos = esHueco
+            ? [1, 2, 3]
+                .map((i) => ({
+                  nombre: dato(t, `candidato-${i}`),
+                  telefono: dato(t, `telefono-${i}`),
+                  pacienteRef: dato(t, `paciente-${i}`),
+                  clave: `${id}-${i}`,
+                }))
+                .filter((c) => c.nombre)
+            : [];
           return (
             <Card key={t.id} withBorder radius="md" p="md">
               <Group justify="space-between" wrap="nowrap" align="flex-start">
@@ -156,6 +206,11 @@ export function Avisos({ onAtender }: { onAtender: (pacienteId: string) => void 
                     {esWhatsApp && (
                       <Badge size="sm" variant="light" color="green" leftSection={<IconBrandWhatsapp size={12} />}>
                         WhatsApp
+                      </Badge>
+                    )}
+                    {esHueco && (
+                      <Badge size="sm" variant="light" color="teal" leftSection={<IconHourglass size={12} />}>
+                        Lista de espera
                       </Badge>
                     )}
                   </Group>
@@ -206,6 +261,48 @@ export function Avisos({ onAtender }: { onAtender: (pacienteId: string) => void 
                   </Button>
                 </Group>
               </Group>
+
+              {esHueco && candidatos.length > 0 && (
+                <Stack gap={6} mt="sm">
+                  {candidatos.map((c) => {
+                    const ya = ofrecidos.has(c.clave);
+                    return (
+                      <Group key={c.clave} justify="space-between" wrap="nowrap" gap="xs">
+                        <Text size="sm">
+                          {c.nombre}
+                          {c.telefono ? ` · ${c.telefono}` : ' · sin teléfono (llamalo a la ficha)'}
+                        </Text>
+                        <Group gap="xs" wrap="nowrap">
+                          <Button
+                            size="compact-xs"
+                            variant={ya ? 'subtle' : 'light'}
+                            color="green"
+                            leftSection={ya ? <IconCheck size={14} /> : <IconBrandWhatsapp size={14} />}
+                            disabled={!c.telefono || ya}
+                            loading={enviando === c.clave}
+                            onClick={() => void ofrecer(t, c.telefono as string, c.clave)}
+                          >
+                            {ya ? 'Ofrecido' : 'Ofrecer por WhatsApp'}
+                          </Button>
+                          {c.pacienteRef && (
+                            <Button
+                              size="compact-xs"
+                              variant="light"
+                              onClick={() => onAtender(c.pacienteRef!.split('/')[1] as string)}
+                            >
+                              Reservarle
+                            </Button>
+                          )}
+                        </Group>
+                      </Group>
+                    );
+                  })}
+                  <Text size="xs" c="dimmed">
+                    El lugar no queda guardado: se lo lleva el primero que confirme. Al reservarlo, quitá su espera
+                    desde la ficha.
+                  </Text>
+                </Stack>
+              )}
 
               {respondiendo === id && (
                 <Stack gap="xs" mt="sm">

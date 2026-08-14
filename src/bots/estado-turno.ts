@@ -10,7 +10,7 @@ import type { BotEvent, MedplumClient } from '@medplum/core';
 import type { Appointment, Encounter } from '@medplum/fhirtypes';
 import { EXT, SYSTEM } from '../fhir/identifiers.js';
 import { evaluarCancelacion } from '../lib/reglas-turno.js';
-import { devolverSesionDePlan } from './_shared.js';
+import { avisarListaDeEspera, devolverSesionDePlan } from './_shared.js';
 
 export type EstadoTurno = 'arrived' | 'checked-in' | 'fulfilled' | 'cancelled';
 
@@ -85,6 +85,14 @@ export async function handler(medplum: MedplumClient, event: BotEvent<EntradaEst
       if (r.devuelveSaldo) {
         await devolverSesionDePlan(medplum, coberturaRef.split('/')[1] as string);
       }
+    }
+
+    // El lugar que se libera es de alguien más. Si hay gente en la lista de
+    // espera a la que le sirve ESTE horario, Recepción se entera; hasta hoy el
+    // hueco desaparecía en silencio (y el portal ya prometía "te avisamos
+    // apenas se libere alguno" sin nada detrás).
+    if (!yaEstabaCancelado) {
+      await avisarListaDeEspera(medplum, appt);
     }
   }
 

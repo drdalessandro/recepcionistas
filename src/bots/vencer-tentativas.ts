@@ -22,7 +22,7 @@ import type { BotEvent, MedplumClient } from '@medplum/core';
 import type { Appointment } from '@medplum/fhirtypes';
 import { EXT, SYSTEM } from '../fhir/identifiers.js';
 import { estadoSenaPendiente } from '../lib/sena.js';
-import { enviarWhatsApp, linkSena, notificarPortal } from './_shared.js';
+import { avisarListaDeEspera, enviarWhatsApp, linkSena, notificarPortal } from './_shared.js';
 
 export interface EntradaVencerTentativas {
   /** Fecha de referencia ISO (default: ahora). Útil para pruebas/reprocesos. */
@@ -146,6 +146,13 @@ export async function handler(
     if (cancelados === 0) {
       continue; // se confirmó en el medio: no hay nada que avisar
     }
+
+    // La seña que no llegó también libera un lugar, y ese lugar puede ser el que
+    // otro está esperando. Es el mismo hueco que deja una cancelación: se avisa
+    // por la misma vía (aviso a Recepción con los candidatos, nunca un WhatsApp
+    // automático al paciente). De un combo se ofrece el primer componente: es el
+    // que define el horario de la secuencia.
+    await avisarListaDeEspera(medplum, rep, ahora);
 
     await enviarWhatsApp(medplum, event.secrets, {
       template: 'tentativa-vencida',

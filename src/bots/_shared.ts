@@ -2,6 +2,7 @@
  * Helpers compartidos por los bots de agenda (acceden a FHIR; no son "lib pura").
  */
 import type { BotEvent, MedplumClient } from '@medplum/core';
+import { getDisplayString } from '@medplum/core';
 import type { Appointment, ChargeItem, Communication, Coverage, Flag, Invoice, Task, TaskInput } from '@medplum/fhirtypes';
 import { COD,
   COD_CONSENTIMIENTO,
@@ -12,9 +13,19 @@ import { COD,
   INTAKE_QUESTIONNAIRE_URL,
   LOINC_CONSENTIMIENTO,
   SYSTEM,
+  TIPO_AVISO,
   esMedioPago,
   type MedioPago,
 } from '../fhir/identifiers.js';
+import { BUSQUEDA_ESPERAS, appointmentAEspera } from '../fhir/lista-espera.js';
+import {
+  candidatosParaHueco,
+  detalleAvisoHueco,
+  textoOfertaHueco,
+  tituloAvisoHueco,
+  type EntradaEspera,
+  type HuecoLiberado,
+} from '../lib/lista-espera.js';
 import { estadoConsentimiento, type RegistroConsentimiento } from '../lib/consentimiento.js';
 import { indiceSolicitudAResolver } from '../lib/solicitudes.js';
 import { esPlanBW, estadoDeCoverage, planCodigoDeCoverage } from '../fhir/coverage.js';
@@ -27,7 +38,7 @@ import {
 import type { PerfilReserva } from '../config/reglas.js';
 import type { IntensidadMembresia, Servicio } from '../domain/types.js';
 import { resolverTC } from '../config/tipo-cambio.js';
-import { getServicio } from '../config/catalogo.js';
+import { CATEGORIA_COMERCIAL, getServicio, nombreServicioRecepcion } from '../config/catalogo.js';
 import { getMembresia } from '../config/membresias.js';
 import { getPaquete } from '../config/paquetes.js';
 import { calcularSenaARS, type ItemCobro, type LineaCobro, type TipoItemCobro } from '../lib/pricing.js';
@@ -1471,6 +1482,114 @@ export interface ConsumoPlan {
  * No es idempotente por sí sola: el bot que reserva decide cuándo llamarla (una
  * vez por turno creado con plan).
  */
+/**
+ * Un turno se liberó: si hay gente esperando ESE lugar, avisarle a Recepción.
+ *
+ * Es la contracara de la lista de espera. Sin esto, el hueco que deja una
+ * cancelación desaparece en silencio — y desde que R-14 devuelve la sesión al
+ * cancelar a tiempo (2026-08-14) van a liberarse más lugares y antes.
+ *
+ * **No le escribe al paciente por su cuenta, a propósito.** El lugar no queda
+ * tomado: ofrecerlo automáticamente a alguien es una decisión comercial (y sin
+ * mecanismo de reserva provisoria, dos personas pueden decir que sí al mismo
+ * turno). El bot deja el aviso con los candidatos en orden y el texto listo;
+ * Recepción decide y manda el WhatsApp de un clic desde la vista Avisos.
+ *
+ * Best-effort en todo: liberar el turno nunca puede fallar por la lista de
+ * espera. Devuelve cuántos candidatos entraron en el aviso (0 = no hubo).
+ */
+export async function avisarListaDeEspera(
+  medplum: MedplumClient,
+  liberado: Appointment,
+  ahora: Date = new Date(),
+): Promise<number> {
+  try {
+    if (!liberado.start || !liberado.id) {
+      return 0;
+    }
+    const inicio = new Date(liberado.start);
+    const fin = liberado.end ? new Date(liberado.end) : inicio;
+    const servicioCodigo = liberado.serviceType?.[0]?.coding?.find((c) => c.system === SYSTEM.servicioCodigo)?.code;
+    // La categoría es la dimensión del match. Los turnos anteriores a
+    // `clasificacionDeServicio` no la tienen: se deriva del código de servicio.
+    let categoria = liberado.serviceCategory?.[0]?.coding?.find((c) => c.system === SYSTEM.categoriaServicio)?.code;
+    let servicio;
+    if (servicioCodigo) {
+      try {
+        servicio = getServicio(servicioCodigo);
+        categoria = categoria ?? servicio.categoria;
+      } catch {
+        // servicio fuera del catálogo (dado de baja): queda la categoría del turno
+      }
+    }
+    if (!categoria) {
+      return 0;
+    }
+    const dejoElHueco = liberado.participant?.find((p) => p.actor?.reference?.startsWith('Patient/'))?.actor?.reference;
+    const hueco: HuecoLiberado = {
+      inicio,
+      fin,
+      categoria,
+      ...(servicioCodigo ? { servicioCodigo } : {}),
+      ...(dejoElHueco ? { pacienteRef: dejoElHueco } : {}),
+    };
+
+    const esperas = await medplum.searchResources('Appointment', BUSQUEDA_ESPERAS);
+    const entradas = esperas
+      .map(appointmentAEspera)
+      .filter((e): e is EntradaEspera => Boolean(e));
+    const candidatos = candidatosParaHueco(entradas, hueco, ahora);
+    if (candidatos.length === 0) {
+      return 0;
+    }
+
+    // El teléfono vive en la ficha, no en la espera (una copia envejece). Son
+    // tres lecturas como mucho, y solo cuando hay a quién avisarle.
+    const conTelefono = await Promise.all(
+      candidatos.map(async (c) => {
+        const id = c.pacienteRef.split('/')[1];
+        if (!id) {
+          return c;
+        }
+        const p = await medplum.readResource('Patient', id).catch(() => undefined);
+        const telefono = p?.telecom?.find((t) => t.system === 'phone' || t.system === 'sms')?.value;
+        return { ...c, telefono, pacienteNombre: c.pacienteNombre ?? (p ? getDisplayString(p) : undefined) };
+      }),
+    );
+
+    const nombreServicio = servicio
+      ? nombreServicioRecepcion(servicio)
+      : (CATEGORIA_COMERCIAL[categoria as keyof typeof CATEGORIA_COMERCIAL] ?? categoria);
+    const datos: Record<string, string | undefined> = {
+      cuando: inicio.toISOString(),
+      servicio: nombreServicio,
+      // El texto ya escrito: que la recepcionista no tenga que redactar el
+      // ofrecimiento con la persona esperando del otro lado.
+      oferta: textoOfertaHueco(hueco, nombreServicio),
+    };
+    conTelefono.forEach((c, i) => {
+      datos[`candidato-${i + 1}`] = c.pacienteNombre ?? 'Paciente';
+      datos[`telefono-${i + 1}`] = c.telefono;
+      datos[`paciente-${i + 1}`] = c.pacienteRef;
+      // Id de la espera: con esto la vista puede darla de baja cuando se resuelve.
+      datos[`espera-${i + 1}`] = c.id;
+    });
+
+    await crearAlertaRecepcion(medplum, {
+      titulo: tituloAvisoHueco(conTelefono),
+      detalle: detalleAvisoHueco(hueco, conTelefono, nombreServicio),
+      focusRef: `Appointment/${liberado.id}`,
+      // Idempotente: cancelar dos veces el mismo turno no duplica el aviso.
+      clave: `hueco-${liberado.id}`,
+      tipo: TIPO_AVISO.huecoLiberado,
+      datos,
+    });
+    return conTelefono.length;
+  } catch {
+    return 0;
+  }
+}
+
 /**
  * Devuelve una sesión al plan (R-14): la operación inversa de
  * `consumirSesionDePlan`, para cuando un turno se cancela a tiempo.

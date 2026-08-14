@@ -12,7 +12,7 @@ Naming: **kebab-case**.
 | **Patient** | Ficha del paciente | `tipo-cliente`, `tag-fm`, `tc-bloqueo-fm`, `perfil-clinico`, `origen-lead` |
 | **Practitioner** | Médicos, terapeutas, enfermeras | `split-porcentaje`, `tipo-contrato` |
 | **Schedule / Slot** | Disponibilidad de recursos físicos | `recurso-fisico`, `comparte-tumbona` |
-| **Appointment** | Turno reservado | `orden-protocolo`, `requiere-hbot-previo`, `ocupantes` |
+| **Appointment** | Turno reservado · **espera de lugar** (`status: waitlist`) | `orden-protocolo`, `requiere-hbot-previo`, `ocupantes`, `espera-dias`, `espera-franjas` |
 | **Encounter** | Visita ejecutada (check-in/out) | `recursos-usados`, `duracion-real` *(slices posteriores)* |
 | **CarePlan** | Protocolo de tratamiento | `ciclo-semanas`, `perfil-clinico` |
 | **ActivityDefinition** | Catálogo de servicios | `precio-usd`, `regla-pricing-recurso`, `split-bw`, `requiere-prescripcion` |
@@ -43,6 +43,16 @@ Naming: **kebab-case**.
   campo del lead a propósito: el lead solo se crea si la persona es nueva, y así
   se cuenta con una búsqueda estándar (`Basic?code=…|no-disponible`) en vez de
   leer las tarjetas del CRM una por una.
+- **Lista de espera** (no hay lugar y quiere venir): `Appointment` con
+  `status: waitlist` —el estado que FHIR R4 tiene para exactamente esto— y la
+  ventana en `requestedPeriod`. No hay recurso nuevo: quien espera es alguien que
+  quiere un turno, y cuando se concreta es el mismo tipo de recurso. Efecto
+  práctico: **no aparece en la agenda**, porque todas las pantallas y bots buscan
+  turnos por `date=ge…` (que en R4 es `Appointment.start`) y una espera no tiene
+  `start`. Lo único que el estándar no modela es la preferencia dentro de la
+  ventana ("martes o jueves, a la tarde"), y sin eso el aviso se vuelve ruido:
+  por eso van `espera-dias` (CSV con la convención de `Date.getDay()`) y
+  `espera-franjas` (`manana|tarde|noche`). Vacías = cualquiera.
 - **Contraindicaciones:** `CodeSystem` en estado `active` — tabla validada por el
   Director Médico (Dr. Conrado López Alonso, 2026-08-09). Una entrada nueva sin
   validar (`borradorPendienteRevision`) lo vuelve a `draft` hasta su aprobación.
