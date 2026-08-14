@@ -20,6 +20,7 @@ import {
 import {
   IconSearch,
   IconShieldCheck,
+  IconShieldQuestion,
   IconShieldX,
   IconCash,
   IconCalendarPlus,
@@ -30,6 +31,7 @@ import {
 import type { Invoice, Patient } from '@medplum/fhirtypes';
 import { COD_CONSENTIMIENTO } from '@bw/fhir/identifiers';
 import { textoConsentimiento } from '@bw/lib/consentimiento';
+import { accionSeguridad, tituloSeguridad } from '@bw/lib/seguridad';
 import { getDisplayString } from '@medplum/core';
 import { medplum } from '../medplum';
 import {
@@ -40,7 +42,9 @@ import {
   asignarPlan,
   mensajeError,
   estadoConsentimientoPaciente,
+  estadoSeguridadPaciente,
   type EstadoConsentimientoBot,
+  type EstadoSeguridadBot,
   type ResultadoReserva,
   type ResultadoCombo,
   type ResultadoRegistrarCobro,
@@ -534,43 +538,52 @@ function SenalConsentimiento({ pacienteId }: { pacienteId: string }): JSX.Elemen
   );
 }
 
+/**
+ * Banner de seguridad. Tiene CUATRO estados, no dos.
+ *
+ * Hasta 2026-08-14 derivaba el color solo de los `Flag` activos: sin Flags
+ * pintaba verde y afirmaba "Paciente apto para atención". Para un paciente
+ * recién creado en el mostrador —que nunca contestó una pregunta de screening—
+ * eso era afirmar algo que nadie verificó; y el `.catch(() => 'verde')` hacía
+ * que un error de lectura se viera exactamente igual. Ahora la señal la calcula
+ * `bw-estado-seguridad` y **falla cerrado**: sin screening o sin poder consultar,
+ * el banner lo dice en vez de dar el OK.
+ */
 function BannerSeguridad({ pacienteId, version = 0 }: { pacienteId: string; version?: number }): JSX.Element {
-  const [estado, setEstado] = useState<'cargando' | 'verde' | 'rojo'>('cargando');
+  const [seguridad, setSeguridad] = useState<EstadoSeguridadBot | null>(null);
   const [bloqueoPago, setBloqueoPago] = useState(false);
 
   useEffect(() => {
     let activo = true;
+    setSeguridad(null);
+    estadoSeguridadPaciente(`Patient/${pacienteId}`)
+      .then((r) => activo && setSeguridad(r))
+      .catch(() => activo && setSeguridad({ ok: false, estado: 'no-verificable', color: 'gris', puedeAvanzar: false }));
+    // El bloqueo administrativo por pago (R-11) es su propio aviso y se sigue
+    // leyendo directo: es dato administrativo, no clínico.
     medplum
       .searchResources('Flag', { subject: `Patient/${pacienteId}`, status: 'active', _count: 20 })
       .then((flags) => {
-        if (!activo) {
-          return;
+        if (activo) {
+          setBloqueoPago(flags.some((f) => f.code?.coding?.some((c) => c.system === SYSTEM.bloqueo)));
         }
-        const esBloqueo = (f: (typeof flags)[number]): boolean =>
-          Boolean(f.code?.coding?.some((c) => c.system === SYSTEM.bloqueo));
-        setBloqueoPago(flags.some(esBloqueo));
-        setEstado(flags.some((f) => !esBloqueo(f)) ? 'rojo' : 'verde');
       })
-      .catch(() => activo && setEstado('verde'));
+      .catch(() => activo && setBloqueoPago(false));
     return () => {
       activo = false;
     };
   }, [pacienteId, version]);
 
-  if (estado === 'cargando') {
+  if (!seguridad) {
     return <Loader size="sm" />;
   }
+  const colorAlerta = seguridad.color === 'rojo' ? 'red' : seguridad.color === 'verde' ? 'bio' : 'yellow';
+  const Icono = seguridad.estado === 'apto' ? IconShieldCheck : seguridad.estado === 'contraindicado' ? IconShieldX : IconShieldQuestion;
   return (
     <>
-      {estado === 'rojo' ? (
-        <Alert color="red" icon={<IconShieldX size={20} />} title="Atención: contraindicación activa" variant="filled">
-          Consultar con el equipo médico antes de continuar.
-        </Alert>
-      ) : (
-        <Alert color="bio" icon={<IconShieldCheck size={20} />} title="Sin contraindicaciones" variant="filled">
-          Paciente apto para atención.
-        </Alert>
-      )}
+      <Alert color={colorAlerta} icon={<Icono size={20} />} title={tituloSeguridad(seguridad.estado)} variant="filled">
+        {accionSeguridad(seguridad.estado)}
+      </Alert>
       {bloqueoPago && (
         <Alert color="orange" icon={<IconInfoCircle size={20} />} title="Pagos pendientes de regularizar (R-11)" variant="filled">
           El último cobro de la membresía fue rechazado. No puede hacer nuevas reservas hasta regularizar el pago.
