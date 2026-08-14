@@ -52,17 +52,22 @@ export async function handler(
 
   let registros: RegistroConsentimiento[] | undefined;
   try {
+    // Se busca por PACIENTE, no por category: el portal usa la categoría
+    // estándar de HL7 (`v3-ActCode|IDSCL`) y pone el código de Biowellness en
+    // `policyRule`. Filtrar por category no traería nada. Son pocos registros
+    // por paciente, así que el filtro fino se hace acá.
     const consents = await medplum.searchResources('Consent', {
       patient: e.pacienteRef,
-      category: `${SYSTEM.consentimiento}|`,
       _count: 50,
     });
     registros = consents.map((c) => ({
       estado: c.status,
       fechaISO: c.dateTime,
-      codigo: c.category
-        ?.flatMap((cat) => cat.coding ?? [])
-        .find((cod) => cod.system === SYSTEM.consentimiento)?.code,
+      // El código de BW vive en policyRule; se mira category de fallback por
+      // si alguna vez se registra del otro modo.
+      codigo:
+        c.policyRule?.coding?.find((cod) => cod.system === SYSTEM.consentimiento)?.code ??
+        c.category?.flatMap((cat) => cat.coding ?? []).find((cod) => cod.system === SYSTEM.consentimiento)?.code,
     }));
   } catch {
     // Falla CERRADO: 'no-verificable' ≠ 'no firmó'. La recepcionista ve que no

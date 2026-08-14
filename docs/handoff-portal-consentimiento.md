@@ -24,12 +24,16 @@ para Coverage y ServiceRequest:
 
 ```jsonc
 { "resourceType": "Consent", "readonly": true, "criteria": "Consent?patient=%patient" },
-{ "resourceType": "Consent", "criteria": "Consent?patient=%patient&category=https://biowellness.ar/fhir/CodeSystem/consentimiento|" }
+{ "resourceType": "Consent", "criteria": "Consent?patient=%patient" }
 ```
 
 - **Lee** todos sus consentimientos (también los que cargue el equipo médico).
-- **Firma** solo los de Biowellness: el `category` le impide fabricar `Consent`
-  de cualquier otro tipo.
+- **Firma** los suyos; el criteria por paciente es la protección real.
+
+> ⚠️ La primera versión de esta entrada acotaba la escritura por `category` con
+> el system de Biowellness. **Estaba mal y habría roto la firma con 403**: el
+> portal usa la categoría estándar de HL7 (`v3-ActCode|IDSCL`) y pone el código
+> de BW en `policyRule`. Corregido el 2026-08-14 contra el recurso real.
 
 **Acción para ustedes:** actualizar el espejo
 `portal/docs/medplum/access-policy-paciente-portal.json` con estas dos entradas
@@ -37,45 +41,59 @@ y **mandarnos ese JSON** para diffearlo contra el código. Ya van tres entradas
 que vivieron solo en el servidor (Coverage HIP, ServiceRequest y esta): mientras
 el espejo no se compare, cada seed es una ruleta.
 
-## 2. La pregunta bloqueante: ¿qué escriben hoy al firmar?
+## 2. Lo que el portal escribe HOY (verificado 2026-08-14)
 
-Nuestra policy les habilita **tres caminos a la vez** —
-`QuestionnaireResponse`, `DocumentReference` y `Binary` — y ninguna convención
-dice cuál usar. Necesitamos saber qué crean **hoy** cuando el paciente firma:
-recurso, y si lleva algún código identificatorio.
-
-Sin esa respuesta, la pantalla de Recepción muestra "sin consentimiento
-firmado" para siempre y **sin ningún error visible** — el peor tipo de bug.
-
-## 3. Contrato propuesto: `Consent`
-
-Proponemos `Consent` porque es el recurso canónico de FHIR para esto, ya estaba
-asumido en nuestra policy, y —clave— es el único que permite dar a Recepción una
-señal **acotada por categoría** sin exponer la historia documental del paciente.
+Contra un recurso real del servidor: la subida de un PDF de laboratorio crea un
+`Consent` con esta forma —
 
 ```jsonc
 {
   "resourceType": "Consent",
-  "status": "active",                       // 'inactive' si se revoca
-  "scope": { "coding": [{ "system": "http://terminology.hl7.org/CodeSystem/consentscope", "code": "treatment" }] },
-  "category": [{ "coding": [{
+  "status": "active",
+  "scope":    { "coding": [{ "system": "…/consentscope", "code": "patient-privacy" }] },
+  "category": [{ "coding": [{ "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode",
+                              "code": "IDSCL" }] }],          // ← categoría ESTÁNDAR
+  "patient":  { "reference": "Patient/…" },
+  "dateTime": "2026-07-25T11:34:22.665Z",
+  "policyRule": { "coding": [{                                 // ← el código de BW vive ACÁ
     "system": "https://biowellness.ar/fhir/CodeSystem/consentimiento",
-    "code": "terapia-biologica"             // o "atencion" (ver tabla)
-  }] }],
-  "patient": { "reference": "Patient/<id>" },
-  "dateTime": "2026-08-13T18:20:00-03:00",  // momento de la firma
-  "sourceAttachment": { /* PDF firmado */ } // o sourceReference → DocumentReference/Binary
+    "code": "procesamiento-datos-salud"
+  }] },
+  "provision": { "type": "permit", "data": [{ "meaning": "instance",
+    "reference": { "reference": "DocumentReference/…" } }] }   // ← el estudio autorizado
 }
 ```
 
-| Código | Qué consentimiento es |
-| --- | --- |
-| `atencion` | Consentimiento general de atención, el que firma cualquier paciente al darse de alta. |
-| `terapia-biologica` | El que exige **R-03** para Terapias Biológicas (péptidos, PRP, exosomas…), con la cadena de responsabilidad médica detrás. |
+**El dato que nos faltaba: el código de Biowellness va en `policyRule`, no en
+`category`.** Nuestro lado ya está adaptado: la policy no filtra por category
+(lo hacía y habría dado 403, ver §1) y el bot busca por paciente y filtra por
+`policyRule`.
 
-Los códigos están en `src/fhir/identifiers.ts` (`COD_CONSENTIMIENTO`) y son
-**provisorios**: si ustedes ya usan otros, los cambiamos acá y listo — es un
-archivo.
+### Lo que falta confirmar: el consentimiento GENERAL
+
+El otro flujo —el onboarding paso a paso que termina en "Firmar y aceptar" en
+`/health-record/consent`— parece registrar la firma como **`DocumentReference`**
+(el Network muestra un `POST DocumentReference` 201 en el momento exacto en que
+aparece "Consentimiento firmado"), no como `Consent`. Si es así, necesitamos:
+
+1. Confirmarlo, y
+2. **Con qué `type`/`category` se marca ese DocumentReference**, para que el bot
+   pueda reconocerlo sin leer el resto de la historia documental.
+
+Alternativa más limpia, si les resulta barato: que ese flujo **además** cree un
+`Consent` con `policyRule` = `atencion` (mismo patrón que ya usan para el PDF).
+Con eso Recepción lo ve sin tocar `DocumentReference` y el modelo queda uniforme.
+
+## 3. Códigos de Biowellness (`policyRule`)
+
+| Código | Cuándo | Estado |
+| --- | --- | --- |
+| `procesamiento-datos-salud` | El paciente sube un PDF de laboratorio y autoriza procesarlo (Ley 25.326). | ✅ CONFIRMADO |
+| `atencion` | Consentimiento general de atención (onboarding). | ⏳ A confirmar (¿hoy es DocumentReference?) |
+| `terapia-biologica` | El que exige **R-03** para TB (péptidos, PRP, exosomas…). | ⏳ A definir |
+
+Están en `src/fhir/identifiers.ts` (`COD_CONSENTIMIENTO`): si usan otros, se
+cambian ahí y nada más.
 
 ## 4. Qué hace Recepción con eso (y qué NO ve)
 
@@ -102,8 +120,10 @@ habilitaría una TB sin respaldo.
 
 1. ⚠️ **Actualizar el espejo** de la policy con las dos entradas `Consent` del §1
    y mandarnos el JSON para diffear.
-2. **Contestar el §2**: ¿qué recurso escriben hoy al firmar?
-3. **Adoptar el contrato del §3** (o decirnos cuál usan, y lo adaptamos).
+2. **Confirmar el consentimiento general** (§2): ¿es un `DocumentReference`? ¿con
+   qué `type`/`category`? ¿o pueden crear además un `Consent` con
+   `policyRule` = `atencion`?
+3. **Definir si existe el de Terapias Biológicas** (R-03) y con qué código.
 4. Si el consentimiento se puede **revocar** desde el portal, que el `Consent`
    pase a `status: 'inactive'` — nuestra lógica ya lo contempla y deja de
    contarlo como firmado.
