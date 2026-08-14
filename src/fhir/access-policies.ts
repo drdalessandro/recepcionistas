@@ -52,6 +52,13 @@ export const POLICY_RECEPCIONISTA: AccessPolicy = {
     // Catálogo y profesionales (sólo lectura, para mostrar precios y quién atiende)
     { resourceType: 'ActivityDefinition', readonly: true },
     { resourceType: 'PlanDefinition', readonly: true },
+    // Kiosco del mostrador: el cuestionario de ingreso que contesta el PACIENTE
+    // en la tablet, y el texto legal del consentimiento que lee antes de firmar.
+    // Son definicionales y no llevan PHI — las respuestas del paciente
+    // (QuestionnaireResponse) siguen FUERA del alcance de recepción, igual que
+    // el Consent y el DocumentReference: los escribe `bw-ingreso-presencial`.
+    { resourceType: 'Questionnaire', readonly: true },
+    { resourceType: 'Library', readonly: true },
     { resourceType: 'Practitioner', readonly: true },
     { resourceType: 'Location', readonly: true },
     { resourceType: 'HealthcareService', readonly: true },
@@ -215,6 +222,9 @@ export const POLICY_PACIENTE_PORTAL: AccessPolicy = {
     { resourceType: 'PlanDefinition', readonly: true },
     { resourceType: 'ObservationDefinition', readonly: true },
     { resourceType: 'Questionnaire', readonly: true },
+    // Texto legal del consentimiento, publicado por el seed: el portal y el
+    // kiosco leen la MISMA versión (no puede haber dos textos firmados).
+    { resourceType: 'Library', readonly: true },
     { resourceType: 'Schedule', readonly: true },
     { resourceType: 'Slot', readonly: true },
     { resourceType: 'HealthcareService', readonly: true },
