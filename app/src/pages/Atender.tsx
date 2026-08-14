@@ -28,6 +28,8 @@ import {
   IconUserPlus,
 } from '@tabler/icons-react';
 import type { Invoice, Patient } from '@medplum/fhirtypes';
+import { COD_CONSENTIMIENTO } from '@bw/fhir/identifiers';
+import { textoConsentimiento } from '@bw/lib/consentimiento';
 import { getDisplayString } from '@medplum/core';
 import { medplum } from '../medplum';
 import {
@@ -37,6 +39,8 @@ import {
   reservarCombo,
   asignarPlan,
   mensajeError,
+  estadoConsentimientoPaciente,
+  type EstadoConsentimientoBot,
   type ResultadoReserva,
   type ResultadoCombo,
   type ResultadoRegistrarCobro,
@@ -227,6 +231,7 @@ function FichaPaciente({
         <Group gap="sm">
           <Title order={3}>{getDisplayString(pacienteActual)}</Title>
           <FoundingMember paciente={pacienteActual} onCambio={setPacienteActual} />
+          <SenalConsentimiento pacienteId={paciente.id!} />
         </Group>
         <Button variant="subtle" onClick={onVolver}>
           ← Volver a la búsqueda
@@ -483,6 +488,48 @@ function PanelPlanes({
  * Banner de seguridad: señal binaria verde/rojo (clínico) + banner administrativo
  * aparte si hay bloqueo de pagos (R-11). La recepción NO ve el detalle clínico.
  */
+/**
+ * Señal de consentimiento firmado en el portal, al lado del nombre.
+ *
+ * Es una señal BINARIA: firmado / sin firmar / no verificable, con la fecha.
+ * Nunca el documento ni el detalle clínico — eso vive del lado médico y el bot
+ * `bw-estado-consentimiento` no lo devuelve (CLAUDE.md, principio 3).
+ *
+ * Ojo con el default ante error: acá NO se copia el `.catch(() => 'verde')` del
+ * banner de seguridad. Si no se pudo verificar, se dice; dar por firmado lo que
+ * no se pudo leer habilitaría una Terapia Biológica sin respaldo (R-03).
+ */
+function SenalConsentimiento({ pacienteId }: { pacienteId: string }): JSX.Element | null {
+  const [resultado, setResultado] = useState<EstadoConsentimientoBot | null>(null);
+
+  useEffect(() => {
+    let activo = true;
+    setResultado(null);
+    estadoConsentimientoPaciente(`Patient/${pacienteId}`)
+      .then((r) => activo && setResultado(r))
+      .catch(() => activo && setResultado({ ok: false, estado: 'no-verificable' }));
+    return () => {
+      activo = false;
+    };
+  }, [pacienteId]);
+
+  if (!resultado) {
+    return <Loader size="xs" />;
+  }
+  const texto = textoConsentimiento({ estado: resultado.estado, fechaISO: resultado.fechaISO });
+  const color = resultado.estado === 'firmado' ? 'bio' : resultado.estado === 'no-registrado' ? 'gray' : 'yellow';
+  return (
+    <Badge
+      variant="light"
+      color={color}
+      title={texto}
+      leftSection={resultado.estado === 'firmado' ? <IconShieldCheck size={12} /> : <IconInfoCircle size={12} />}
+    >
+      {resultado.estado === 'firmado' ? 'Consentimiento firmado' : texto}
+    </Badge>
+  );
+}
+
 function BannerSeguridad({ pacienteId, version = 0 }: { pacienteId: string; version?: number }): JSX.Element {
   const [estado, setEstado] = useState<'cargando' | 'verde' | 'rojo'>('cargando');
   const [bloqueoPago, setBloqueoPago] = useState(false);
@@ -690,6 +737,8 @@ function PanelReserva({
   }, [prefill]);
   const [prescripcion, setPrescripcion] = useState(false);
   const [consentimiento, setConsentimiento] = useState(false);
+  /** Consentimiento de TB firmado en el portal (R-03): lo verifica el sistema. */
+  const [consentTB, setConsentTB] = useState<EstadoConsentimientoBot | null>(null);
   const [usarPlan, setUsarPlan] = useState(true);
   const [resultado, setResultado] = useState<ResultadoReserva | null>(null);
   const [resultadoCombo, setResultadoCombo] = useState<ResultadoCombo | null>(null);
@@ -699,6 +748,36 @@ function PanelReserva({
   const esCombo = seleccion ? COMBOS.some((c) => c.codigo === seleccion) : false;
   const servicio = !esCombo && seleccion ? SERVICIOS.find((s) => s.codigo === seleccion) : undefined;
   const salas = servicio ? recursosParaCategoria(servicio.categoria) : [];
+
+  // R-03: al elegir una Terapia Biológica, el sistema pregunta si el paciente
+  // ya firmó en el portal, en vez de confiar en la memoria de la recepcionista
+  // (principio 1). El switch queda editable igual: la firma en papel en el
+  // mostrador sigue siendo un caso real.
+  const esTB = servicio?.categoria === 'TERAPIA_BIOLOGICA';
+  useEffect(() => {
+    if (!esTB || !paciente.id) {
+      setConsentTB(null);
+      return;
+    }
+    let activo = true;
+    setConsentTB(null);
+    estadoConsentimientoPaciente(`Patient/${paciente.id}`, COD_CONSENTIMIENTO.terapiaBiologica)
+      .then((r) => {
+        if (!activo) {
+          return;
+        }
+        setConsentTB(r);
+        // Solo 'firmado' precarga el switch. 'no-verificable' NO: ante la duda
+        // lo declara la recepcionista, y así queda claro quién lo afirmó.
+        if (r.estado === 'firmado') {
+          setConsentimiento(true);
+        }
+      })
+      .catch(() => activo && setConsentTB({ ok: false, estado: 'no-verificable' }));
+    return () => {
+      activo = false;
+    };
+  }, [esTB, paciente.id]);
 
   // ¿Hay un plan utilizable para lo seleccionado? (membresía↔combo, paquete↔servicio)
   const plan = seleccion
@@ -745,6 +824,10 @@ function PanelReserva({
           inicio,
           prescripcionActiva: prescripcion,
           consentimientoFirmado: consentimiento,
+          // De dónde salió la afirmación: verificada contra el portal o
+          // declarada por Recepción. Sin esto no hay forma de reconstruir
+          // quién dijo que había consentimiento ante un reclamo.
+          origenConsentimiento: consentTB?.estado === 'firmado' ? 'portal' : 'declarado-recepcion',
           coverageId,
           confirmar: true,
         });
@@ -834,12 +917,34 @@ function PanelReserva({
 
         {servicio?.categoria === 'TERAPIA_BIOLOGICA' && (
           <>
-            <Switch
-              label="Consentimiento informado FIRMADO (requerido para Terapias Biológicas)"
-              description="Responsable principal: el médico que indica; luego el Director Médico. El documento firmado se archiva en la historia clínica."
-              checked={consentimiento}
-              onChange={(e) => setConsentimiento(e.currentTarget.checked)}
-            />
+            <Group gap="xs" align="center">
+              <Switch
+                label="Consentimiento informado FIRMADO (requerido para Terapias Biológicas)"
+                description={
+                  consentTB
+                    ? `${textoConsentimiento({ estado: consentTB.estado, fechaISO: consentTB.fechaISO })}. Responsable principal: el médico que indica; luego el Director Médico.`
+                    : 'Verificando contra el portal… Responsable principal: el médico que indica; luego el Director Médico.'
+                }
+                checked={consentimiento}
+                onChange={(e) => setConsentimiento(e.currentTarget.checked)}
+              />
+              {consentTB?.estado === 'firmado' && (
+                <Badge variant="light" color="bio" leftSection={<IconShieldCheck size={12} />}>
+                  Verificado en el portal
+                </Badge>
+              )}
+              {consentTB?.estado === 'no-verificable' && (
+                <Badge variant="light" color="yellow" leftSection={<IconInfoCircle size={12} />}>
+                  Sin verificar
+                </Badge>
+              )}
+            </Group>
+            {consentTB?.estado === 'no-registrado' && !consentimiento && (
+              <Text size="xs" c="dimmed">
+                El paciente puede firmarlo desde el portal. Si firmó en papel en el mostrador, tildalo acá: queda
+                registrado que lo declaró Recepción.
+              </Text>
+            )}
             <Text size="xs" c="dimmed">
               Estas terapias siempre requieren evaluación e indicación médica previas. Info para el paciente:{' '}
               <Anchor href="https://info.biowellness.ar/terapias-biologicas.html" target="_blank" size="xs">

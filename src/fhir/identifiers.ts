@@ -96,6 +96,12 @@ export const EXT = {
   cajaEsperado: `${BASE}/StructureDefinition/caja-esperado`,
   /** Arqueo: diferencia contado − esperado en ARS (valueDecimal). */
   cajaDiferencia: `${BASE}/StructureDefinition/caja-diferencia`,
+  /**
+   * R-03 · de dónde salió la afirmación del consentimiento en un turno de
+   * Terapia Biológica (`valueCode`: portal | declarado-recepcion). Sin esto el
+   * booleano se evaporaba al validar y no quedaba auditoría de quién lo afirmó.
+   */
+  consentimientoOrigen: `${BASE}/StructureDefinition/consentimiento-origen`,
 } as const;
 
 /** Sistemas de codificación / identificadores de negocio. */
@@ -145,6 +151,14 @@ export const SYSTEM = {
    * también es Basic y no debe ser tocable desde el mostrador).
    */
   caja: `${BASE}/CodeSystem/caja`,
+  /**
+   * Consentimientos informados que firma el paciente (`Consent.category`).
+   * Acota los permisos por los dos lados: el paciente solo puede firmar
+   * consentimientos de Biowellness (no fabricar Consent de cualquier tipo) y
+   * recepción solo recibe la señal binaria de esta categoría, nunca el
+   * documento ni el resto de la historia.
+   */
+  consentimiento: `${BASE}/CodeSystem/consentimiento`,
   /** Tipo de Task (p. ej. solicitud de turno desde el portal). */
   taskTipo: `${BASE}/CodeSystem/task-tipo`,
   /** Identifier de Task (para deduplicar alertas automáticas a Recepción). */
@@ -166,6 +180,25 @@ export const COD = {
    */
   avisoRecepcion: 'aviso-recepcion',
 } as const;
+
+/**
+ * Consentimientos informados (código dentro de `SYSTEM.consentimiento`).
+ *
+ * - `atencion`: consentimiento general de atención, el que firma cualquier
+ *   paciente al darse de alta en el portal.
+ * - `terapia-biologica`: el que exige R-03 para las TB (péptidos, PRP,
+ *   exosomas…), con la cadena de responsabilidad médica detrás.
+ *
+ * ⚠️ PROVISORIO hasta que el portal confirme el contrato
+ * (docs/handoff-portal-consentimiento.md): si el portal escribe otros códigos,
+ * se cambian acá y nada más.
+ */
+export const COD_CONSENTIMIENTO = {
+  atencion: 'atencion',
+  terapiaBiologica: 'terapia-biologica',
+} as const;
+
+export type CodigoConsentimiento = (typeof COD_CONSENTIMIENTO)[keyof typeof COD_CONSENTIMIENTO];
 
 /**
  * Subtipo del aviso (input `tipo` del Task): habilita acciones específicas en

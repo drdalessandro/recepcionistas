@@ -181,6 +181,18 @@ export const POLICY_PACIENTE_PORTAL: AccessPolicy = {
     // y mostraba "No pudimos registrar tu solicitud").
     { resourceType: 'ServiceRequest', readonly: true, criteria: 'ServiceRequest?subject=%patient' },
     { resourceType: 'ServiceRequest', criteria: 'ServiceRequest?subject=%patient&intent=proposal,plan' },
+    // Consentimientos informados que el paciente firma desde el portal. El
+    // docstring de arriba los prometía desde siempre y el espejo del portal
+    // tenía la entrada aplicada A MANO en el servidor
+    // (docs/recepcionistaschequeohandoff.md), pero NO estaba en este array:
+    // como el seed hace upsert por `name`, cada `npm run seed` la borraba y
+    // dejaba la firma del portal en 403. Mismo accidente que ya pasó con
+    // Coverage HIP y con ServiceRequest.
+    //  - lee TODOS sus consentimientos (también los que carga el equipo médico);
+    //  - firma SOLO los de Biowellness: el criteria por category le impide
+    //    fabricar Consent de cualquier otro tipo.
+    { resourceType: 'Consent', readonly: true, criteria: 'Consent?patient=%patient' },
+    { resourceType: 'Consent', criteria: `Consent?patient=%patient&category=${SYSTEM.consentimiento}|` },
     // CarePlan escribible: "Mi plan" del portal marca acciones (Empezar/Lograda)
     // con updateResource (portal/src/pages/care-plan/ActionItems.tsx).
     { resourceType: 'CarePlan', criteria: 'CarePlan?subject=%patient' },
