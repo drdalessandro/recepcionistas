@@ -228,6 +228,8 @@ export interface AltaPacienteInput {
   cicloVida?: CicloVida;
   /** Qué vino a consultar; va en la tarjeta del pipeline del CRM. */
   interes?: string;
+  /** Quién lo registró (Practitioner/…), para el Provenance del CRM. */
+  registradoPorRef?: string;
 }
 
 export interface ResultadoAltaPaciente {

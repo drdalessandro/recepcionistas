@@ -9,17 +9,19 @@
  * `Patient` por su AccessPolicy.
  */
 import type { BotEvent, MedplumClient } from '@medplum/core';
-import type { ContactPoint, Patient, Task } from '@medplum/fhirtypes';
+import type { ContactPoint, Patient, Provenance, Task } from '@medplum/fhirtypes';
 import {
   EXT,
   EXT_CICLO_VIDA,
+  EXT_LEAD_ORIGEN,
+  ORIGENES_LEAD_LABELS,
   SYSTEM,
   SYSTEM_CICLO_VIDA,
   SYSTEM_ETAPA_PIPELINE,
   esOrigenLead,
   type CicloVida,
 } from '../fhir/identifiers.js';
-import { descripcionLead, nombreDeLead } from '../lib/lead.js';
+import { descripcionLead, fuenteDeLead, nombreDeLead } from '../lib/lead.js';
 import { partirNombre, validarEmail } from '../lib/onboarding.js';
 
 export interface EntradaAltaPaciente {
@@ -43,6 +45,11 @@ export interface EntradaAltaPaciente {
   cicloVida?: CicloVida;
   /** Qué vino a preguntar. Va en la Task del pipeline; no es dato clínico. */
   interes?: string;
+  /**
+   * Quién lo registró (`Practitioner/…`), para el `agent` del Provenance del
+   * CRM. Lo manda la app con el perfil logueado: el bot no sabe quién lo llamó.
+   */
+  registradoPorRef?: string;
 }
 
 export interface ResultadoAltaPaciente {
@@ -199,6 +206,29 @@ export async function handler(
         taskPipelineId = tarea.id;
       } catch {
         // el CRM puede tomarlo igual desde la ficha (ciclo-vida = lead)
+      }
+
+      // Provenance de atribución: el chip de fuente en la tarjeta del kanban.
+      // Administración confirmó que es OPCIONAL —para métricas manda nuestro
+      // `origen-lead`— así que es best-effort y su forma es la que ellos leen
+      // (`fuenteDe` en su PipelinePage). `agent.who` es obligatorio en FHIR y
+      // solo acepta ciertos tipos: sin un Practitioner válido no se escribe,
+      // porque un Provenance inválido sería peor que ninguno.
+      const fuente = fuenteDeLead(origen, ORIGENES_LEAD_LABELS);
+      if (fuente && e.registradoPorRef?.startsWith('Practitioner/')) {
+        try {
+          await medplum.createResource<Provenance>({
+            resourceType: 'Provenance',
+            target: [{ reference: `Patient/${creado.id}` }],
+            recorded: ahora.toISOString(),
+            agent: [{ who: { reference: e.registradoPorRef } }],
+            extension: [
+              { url: EXT_LEAD_ORIGEN, extension: [{ url: 'fuente', valueString: fuente }] },
+            ],
+          });
+        } catch {
+          // sin chip de fuente en la tarjeta; el lead ya quedó registrado
+        }
       }
     }
     return { ok: true, patientId: creado.id, creado: true, ...(taskPipelineId ? { taskPipelineId } : {}) };

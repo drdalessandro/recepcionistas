@@ -3,6 +3,8 @@ import { Alert, Button, Group, Modal, Select, Stack, Text, TextInput } from '@ma
 import { IconInfoCircle, IconMessageQuestion } from '@tabler/icons-react';
 import { SERVICIOS, CATEGORIA_COMERCIAL } from '@bw/config/catalogo';
 import { validarLead } from '@bw/lib/lead';
+import { useMedplumProfile } from '@medplum/react';
+import { getReferenceString } from '@medplum/core';
 import { altaPaciente, mensajeError } from '../lib/bots';
 
 /**
@@ -29,6 +31,9 @@ export function RegistrarConsulta({
   /** Se llama con el id del lead creado (para poder abrir su ficha). */
   onRegistrado: (patientId: string, anonimo: boolean) => void;
 }): JSX.Element {
+  // Quién está registrando: va como `agent` del Provenance del CRM. El bot no
+  // sabe quién lo llamó, así que se lo manda la app.
+  const perfil = useMedplumProfile();
   const [interes, setInteres] = useState<string | null>(null);
   const [nombre, setNombre] = useState('');
   const [telefono, setTelefono] = useState('');
@@ -70,6 +75,7 @@ export function RegistrarConsulta({
         // Contrato del CRM: nace como lead, no como cliente.
         cicloVida: 'lead',
         origenLead: 'walk-in',
+        registradoPorRef: perfil ? getReferenceString(perfil) : undefined,
       });
       if (!r.ok || !r.patientId) {
         setError(r.mensaje ?? 'No se pudo registrar la consulta.');
