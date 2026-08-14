@@ -34,6 +34,41 @@ carga como secret se activa solo.
 
 ## Catálogo de plantillas
 
+## Estado verificado — 2026-08-14 ✅
+
+`npm run whatsapp:plantilla` devuelve **10 plantillas, todas `approved`** por Meta
+en `es_AR`, con los placeholders numéricos validados. O sea: el pendiente de
+"aprobar las plantillas para producción" **está cerrado**.
+
+| Nuestro `template` | Plantilla aprobada en Twilio |
+|---|---|
+| `recordatorio-48h` | `biowellness_recordatorio_48h_v4` |
+| `recordatorio-2h` | `biowellness_recordatorio_2h_v4` |
+| `turno-confirmado` | `biowellness_turno_confirmado_v4` (⚠️ existe también `_v3`, duplicada) |
+| `reserva-plan` | `biowellness_reserva_plan_v4` |
+| `tentativa-vencida` | `biowellness_tentativa_vencida_v3` |
+| `plan-link-pago` | `biowellness_plan_link_pago_v3` |
+| `sena-recordatorio` | `biowellness_sena_recordatorio_v3` |
+| `mensaje-recepcion` | `biowellness_mensaje_recepcion_v4` |
+| *(genérica)* | `biowellness_generico_v4` |
+
+Los demás `template` del código (`reserva-tentativa`, `lista-espera-hueco`,
+`invitacion-portal`, `plan-asignado`, `membresia-*`, `solicitud-turno`) **no
+tienen plantilla propia y no la necesitan**: viajan por la genérica, que también
+está aprobada. Los dos primeros por decisión explícita (ver la tabla de abajo).
+
+> **Aprobada ≠ en uso.** Que Meta la haya aprobado no alcanza: su `HX…` tiene que
+> estar cargado como Project Secret. Cómo saberlo sin entrar a Medplum: mirar el
+> texto entregado en `npm run whatsapp:entregas`. La genérica **prefija `Hola: `**;
+> si el mensaje entregado NO empieza con eso, salió por la plantilla específica.
+> Verificado así el 2026-08-14 para `recordatorio-48h`, `turno-confirmado` y
+> `tentativa-vencida` (entregados sin el prefijo → secret cargado).
+
+> **Los cuerpos "sugeridos" de las tablas de abajo no son los aprobados.** Los
+> reales no llevan el prefijo "Biowellness:" ni el 💚 — p. ej. `recordatorio-48h`
+> quedó como *"Te recordamos tu turno de {{1}} el {{2}}. ¡Te esperamos!"*. La
+> fuente de verdad es `npm run whatsapp:plantilla`, no esta doc.
+
 **Primera y prioritaria — la genérica** (habilita TODO mientras se aprueban las demás):
 
 | Secret | Cuerpo sugerido |

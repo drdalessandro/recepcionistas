@@ -90,5 +90,5 @@ Twilio y SES ya están **operativos** (Project Secrets cargados y verificados,
 está **validada** por el Director Médico (Dr. Conrado López Alonso, 2026-08-09).
 Lo que queda hoy **no frena el desarrollo**: configurar el `cronString` de los
 bots de cron (paso a paso en [`docs/puesta-en-produccion.md`](docs/puesta-en-produccion.md)),
-aprobar la plantilla de WhatsApp para producción y confirmar el precio de
-consulta del Dr. Conrado.
+y confirmar el precio de consulta del Dr. Conrado. Las plantillas de WhatsApp
+ya están **todas aprobadas por Meta** y en uso (verificado 2026-08-14).
