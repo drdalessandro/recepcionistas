@@ -61,6 +61,13 @@ export interface EntradaReserva {
   prescripcionActiva?: boolean;
   /** TB: consentimiento informado firmado (el documento vive en la HC, no acá). */
   consentimientoFirmado?: boolean;
+  /**
+   * De dónde salió esa afirmación: `portal` = verificada contra el Consent que
+   * firmó el paciente; `declarado-recepcion` = lo declaró el mostrador (firma
+   * en papel). Queda en el Appointment: sin esto, ante un reclamo médico-legal
+   * por una TB no hay forma de reconstruir quién dijo que había consentimiento.
+   */
+  origenConsentimiento?: 'portal' | 'declarado-recepcion';
   /** Autorización médica que destraba una contraindicación absoluta (R-02). */
   autorizacionMedica?: boolean;
   /** Coverage (paquete) con el que se paga el turno: consume una sesión y confirma sin seña. */
@@ -268,6 +275,12 @@ export async function handler(
       { url: EXT.ocupantes, valueInteger: e.ocupantes ?? 1 },
       { url: EXT.itemTipo, valueCode: 'servicio' },
       { url: EXT.itemCodigo, valueString: e.servicioCodigo },
+      // R-03: en las TB queda registrado de dónde salió la afirmación del
+      // consentimiento (verificado en el portal vs declarado en el mostrador).
+      // El `meta.author` del Appointment dice QUIÉN lo cargó; esto, sobre qué.
+      ...(servicio.categoria === 'TERAPIA_BIOLOGICA' && e.consentimientoFirmado
+        ? [{ url: EXT.consentimientoOrigen, valueCode: e.origenConsentimiento ?? 'declarado-recepcion' }]
+        : []),
       ...(consumo
         ? [{ url: EXT.coberturaUsada, valueString: `Coverage/${e.coverageId}` }]
         : [{ url: EXT.venceSena, valueDateTime: vence.toISOString() }]),

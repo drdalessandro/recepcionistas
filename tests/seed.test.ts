@@ -148,6 +148,18 @@ describe('Seed — AccessPolicy Paciente — Portal (los dos usos de Coverage)',
     expect(escribible.criteria).not.toContain('intent=order');
   });
 
+  it('Consentimientos: lee los suyos y firma SOLO los de Biowellness (la entrada que el seed borraba)', () => {
+    // docs/recepcionistaschequeohandoff.md decía que el espejo del portal tenía
+    // una entrada Consent aplicada A MANO que no estaba en este array: cada
+    // `npm run seed` la borraba y dejaba la firma del portal en 403.
+    const portal = seed.accessPolicies.find((p) => p.name === 'Paciente — Portal')!;
+    const consents = (portal.resource ?? []).filter((r) => r.resourceType === 'Consent');
+    expect(consents).toHaveLength(2);
+    expect(consents.some((r) => r.readonly === true && r.criteria === 'Consent?patient=%patient')).toBe(true);
+    const escribible = consents.find((r) => !r.readonly)!;
+    expect(escribible.criteria).toBe(`Consent?patient=%patient&category=${SYSTEM.consentimiento}|`);
+  });
+
   it('El paciente solo puede ejecutar los bots del portal (solicitar-turno y disponibilidad)', () => {
     const portal = seed.accessPolicies.find((p) => p.name === 'Paciente — Portal')!;
     const bot = (portal.resource ?? []).find((r) => r.resourceType === 'Bot')!;
@@ -173,7 +185,9 @@ describe('Seed — AccessPolicy de recepción (privacidad por diseño)', () => {
   it('No otorga acceso a recursos clínicos sensibles', () => {
     const recep = seed.accessPolicies.find((p) => p.name === 'Recepción — Operativo')!;
     const tipos = (recep.resource ?? []).map((r) => r.resourceType);
-    for (const clinico of ['Observation', 'Condition', 'DiagnosticReport', 'DocumentReference', 'CarePlan', 'MedicationRequest']) {
+    // Consent incluido: recepción NO lee el consentimiento directo — recibe la
+    // señal binaria por el bot bw-estado-consentimiento (principio 3).
+    for (const clinico of ['Observation', 'Condition', 'DiagnosticReport', 'DocumentReference', 'CarePlan', 'MedicationRequest', 'Consent', 'QuestionnaireResponse']) {
       expect(tipos).not.toContain(clinico);
     }
     // Sí da acceso a lo operativo.

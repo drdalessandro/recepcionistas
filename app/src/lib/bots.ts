@@ -1,4 +1,5 @@
 import type { Communication, Invoice } from '@medplum/fhirtypes';
+import type { EstadoConsentimiento } from '@bw/lib/consentimiento';
 import { medplum } from '../medplum';
 
 /**
@@ -55,6 +56,8 @@ export interface ReservaInput {
   prescripcionActiva?: boolean;
   /** TB: consentimiento informado firmado (R-03; el documento vive en la HC). */
   consentimientoFirmado?: boolean;
+  /** De dónde salió esa afirmación: verificada en el portal o declarada por Recepción. */
+  origenConsentimiento?: 'portal' | 'declarado-recepcion';
   autorizacionMedica?: boolean;
   /** Coverage (paquete) con el que se paga el turno: confirma sin seña. */
   coverageId?: string;
@@ -328,4 +331,33 @@ export async function fusionarPaciente(entrada: EntradaFusion): Promise<Resultad
  */
 export async function espejarWhatsApp(pacienteRef: string, body: string, mensajeId?: string): Promise<Communication> {
   return enviarWhatsApp({ pacienteRef, template: 'mensaje-recepcion', body, mensajeId });
+}
+
+export interface EstadoConsentimientoBot {
+  ok: boolean;
+  estado: EstadoConsentimiento;
+  fechaISO?: string;
+  mensaje?: string;
+}
+
+/**
+ * ¿El paciente firmó el consentimiento en el portal? (bw-estado-consentimiento).
+ *
+ * Devuelve SOLO la señal binaria: el documento y el resto de la historia nunca
+ * salen del lado clínico. Falla CERRADO — si el bot no está deployado, no hay
+ * permisos o se cae la red, devuelve 'no-verificable', jamás 'firmado': dar por
+ * bueno un consentimiento que no se pudo verificar habilitaría una Terapia
+ * Biológica sin respaldo (R-03).
+ */
+export async function estadoConsentimientoPaciente(
+  pacienteRef: string,
+  codigo?: string,
+): Promise<EstadoConsentimientoBot> {
+  try {
+    const id = await botIdPorNombre('bw-estado-consentimiento');
+    const r = (await medplum.executeBot(id, { pacienteRef, codigo })) as EstadoConsentimientoBot;
+    return r?.estado ? r : { ok: false, estado: 'no-verificable' };
+  } catch (e) {
+    return { ok: false, estado: 'no-verificable', mensaje: mensajeError(e) };
+  }
 }

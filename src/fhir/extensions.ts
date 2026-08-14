@@ -65,6 +65,7 @@ const SPECS: SpecExtension[] = [
   { url: EXT.cajaAutorizado, nombre: 'caja-autorizado', contexto: ['Basic'], tipoValor: 'boolean', descripcion: 'Gasto sobre el tope autorizado por Administración.' },
   { url: EXT.cajaEsperado, nombre: 'caja-esperado', contexto: ['PaymentReconciliation'], tipoValor: 'decimal', descripcion: 'Arqueo: saldo esperado en ARS.' },
   { url: EXT.cajaDiferencia, nombre: 'caja-diferencia', contexto: ['PaymentReconciliation'], tipoValor: 'decimal', descripcion: 'Arqueo: diferencia contado − esperado en ARS.' },
+  { url: EXT.consentimientoOrigen, nombre: 'consentimiento-origen', contexto: ['Appointment'], tipoValor: 'code', descripcion: 'R-03: origen de la afirmación del consentimiento (portal / declarado-recepcion).' },
 ];
 
 function buildStructureDefinition(spec: SpecExtension): StructureDefinition {
