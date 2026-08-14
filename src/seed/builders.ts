@@ -10,6 +10,7 @@ import type {
   CodeSystemConcept,
   Extension,
   Library,
+  Questionnaire,
   Location,
   PlanDefinition,
   PlanDefinitionAction,
@@ -26,6 +27,7 @@ import { COMBOS } from '../config/combos.js';
 import { MEMBRESIAS } from '../config/membresias.js';
 import { PAQUETES } from '../config/paquetes.js';
 import { CONTRAINDICACIONES } from '../config/contraindicaciones.js';
+import { CUESTIONARIO_INGRESO } from '../config/cuestionario-ingreso.js';
 import {
   CONSENTIMIENTO_LIBRARY_URL,
   VERSION_CONSENTIMIENTO,
@@ -366,6 +368,8 @@ export interface RecursosSeed {
   contraindicaciones: CodeSystem;
   /** Texto del Consentimiento Informado (fuente única para portal y kiosco). */
   consentimiento: Library;
+  /** Cuestionario de ingreso (screening R-20): lo comparten portal y kiosco. */
+  cuestionarioIngreso: Questionnaire;
   locations: Location[];
   schedules: Schedule[];
   practitioners: Practitioner[];
@@ -384,6 +388,7 @@ export function buildSeed(): RecursosSeed {
     paquetes: PAQUETES.map((p) => buildPaquetePlanDefinition(p.codigo)),
     contraindicaciones: buildContraindicacionesCodeSystem(),
     consentimiento: buildConsentimientoLibrary(),
+    cuestionarioIngreso: CUESTIONARIO_INGRESO,
     locations: RECURSOS.map((r) => buildLocation(r.codigo)),
     schedules: [
       ...RECURSOS.map((r) => buildSchedule(r.codigo)),
