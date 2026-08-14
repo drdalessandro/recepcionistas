@@ -150,10 +150,18 @@ export async function enviarWhatsApp(input: {
 
 export type EstadoTurno = 'arrived' | 'checked-in' | 'fulfilled' | 'cancelled';
 
-/** Cambia el estado de un turno (check-in/out): el bot actualiza Appointment + Encounter + Slot. */
-export async function cambiarEstadoTurno(appointmentId: string, estado: EstadoTurno): Promise<void> {
+/**
+ * Cambia el estado de un turno (check-in/out): el bot actualiza Appointment +
+ * Encounter + Slot, y al CANCELAR aplica R-14 (devuelve la sesión al plan si se
+ * canceló con 24 h o más).
+ */
+export async function cambiarEstadoTurno(
+  appointmentId: string,
+  estado: EstadoTurno,
+  opts: { fuerzaMayorMedica?: boolean; declaradaPorRef?: string } = {},
+): Promise<void> {
   const id = await botIdPorNombre('bw-estado-turno');
-  await medplum.executeBot(id, { appointmentId, estado });
+  await medplum.executeBot(id, { appointmentId, estado, ...opts });
 }
 
 export interface ResultadoSena {
@@ -228,8 +236,12 @@ export interface AltaPacienteInput {
   cicloVida?: CicloVida;
   /** Qué vino a consultar; va en la tarjeta del pipeline del CRM. */
   interes?: string;
+  /** Qué pidió, si pidió algo que NO ofrecemos (caso 11 del walk-in). */
+  pedido?: string;
   /** Quién lo registró (Practitioner/…), para el Provenance del CRM. */
   registradoPorRef?: string;
+  /** A quién acompañaba, si el lead vino con un paciente. */
+  acompanaA?: string;
 }
 
 export interface ResultadoAltaPaciente {
@@ -239,6 +251,8 @@ export interface ResultadoAltaPaciente {
   creado?: boolean;
   /** Tarjeta creada en el kanban del CRM, si se registró como lead. */
   taskPipelineId?: string;
+  /** Registro de demanda no cubierta, si pidió algo que no ofrecemos. */
+  demandaId?: string;
 }
 
 /** Da de alta (o actualiza, sin duplicar) el paciente. No le da acceso al portal. */

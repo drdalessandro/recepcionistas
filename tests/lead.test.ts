@@ -1,5 +1,15 @@
 import { describe, it, expect } from 'vitest';
-import { descripcionLead, esLeadAnonimo, fuenteDeLead, nombreDeLead, proximaAccionLead, validarLead } from '../src/lib/lead.js';
+import {
+  descripcionLead,
+  esLeadAnonimo,
+  esPedidoNoDisponible,
+  fuenteDeLead,
+  interesDeLead,
+  nombreDeLead,
+  proximaAccionLead,
+  validarLead,
+} from '../src/lib/lead.js';
+import { PEDIDO_OTRA_COSA } from '../src/lib/demanda.js';
 import { ORIGENES_LEAD_LABELS } from '../src/fhir/identifiers.js';
 
 // Caso 1 del walk-in: alguien pasa, entra, pregunta y se va. Hoy no deja rastro,
@@ -104,5 +114,100 @@ describe('proximaAccionLead — lo unico que se ve en la tarjeta', () => {
   it('siempre devuelve algo: una tarjeta sin texto no dice nada', () => {
     expect(proximaAccionLead({}).length).toBeGreaterThan(0);
     expect(proximaAccionLead({ telefono: '1169315830' })).toContain('Contactar');
+  });
+});
+
+// El acompanante: vino con alguien que se atiende, tiene 40 minutos de espera y
+// ya vio el lugar por dentro. El vinculo es su dato de mas valor comercial.
+describe('acompañante — el vínculo es lo que abre la conversación', () => {
+  it('el vínculo va PRIMERO: "vino con Julio" abre mejor que el servicio', () => {
+    const t = proximaAccionLead({ acompanaA: "Julio D'Alessandro", interes: 'IHHT', telefono: '1169315830' });
+    expect(t).toContain('Contactar');
+    expect(t.indexOf("Julio D'Alessandro")).toBeLessThan(t.indexOf('IHHT'));
+  });
+
+  it('sin teléfono tampoco promete contactar, pero conserva el vínculo', () => {
+    const t = proximaAccionLead({ acompanaA: "Julio D'Alessandro", interes: 'IHHT' });
+    expect(t).not.toContain('Contactar');
+    expect(t).toContain("Julio D'Alessandro");
+    expect(t).toContain('no dejó datos de contacto');
+  });
+
+  it('acompañante sin interés declarado igual dice con quién vino', () => {
+    expect(proximaAccionLead({ acompanaA: 'Ana', telefono: '1169315830' })).toContain('Ana');
+  });
+
+  it('el vínculo alcanza para registrar: ya es un lead trabajable', () => {
+    expect(validarLead({ acompanaA: 'Ana' }).ok).toBe(true);
+    // Sin nada sigue sin registrarse.
+    expect(validarLead({}).ok).toBe(false);
+  });
+
+  it('la descripción deja el vínculo para quien abra el detalle', () => {
+    expect(descripcionLead({ acompanaA: 'Ana', interes: 'IHHT' })).toContain('Acompañó a Ana');
+  });
+
+  it('sin vínculo, los textos siguen exactamente como antes', () => {
+    expect(proximaAccionLead({ interes: 'IHHT', telefono: '1' })).toBe('Contactar — preguntó por IHHT');
+    expect(descripcionLead({ interes: 'IHHT' })).toContain('Consulta presencial en el local');
+  });
+});
+
+// Caso 11: pidió algo que NO ofrecemos. El lead sigue siendo un lead, pero hoy
+// no hay nada que venderle: tratarlo como a los demás termina en una llamada
+// donde se le vuelve a decir que no.
+describe('pedido de algo que no tenemos', () => {
+  const pedido = { interes: PEDIDO_OTRA_COSA, pedido: 'nutricionista' };
+
+  it('"Otra cosa" sin el detalle NO se registra: es el dato que se perdía', () => {
+    const v = validarLead({ interes: PEDIDO_OTRA_COSA, telefono: '1169315830' });
+    expect(v.ok).toBe(false);
+  });
+
+  it('con el detalle, se registra', () => {
+    expect(validarLead(pedido).ok).toBe(true);
+  });
+
+  it('es lo ÚNICO obligatorio de más: el resto del formulario sigue siendo opcional', () => {
+    expect(validarLead({ interes: 'Cámara hiperbárica' }).ok).toBe(true);
+    expect(validarLead({ nombre: 'Ana' }).ok).toBe(true);
+  });
+
+  it('en los textos se ve el pedido, no la palabra "Otra cosa"', () => {
+    expect(interesDeLead(pedido)).toBe('nutricionista');
+    expect(descripcionLead(pedido)).toContain('nutricionista');
+    expect(descripcionLead(pedido)).not.toContain(PEDIDO_OTRA_COSA);
+    expect(proximaAccionLead({ ...pedido, telefono: '1169315830' })).not.toContain(PEDIDO_OTRA_COSA);
+  });
+
+  it('la tarjeta dice que la respuesta fue NO, para que nadie lo llame a venderle eso', () => {
+    expect(descripcionLead(pedido)).toContain('NO está en el catálogo');
+  });
+
+  it('la próxima acción es avisarle si lo sumamos, no "contactar" (no hay qué venderle)', () => {
+    const t = proximaAccionLead({ ...pedido, telefono: '1169315830' });
+    expect(t).toContain('Avisarle si sumamos nutricionista');
+    expect(t).not.toContain('Contactar');
+  });
+
+  it('sin teléfono no promete nada: el pedido queda igual para el reporte', () => {
+    const t = proximaAccionLead(pedido);
+    expect(t).toContain('nutricionista');
+    expect(t).toContain('no dejó datos de contacto');
+  });
+
+  it('conserva el vínculo si además vino acompañando a alguien', () => {
+    expect(proximaAccionLead({ ...pedido, acompanaA: 'Julio', telefono: '1' })).toContain('Julio');
+  });
+
+  it('sin texto no se marca como pedido: "Otra cosa" sola no dice nada', () => {
+    expect(esPedidoNoDisponible({ interes: PEDIDO_OTRA_COSA })).toBe(false);
+    expect(esPedidoNoDisponible({ interes: PEDIDO_OTRA_COSA, pedido: '  ' })).toBe(false);
+    expect(esPedidoNoDisponible(pedido)).toBe(true);
+  });
+
+  it('un interés del catálogo NO se marca aunque venga un pedido colgado', () => {
+    expect(esPedidoNoDisponible({ interes: 'Cámara hiperbárica', pedido: 'nutricionista' })).toBe(false);
+    expect(interesDeLead({ interes: 'Cámara hiperbárica', pedido: 'nutricionista' })).toBe('Cámara hiperbárica');
   });
 });

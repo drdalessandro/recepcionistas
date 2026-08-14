@@ -210,12 +210,21 @@ describe('Seed — AccessPolicy de recepción (privacidad por diseño)', () => {
     expect(subs[0]?.criteria).toBe('Subscription?type=websocket');
   });
 
-  it('Caja chica: Basic SOLO con el code de caja (el config del TC no se toca del mostrador)', () => {
+  it('Basic: SOLO caja chica y demanda no cubierta (el config del TC no se toca del mostrador)', () => {
     const recep = seed.accessPolicies.find((p) => p.name === 'Recepción — Operativo')!;
     const basicos = (recep.resource ?? []).filter((r) => r.resourceType === 'Basic');
+    // Una sola entrada con los dos codes en OR, no dos entradas del mismo
+    // resourceType: así no depende de cómo resuelve el servidor policies que
+    // compiten por el mismo tipo.
     expect(basicos).toHaveLength(1);
-    expect(basicos[0]?.criteria).toBe('Basic?code=https://biowellness.ar/fhir/CodeSystem/caja|');
+    expect(basicos[0]?.criteria).toBe(
+      'Basic?code=https://biowellness.ar/fhir/CodeSystem/caja|,https://biowellness.ar/fhir/CodeSystem/demanda|',
+    );
     expect(basicos[0]?.readonly).toBeUndefined();
+    // Lo que este test cuida de verdad: el Basic del TC (identifier `config`)
+    // sigue fuera de alcance. Sin criteria, el mostrador podría cambiar el
+    // tipo de cambio de todo el centro.
+    expect(basicos[0]?.criteria).not.toContain('/Identifier/config');
   });
 });
 

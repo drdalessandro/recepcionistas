@@ -117,6 +117,77 @@ detalle completo por si algún día lo quieren mostrar.
 **`Task.owner` lo dejamos vacío a propósito**: el responsable del lead lo asignan
 ustedes al trabajarlo, no Recepción. Por eso las tarjetas salen sin responsable.
 
+## Canal nuevo: `acompanante` (2026-08-14, segunda tanda)
+
+Sumamos un código al contrato de canales: **`acompanante`**, para el que viene
+acompañando a un paciente y pregunta mientras espera. No es `walk-in` —no vino
+por su cuenta, vino traído— y muy probablemente **convierte distinto**: ya vio
+el lugar por dentro y tuvo cuarenta minutos de exposición. Medirlo aparte es
+justamente el punto.
+
+Verificamos en su `canales.ts` que un canal nuevo no rompe nada:
+`canalLabel` cae al código crudo y `ordenContrato` lo manda al final. Así que
+**va a aparecer como `acompanante`** en el panel hasta que le agreguen la
+etiqueta. La nuestra es *"Acompañante de un paciente"*, por si quieren la misma.
+
+En la tarjeta del kanban el vínculo va primero, porque es lo que abre la
+conversación:
+
+| Situación | Texto en la tarjeta |
+| --- | --- |
+| Acompañante con teléfono | `Contactar — acompañó a Julio D'Alessandro y preguntó por IHHT` |
+| Acompañante sin datos | `Acompañó a Julio D'Alessandro y preguntó por IHHT — no dejó datos de contacto` |
+
+> El vínculo va **solo en el texto**, no en un recurso ni extensión nueva: nada
+> del lado de ustedes lo leería, y no quisimos inventar contrato para un dato
+> que es color de conversación, no métrica. Para medir alcanza con el canal.
+
+## El que pide algo que no tenemos (2026-08-14, tercera tanda)
+
+Caso 11 del walk-in. Cuando alguien pregunta por algo **que no está en el
+catálogo**, Recepción ahora anota *qué* pidió (antes caía en "Otra cosa" y el
+texto se perdía). Eso les cambia dos cosas en la tarjeta y **no requiere que
+toquen nada**:
+
+| Situación | Texto en la tarjeta (`próxima-acción`) |
+| --- | --- |
+| Con teléfono | `Avisarle si sumamos nutricionista — hoy no lo ofrecemos` |
+| Sin datos | `Pidió nutricionista, que hoy no ofrecemos — no dejó datos de contacto` |
+
+`Task.description` dice además **"Pidió: nutricionista — NO está en el catálogo
+hoy"**. La acción deliberadamente **no** es "Contactar": no hay qué venderle
+hoy, y llamarlo para repetirle que no lo tenemos quema el lead. Lo que sí se
+puede prometer es avisarle si lo sumamos — por eso el lead queda vivo.
+
+El agregado que **sí** es dato nuevo, por si lo quieren en su panel: cada pedido
+deja un `Basic` propio, listable con una búsqueda estándar:
+
+```
+GET /fhir/R4/Basic?code=https://biowellness.ar/fhir/CodeSystem/demanda|no-disponible
+```
+
+```jsonc
+{
+  "resourceType": "Basic",
+  "code": {
+    "coding": [{ "system": "https://biowellness.ar/fhir/CodeSystem/demanda", "code": "no-disponible" }],
+    "text": "nutricionista"                       // tal como lo dijo
+  },
+  "subject": { "reference": "Patient/…" },          // a quién avisarle si lo sumamos
+  "author":  { "reference": "Practitioner/…" },     // quién lo registró
+  "created": "2026-08-14",
+  "extension": [
+    { "url": "https://biowellness.ar/fhir/StructureDefinition/demanda-clave",
+      "valueString": "nutricionista" }              // clave de agregación (sin tildes/mayúsculas)
+  ]
+}
+```
+
+Se escribe **también para pacientes que ya existen** (ahí no hay tarjeta de lead,
+y el pedido vale igual). Nosotros lo mostramos agrupado en Reportes; si les
+sirve para el panel comercial, el dato ya está y no hay contrato nuevo que
+acordar.
+
 ## Deduplicación (esto les sirve)
 
 El lead entra por el **mismo** `bw-alta-paciente` que un alta normal, así que

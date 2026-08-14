@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Alert, Button, Group, Modal, Select, Stack, Text, TextInput } from '@mantine/core';
 import { IconInfoCircle, IconMessageQuestion } from '@tabler/icons-react';
 import { SERVICIOS, CATEGORIA_COMERCIAL } from '@bw/config/catalogo';
+import { PEDIDO_OTRA_COSA, PEDIDO_MAX } from '@bw/lib/demanda';
 import { validarLead } from '@bw/lib/lead';
 import { useMedplumProfile } from '@medplum/react';
 import { getReferenceString } from '@medplum/core';
@@ -25,16 +26,23 @@ export function RegistrarConsulta({
   abierto,
   onCerrar,
   onRegistrado,
+  acompanaA,
 }: {
   abierto: boolean;
   onCerrar: () => void;
   /** Se llama con el id del lead creado (para poder abrir su ficha). */
   onRegistrado: (patientId: string, anonimo: boolean) => void;
+  /**
+   * Nombre del paciente al que acompaña, si se abre desde su ficha. Cambia el
+   * canal a `acompanante` y agrega el vínculo al texto de la tarjeta del CRM.
+   */
+  acompanaA?: string;
 }): JSX.Element {
   // Quién está registrando: va como `agent` del Provenance del CRM. El bot no
   // sabe quién lo llamó, así que se lo manda la app.
   const perfil = useMedplumProfile();
   const [interes, setInteres] = useState<string | null>(null);
+  const [pedido, setPedido] = useState('');
   const [nombre, setNombre] = useState('');
   const [telefono, setTelefono] = useState('');
   const [guardando, setGuardando] = useState(false);
@@ -48,18 +56,30 @@ export function RegistrarConsulta({
       label: c,
     })),
     { value: 'Precios y planes', label: 'Precios y planes' },
-    { value: 'Otra cosa', label: 'Otra cosa' },
+    { value: PEDIDO_OTRA_COSA, label: 'Otra cosa (algo que no ofrecemos)' },
   ];
+
+  // Caso 11: pidió algo que no está en el catálogo. Es el único dato que este
+  // formulario NO puede perder — nadie más nos dice qué nos están pidiendo y no
+  // vendemos.
+  const esOtraCosa = interes === PEDIDO_OTRA_COSA;
 
   function limpiar(): void {
     setInteres(null);
+    setPedido('');
     setNombre('');
     setTelefono('');
     setError(null);
   }
 
   async function registrar(): Promise<void> {
-    const datos = { nombre: nombre.trim(), telefono: telefono.trim(), interes: interes ?? undefined };
+    const datos = {
+      nombre: nombre.trim(),
+      telefono: telefono.trim(),
+      interes: interes ?? undefined,
+      pedido: esOtraCosa ? pedido.trim() : undefined,
+      acompanaA,
+    };
     const v = validarLead(datos);
     if (!v.ok) {
       setError(v.error);
@@ -72,9 +92,14 @@ export function RegistrarConsulta({
         nombre: datos.nombre || undefined,
         telefono: datos.telefono || undefined,
         interes: datos.interes,
+        pedido: datos.pedido,
+        acompanaA,
         // Contrato del CRM: nace como lead, no como cliente.
         cicloVida: 'lead',
-        origenLead: 'walk-in',
+        // Canal distinto del walk-in: no vino por su cuenta, vino traído. Y
+        // convierte distinto —ya vio el lugar por dentro— así que medirlo
+        // aparte es justamente el punto.
+        origenLead: acompanaA ? 'acompanante' : 'walk-in',
         registradoPorRef: perfil ? getReferenceString(perfil) : undefined,
       });
       if (!r.ok || !r.patientId) {
@@ -92,11 +117,17 @@ export function RegistrarConsulta({
   }
 
   return (
-    <Modal opened={abierto} onClose={onCerrar} title="Registrar una consulta del mostrador" size="md">
+    <Modal
+      opened={abierto}
+      onClose={onCerrar}
+      title={acompanaA ? `Registrar acompañante de ${acompanaA}` : 'Registrar una consulta del mostrador'}
+      size="md"
+    >
       <Stack gap="sm">
         <Text size="sm" c="dimmed">
-          Para saber cuánta gente entra y qué pregunta. Si no quiere dejar sus datos, registrala igual: con el
-          interés alcanza.
+          {acompanaA
+            ? `Vino acompañando a ${acompanaA} y preguntó por algo. Queda como lead con ese vínculo, que es lo que le da contexto a quien lo contacte.`
+            : 'Para saber cuánta gente entra y qué pregunta. Si no quiere dejar sus datos, registrala igual: con el interés alcanza.'}
         </Text>
 
         <Select
@@ -107,6 +138,18 @@ export function RegistrarConsulta({
           onChange={setInteres}
           searchable
         />
+
+        {esOtraCosa && (
+          <TextInput
+            label="¿Qué pidió exactamente?"
+            description="Con las palabras que usó. Es lo que después nos dice qué nos están pidiendo y no tenemos."
+            placeholder="Ej.: nutricionista, crioterapia de cuerpo entero, masajes deportivos"
+            value={pedido}
+            maxLength={PEDIDO_MAX}
+            onChange={(e) => setPedido(e.currentTarget.value)}
+            data-autofocus
+          />
+        )}
 
         <Group grow align="flex-start">
           <TextInput

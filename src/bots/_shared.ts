@@ -1471,6 +1471,40 @@ export interface ConsumoPlan {
  * No es idempotente por sí sola: el bot que reserva decide cuándo llamarla (una
  * vez por turno creado con plan).
  */
+/**
+ * Devuelve una sesión al plan (R-14): la operación inversa de
+ * `consumirSesionDePlan`, para cuando un turno se cancela a tiempo.
+ *
+ * Existía el consumo y NO existía la devolución, así que quien cancelaba con la
+ * anticipación que pide la regla perdía igual la sesión que había pagado. El
+ * error iba siempre en contra del paciente.
+ *
+ * Nunca baja de 0: si la cuenta ya estaba en cero (o alguien canceló dos veces),
+ * devolver de más le regalaría sesiones al plan.
+ */
+export async function devolverSesionDePlan(
+  medplum: MedplumClient,
+  coverageId: string,
+): Promise<{ usadas: number } | undefined> {
+  try {
+    const coverage = await medplum.readResource('Coverage', coverageId);
+    const extension = [...(coverage.extension ?? [])];
+    const idx = extension.findIndex((x) => x.url === EXT.sesionesUsadas);
+    const usadas = idx >= 0 ? (extension[idx]!.valueInteger ?? 0) : 0;
+    if (usadas <= 0) {
+      return { usadas: 0 };
+    }
+    const nuevas = usadas - 1;
+    extension[idx] = { url: EXT.sesionesUsadas, valueInteger: nuevas };
+    await medplum.updateResource<Coverage>({ ...coverage, extension });
+    return { usadas: nuevas };
+  } catch {
+    // Best-effort: la cancelación del turno no puede fallar por esto. Queda la
+    // sesión sin devolver y Recepción puede corregirla a mano.
+    return undefined;
+  }
+}
+
 export async function consumirSesionDePlan(
   medplum: MedplumClient,
   coverageId: string,

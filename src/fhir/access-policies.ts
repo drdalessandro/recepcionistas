@@ -26,10 +26,14 @@ export const POLICY_RECEPCIONISTA: AccessPolicy = {
     { resourceType: 'ChargeItem' },
     { resourceType: 'PaymentReconciliation' },
     { resourceType: 'Account' },
-    // Caja chica: movimientos (egreso/reposición/ajuste) como Basic, SOLO con
-    // el code de caja — el config del TC también es Basic y desde el mostrador
-    // no se toca. El arqueo va en PaymentReconciliation (ya listado arriba).
-    { resourceType: 'Basic', criteria: `Basic?code=${SYSTEM.caja}|` },
+    // Basic de recepción: caja chica (movimientos egreso/reposición/ajuste) y
+    // demanda no cubierta (lo que piden y no tenemos). SOLO esos dos codes — el
+    // config del TC también es Basic y desde el mostrador no se toca. Va como
+    // UNA entrada con los dos codes en OR (`code=a|,b|`) y no como dos entradas
+    // del mismo resourceType, para no depender de cómo resuelve el servidor dos
+    // policies que compiten por el mismo tipo. El arqueo va en
+    // PaymentReconciliation (ya listado arriba).
+    { resourceType: 'Basic', criteria: `Basic?code=${SYSTEM.caja}|,${SYSTEM.demanda}|` },
     // Membresía / sesiones del mes (sólo lectura)
     { resourceType: 'Coverage', readonly: true },
     { resourceType: 'Contract', readonly: true },

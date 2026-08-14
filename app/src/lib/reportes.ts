@@ -1,7 +1,16 @@
-import type { Appointment, Invoice } from '@medplum/fhirtypes';
+import type { Appointment, Basic, Invoice } from '@medplum/fhirtypes';
 import { medplum } from '../medplum';
 import { RECURSOS_POR_CODIGO } from '@bw/config/recursos';
-import { EXT } from '@bw/fhir/identifiers';
+import { EXT, SYSTEM } from '@bw/fhir/identifiers';
+import { CODIGO_DEMANDA_NO_DISPONIBLE, basicADemanda } from '@bw/fhir/demanda';
+import { agruparDemanda, type DemandaAgrupada } from '@bw/lib/demanda';
+
+/**
+ * Ventana del reporte de demanda no cubierta. 90 días: menos no alcanza para
+ * que un pedido se repita —son pocos por semana— y más arrastra pedidos que ya
+ * resolvimos sumando el servicio.
+ */
+const DIAS_DEMANDA = 90;
 
 export interface Reportes {
   hoy: {
@@ -17,6 +26,12 @@ export interface Reportes {
   };
   mes: { ingresosARS: number; turnos: number; aCobrarARS: number };
   ocupacion: Array<{ sala: string; turnos: number }>;
+  /**
+   * Caso 11 · lo que nos piden y no tenemos. Es el único reporte de acá que no
+   * mide lo que hicimos sino lo que **no** podemos vender, y sale del mostrador
+   * porque es el único lugar donde alguien nos lo dice en la cara.
+   */
+  demanda: { dias: number; total: number; pedidos: DemandaAgrupada[] };
 }
 
 function sum<T>(arr: T[], f: (x: T) => number): number {
@@ -106,6 +121,22 @@ export async function cargarReportes(): Promise<Reportes> {
   const turnosMes = await contar('Appointment', { date: `ge${inicioMes.toISOString()}` });
   const whatsapp = await contar('Communication', { sent: `ge${inicioHoy.toISOString()}` });
 
+  // Demanda no cubierta. `Basic.created` es `date` (día), así que la ventana se
+  // calcula en días y se compara por fecha, no por instante.
+  const desdeDemanda = new Date(inicioHoy);
+  desdeDemanda.setDate(desdeDemanda.getDate() - DIAS_DEMANDA);
+  const basics = await safe(() =>
+    medplum.searchResources('Basic', {
+      code: `${SYSTEM.demanda}|${CODIGO_DEMANDA_NO_DISPONIBLE}`,
+      created: `ge${desdeDemanda.toISOString().slice(0, 10)}`,
+      _count: 500,
+    }),
+  );
+  const pedidos = (basics as Basic[]).flatMap((b) => {
+    const p = basicADemanda(b);
+    return p ? [p] : [];
+  });
+
   return {
     hoy: {
       turnos: delDia.length,
@@ -123,5 +154,6 @@ export async function cargarReportes(): Promise<Reportes> {
       aCobrarARS: sum(pendMes as Invoice[], (i) => i.totalGross?.value ?? 0),
     },
     ocupacion,
+    demanda: { dias: DIAS_DEMANDA, total: pedidos.length, pedidos: agruparDemanda(pedidos) },
   };
 }
