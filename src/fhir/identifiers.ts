@@ -102,6 +102,14 @@ export const EXT = {
    * booleano se evaporaba al validar y no quedaba auditoría de quién lo afirmó.
    */
   consentimientoOrigen: `${BASE}/StructureDefinition/consentimiento-origen`,
+  /**
+   * R-14 · la cancelación tardía se perdonó por **fuerza mayor médica**
+   * (valueBoolean). La regla contempla la excepción; sin registrarla, la
+   * devolución de una sesión fuera de ventana no se puede auditar después.
+   */
+  cancelacionFuerzaMayor: `${BASE}/StructureDefinition/cancelacion-fuerza-mayor`,
+  /** R-14 · quién declaró la fuerza mayor (valueString con la referencia). */
+  cancelacionDeclaradaPor: `${BASE}/StructureDefinition/cancelacion-declarada-por`,
 } as const;
 
 /** Sistemas de codificación / identificadores de negocio. */

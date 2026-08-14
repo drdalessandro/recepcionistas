@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
-import { Alert, Anchor, Badge, Button, Divider, Group, Modal, NumberFormatter, Select, Stack, Text } from '@mantine/core';
+import { Alert, Anchor, Badge, Button, Checkbox, Divider, Group, Modal, NumberFormatter, Select, Stack, Text } from '@mantine/core';
 import type { Invoice } from '@medplum/fhirtypes';
+import { getReferenceString } from '@medplum/core';
+import { useMedplumProfile } from '@medplum/react';
 import { medplum } from '../medplum';
 import {
   cambiarEstadoTurno,
@@ -52,6 +54,10 @@ export function TurnoModal({
   const [medioPago, setMedioPago] = useState<string | null>('efectivo');
   const [mp, setMp] = useState<ResultadoLinkMP | null>(null);
   const [saldo, setSaldo] = useState<Invoice | null>(null);
+  // R-14: si el turno se pagó con plan hay una sesión que devolver al cancelar.
+  const [usaPlan, setUsaPlan] = useState(false);
+  const [fuerzaMayor, setFuerzaMayor] = useState(false);
+  const perfil = useMedplumProfile();
   const [confirmarCompletar, setConfirmarCompletar] = useState(false);
   const [venceSena, setVenceSena] = useState<Date | null>(null);
 
@@ -68,10 +74,22 @@ export function TurnoModal({
     setError(null);
     setConfirmarCompletar(false);
     setVenceSena(null);
+    setFuerzaMayor(false);
+    setUsaPlan(false);
     if (!turno) {
       return;
     }
     let vivo = true;
+    // ¿El turno se pagó con un plan? Solo entonces hay una sesión que devolver
+    // (R-14), y solo entonces tiene sentido ofrecer la excepción.
+    medplum
+      .readResource('Appointment', turno.appointmentId)
+      .then((a) => {
+        if (vivo) {
+          setUsaPlan(Boolean(a.extension?.some((x) => x.url === EXT.coberturaUsada)));
+        }
+      })
+      .catch(() => undefined);
     if (turno.estado === 'pending' || turno.estado === 'proposed') {
       medplum
         .readResource('Appointment', turno.appointmentId)
@@ -109,7 +127,12 @@ export function TurnoModal({
     setCargando(estado);
     setError(null);
     try {
-      await cambiarEstadoTurno(turno.appointmentId, estado);
+      await cambiarEstadoTurno(turno.appointmentId, estado, {
+        // R-14: solo aplica al cancelar. El bot decide si devuelve la sesión;
+        // acá solo se declara la excepción.
+        fuerzaMayorMedica: estado === 'cancelled' ? fuerzaMayor : undefined,
+        declaradaPorRef: perfil ? getReferenceString(perfil) : undefined,
+      });
       onCambiado();
       onClose();
     } catch (e) {
@@ -285,6 +308,17 @@ export function TurnoModal({
           )}
 
           <Divider label="Estado del turno" labelPosition="center" />
+          {/* R-14 · cancelar con 24 h o más devuelve la sesión al plan. Sobre esa
+              hora ya se consume, salvo fuerza mayor médica — que es una excepción
+              real (alguien se descompone) y por eso queda registrada con quién la
+              declaró, en vez de resolverse por WhatsApp y sin rastro. */}
+          {usaPlan && (
+            <Checkbox
+              checked={fuerzaMayor}
+              onChange={(e) => setFuerzaMayor(e.currentTarget.checked)}
+              label="Fuerza mayor médica: devolver la sesión aunque cancele fuera de las 24 h"
+            />
+          )}
           <Group>
             {ACCIONES.map((a) => (
               <Button
