@@ -25,12 +25,9 @@
  * gana y el DocumentReference queda de respaldo histórico.
  */
 import type { BotEvent, MedplumClient } from '@medplum/core';
-import { COD_CONSENTIMIENTO, COD_LOINC_CONSENTIMIENTO, LOINC_CONSENTIMIENTO, SYSTEM } from '../fhir/identifiers.js';
-import {
-  estadoConsentimiento,
-  type EstadoConsentimiento,
-  type RegistroConsentimiento,
-} from '../lib/consentimiento.js';
+import { COD_CONSENTIMIENTO } from '../fhir/identifiers.js';
+import { estadoConsentimiento, type EstadoConsentimiento } from '../lib/consentimiento.js';
+import { leerRegistrosConsentimiento } from './_shared.js';
 
 export interface EntradaConsentimiento {
   /** "Patient/<id>". */
@@ -56,53 +53,12 @@ export async function handler(
     return { ok: false, estado: 'no-verificable', mensaje: 'Falta pacienteRef (Patient/<id>).' };
   }
 
-  let registros: RegistroConsentimiento[] | undefined;
-  try {
-    // 1) Consent (el registro legal). Se busca por PACIENTE, no por category:
-    //    el portal usa la categoría estándar de HL7 (`v3-ActCode|IDSCL` en el
-    //    de laboratorio, LOINC 59284-0 en el general) y pone el código de
-    //    Biowellness en `policyRule`. Filtrar por category no traería nada.
-    const consents = await medplum.searchResources('Consent', {
-      patient: e.pacienteRef,
-      _count: 50,
-    });
-    registros = consents.map((c) => ({
-      estado: c.status,
-      fechaISO: c.dateTime,
-      // El código de BW vive en policyRule; se mira category de fallback por
-      // si alguna vez se registra del otro modo.
-      codigo:
-        c.policyRule?.coding?.find((cod) => cod.system === SYSTEM.consentimiento)?.code ??
-        c.category?.flatMap((cat) => cat.coding ?? []).find((cod) => cod.system === SYSTEM.consentimiento)?.code,
-    }));
-
-    // 2) Firmas HISTÓRICAS del consentimiento general: hasta que el portal
-    //    empiece a crear el Consent, la única huella es el DocumentReference
-    //    del documento firmado (LOINC 59284-0). Sin esto, todo el que ya firmó
-    //    aparecería como "sin consentimiento" hasta que vuelva a firmar.
-    //    Búsqueda ACOTADA a ese código: no se toca el resto de la historia
-    //    documental, y de acá solo sale la fecha (nunca el contenido).
-    const docs = await medplum
-      .searchResources('DocumentReference', {
-        subject: e.pacienteRef,
-        type: `${LOINC_CONSENTIMIENTO}|${COD_LOINC_CONSENTIMIENTO}`,
-        _count: 20,
-      })
-      .catch(() => []);
-    for (const d of docs) {
-      // `superseded`/`entered-in-error` no cuentan como firma vigente.
-      registros.push({
-        estado: d.status === 'current' ? 'active' : 'inactive',
-        fechaISO: d.date,
-        codigo: COD_CONSENTIMIENTO.atencion,
-      });
-    }
-  } catch {
-    // Falla CERRADO: 'no-verificable' ≠ 'no firmó'. La recepcionista ve que no
-    // se pudo consultar y decide con el papel en la mano, en vez de creer que
-    // el paciente no firmó (o peor, que sí).
-    registros = undefined;
-  }
+  // La lectura vive en `_shared` y la comparten los bots de reserva (R-20): si
+  // divergieran, el badge de Atender diría una cosa y la reserva otra.
+  // `undefined` = no se pudo consultar → falla CERRADO ('no-verificable' ≠ 'no
+  // firmó'): la recepcionista ve que no se pudo verificar y decide con el papel
+  // en la mano, en vez de creer que el paciente no firmó (o peor, que sí).
+  const registros = await leerRegistrosConsentimiento(medplum, e.pacienteRef);
 
   const r = estadoConsentimiento(registros, { codigo: e.codigo });
   return { ok: true, estado: r.estado, ...(r.fechaISO ? { fechaISO: r.fechaISO } : {}) };

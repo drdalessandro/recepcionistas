@@ -112,6 +112,63 @@ export function validarPrescripcion(servicio: Servicio, prescripcionActiva: bool
  * El documento firmado se archiva en la historia clínica (lado Panel Bio);
  * recepción solo declara que existe — nunca ve el contenido.
  */
+/**
+ * R-20 · Ninguna terapia se reserva sin **consentimiento general firmado** y
+ * **cuestionario de ingreso completo**. Decisión de Andrés (2026-08-14), a raíz
+ * del recorrido del walk-in: el portal ya bloqueaba las dos cosas, pero el
+ * mostrador no las pedía — y el walk-in ES el mostrador.
+ *
+ * Es distinto de R-03, que exige consentimiento **específico de TB** y admite la
+ * declaración de Recepción. R-20 aplica a TODAS las categorías y **no admite
+ * override**: sin firma y sin screening no hay reserva.
+ *
+ * Falla CERRADO: `undefined` (no se pudo verificar) bloquea igual que `false`.
+ * Los mensajes se distinguen a propósito — "todavía no lo hizo" manda a
+ * completarlo; "no pudimos verificar" es un problema nuestro que hay que escalar.
+ */
+export function validarAptitudPaciente(opts: {
+  /** ¿Firmó el consentimiento general de atención? `undefined` = no verificable. */
+  consentimientoGeneralFirmado?: boolean;
+  /** ¿Completó el cuestionario de ingreso (screening)? `undefined` = no verificable. */
+  screeningCompleto?: boolean;
+}): ResultadoValidacion {
+  const bloqueos: Issue[] = [];
+
+  if (opts.consentimientoGeneralFirmado === undefined) {
+    bloqueos.push({
+      regla: 'R-20',
+      nivel: 'bloqueo',
+      mensaje:
+        'No pudimos verificar el consentimiento informado del paciente. No se reserva sin confirmarlo (escalá al equipo).',
+    });
+  } else if (!opts.consentimientoGeneralFirmado) {
+    bloqueos.push({
+      regla: 'R-20',
+      nivel: 'bloqueo',
+      mensaje:
+        'El paciente todavía no firmó el consentimiento informado. Invitalo al portal desde "Invitar al portal" y que lo firme antes de reservar.',
+    });
+  }
+
+  if (opts.screeningCompleto === undefined) {
+    bloqueos.push({
+      regla: 'R-20',
+      nivel: 'bloqueo',
+      mensaje:
+        'No pudimos verificar el cuestionario de ingreso del paciente. No se reserva sin confirmarlo (escalá al equipo).',
+    });
+  } else if (!opts.screeningCompleto) {
+    bloqueos.push({
+      regla: 'R-20',
+      nivel: 'bloqueo',
+      mensaje:
+        'El paciente todavía no completó el cuestionario de ingreso, así que no sabemos si puede recibir esta terapia. Que lo complete en el portal antes de reservar.',
+    });
+  }
+
+  return resultado(bloqueos);
+}
+
 export function validarConsentimientoTB(servicio: Servicio, consentimientoFirmado: boolean): ResultadoValidacion {
   if (servicio.categoria === 'TERAPIA_BIOLOGICA' && !consentimientoFirmado) {
     return resultado([

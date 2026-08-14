@@ -20,12 +20,13 @@
  * `no-verificable`: los dos **fallan cerrado**.
  */
 import type { BotEvent, MedplumClient } from '@medplum/core';
-import { INTAKE_QUESTIONNAIRE_URL, SYSTEM } from '../fhir/identifiers.js';
+import { SYSTEM } from '../fhir/identifiers.js';
 import {
   estadoSeguridad,
   type ColorSeguridad,
   type EstadoSeguridad,
 } from '../lib/seguridad.js';
+import { leerScreeningCompleto } from './_shared.js';
 
 export interface EntradaSeguridadBot {
   /** "Patient/<id>". */
@@ -72,20 +73,9 @@ export async function handler(
   }
 
   // 2) ¿Completó el cuestionario de ingreso? Es el que incluye el screening de
-  //    contraindicaciones HBOT/IHHT. Solo se mira que EXISTA una respuesta
-  //    completa: de acá no sale ni una sola respuesta suya.
-  let screeningCompleto: boolean | undefined;
-  try {
-    const respuestas = await medplum.searchResources('QuestionnaireResponse', {
-      subject: e.pacienteRef,
-      questionnaire: INTAKE_QUESTIONNAIRE_URL,
-      status: 'completed',
-      _count: 1,
-    });
-    screeningCompleto = respuestas.length > 0;
-  } catch {
-    screeningCompleto = undefined;
-  }
+  //    contraindicaciones HBOT/IHHT. La lectura la comparte con los bots de
+  //    reserva (R-20) para que el banner y el bloqueo no puedan divergir.
+  const screeningCompleto = await leerScreeningCompleto(medplum, e.pacienteRef);
 
   return { ok: true, ...estadoSeguridad({ contraindicacionesActivas, screeningCompleto }) };
 }

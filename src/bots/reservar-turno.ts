@@ -16,7 +16,7 @@ import { getServicio, nombreServicioRecepcion } from '../config/catalogo.js';
 import type { PerfilReserva } from '../config/reglas.js';
 import { EXT, SYSTEM } from '../fhir/identifiers.js';
 import { clasificacionDeServicio } from '../fhir/appointment.js';
-import { cargarReservasDelDia, consumirSesionDePlan, enviarWhatsApp, extraerCodigos, linkSena, resolverSolicitudTurno, scheduleIdDeRecurso, tieneBloqueoPago, type ConsumoPlan } from './_shared.js';
+import { aptitudDePaciente, cargarReservasDelDia, consumirSesionDePlan, enviarWhatsApp, extraerCodigos, linkSena, resolverSolicitudTurno, scheduleIdDeRecurso, tieneBloqueoPago, type ConsumoPlan } from './_shared.js';
 import { vencimientoSena } from '../lib/sena.js';
 
 const fmtFechaHora = new Intl.DateTimeFormat('es-AR', {
@@ -39,6 +39,7 @@ import {
   validarBloqueoAdministrativo,
   validarContraindicaciones,
   validarMinimoGrupal,
+  validarAptitudPaciente,
   validarConsentimientoTB,
   validarPrescripcion,
   validarRecursos,
@@ -95,6 +96,10 @@ export interface ContextoReserva {
   prescripcionActiva: boolean;
   /** TB: hay consentimiento informado firmado (R-03). */
   consentimientoFirmado: boolean;
+  /** R-20: firmó el consentimiento GENERAL. `undefined` = no verificable (bloquea). */
+  consentimientoGeneralFirmado?: boolean;
+  /** R-20: completó el cuestionario de ingreso. `undefined` = no verificable (bloquea). */
+  screeningCompleto?: boolean;
   autorizacionMedica: boolean;
   /** Turnos ya ocupados (de hoy), de todos los recursos, para capacidad/desfasaje. */
   reservasExistentes: ReservaRecurso[];
@@ -119,6 +124,14 @@ export function validarReserva(ctx: ContextoReserva): ResultadoValidacion {
 
   partes.push(validarPrescripcion(ctx.servicio, ctx.prescripcionActiva));
   partes.push(validarConsentimientoTB(ctx.servicio, ctx.consentimientoFirmado));
+  // R-20 · sin consentimiento general firmado y sin cuestionario de ingreso no
+  // se reserva NINGUNA terapia. Sin override: decisión de Andrés (2026-08-14).
+  partes.push(
+    validarAptitudPaciente({
+      consentimientoGeneralFirmado: ctx.consentimientoGeneralFirmado,
+      screeningCompleto: ctx.screeningCompleto,
+    }),
+  );
   partes.push(recomendarHbotPrevio(ctx.servicio.categoria, false));
   partes.push(
     validarContraindicaciones([ctx.servicio.categoria], ctx.contraindicacionesActivas, {
@@ -167,6 +180,11 @@ export async function handler(
   // Turnos ocupados de hoy (todos los recursos) para capacidad/desfasaje.
   const reservasExistentes = await cargarReservasDelDia(medplum, inicio);
 
+  // R-20 · consentimiento general + cuestionario de ingreso. Se lee en el server,
+  // no se recibe del input: es una regla de seguridad, no puede depender de lo
+  // que afirme quien llama al bot.
+  const aptitud = await aptitudDePaciente(medplum, e.pacienteRef);
+
   const resultado = validarReserva({
     servicio,
     inicio,
@@ -176,6 +194,7 @@ export async function handler(
     contraindicacionesActivas,
     prescripcionActiva: e.prescripcionActiva ?? false,
     consentimientoFirmado: e.consentimientoFirmado ?? false,
+    ...aptitud,
     autorizacionMedica: e.autorizacionMedica ?? false,
     reservasExistentes,
     perfil: e.perfil,

@@ -3,14 +3,19 @@
  */
 import type { BotEvent, MedplumClient } from '@medplum/core';
 import type { Appointment, ChargeItem, Communication, Coverage, Flag, Invoice, Task, TaskInput } from '@medplum/fhirtypes';
-import { COD, 
+import { COD,
+  COD_CONSENTIMIENTO,
+  COD_LOINC_CONSENTIMIENTO,
   CONFIG_TC_ID,
   EXT,
   EXT_LINEA_COMERCIAL,
+  INTAKE_QUESTIONNAIRE_URL,
+  LOINC_CONSENTIMIENTO,
   SYSTEM,
   esMedioPago,
   type MedioPago,
 } from '../fhir/identifiers.js';
+import { estadoConsentimiento, type RegistroConsentimiento } from '../lib/consentimiento.js';
 import { indiceSolicitudAResolver } from '../lib/solicitudes.js';
 import { esPlanBW, estadoDeCoverage, planCodigoDeCoverage } from '../fhir/coverage.js';
 import {
@@ -353,6 +358,100 @@ export async function cargarReservasEnRango(medplum: MedplumClient, desde: Date,
  * (para ofrecer) y `bw-solicitar-turno` (para rechazar horarios ya tomados —
  * defensa en profundidad, feedback de recepción 2026-08-12).
  */
+/**
+ * Registros de consentimiento del paciente, como los necesita la lógica pura.
+ *
+ * `undefined` = NO se pudo consultar (→ 'no-verificable'), distinto de `[]`, que
+ * significa "se consultó y no hay ninguno". Esa diferencia es la que hace que
+ * todo el circuito falle CERRADO.
+ *
+ * Lee los dos recursos a propósito: el `Consent` es el hecho legal, y el
+ * `DocumentReference` (LOINC 59284-0) cubre las firmas históricas anteriores a
+ * que el portal empezara a crear el Consent. De acá sale estado, fecha y código
+ * — nunca el contenido del documento.
+ *
+ * Compartida por `bw-estado-consentimiento` (la señal de Atender) y los bots de
+ * reserva (R-20). Si divergieran, el badge diría una cosa y la reserva otra.
+ */
+export async function leerRegistrosConsentimiento(
+  medplum: MedplumClient,
+  pacienteRef: string,
+): Promise<RegistroConsentimiento[] | undefined> {
+  try {
+    // Se busca por PACIENTE, no por category: el portal usa la categoría
+    // estándar de HL7 y pone el código de Biowellness en `policyRule`.
+    const consents = await medplum.searchResources('Consent', { patient: pacienteRef, _count: 50 });
+    const registros: RegistroConsentimiento[] = consents.map((c) => ({
+      estado: c.status,
+      fechaISO: c.dateTime,
+      codigo:
+        c.policyRule?.coding?.find((cod) => cod.system === SYSTEM.consentimiento)?.code ??
+        c.category?.flatMap((cat) => cat.coding ?? []).find((cod) => cod.system === SYSTEM.consentimiento)?.code,
+    }));
+
+    const docs = await medplum
+      .searchResources('DocumentReference', {
+        subject: pacienteRef,
+        type: `${LOINC_CONSENTIMIENTO}|${COD_LOINC_CONSENTIMIENTO}`,
+        _count: 20,
+      })
+      .catch(() => []);
+    for (const d of docs) {
+      // `superseded`/`entered-in-error` no cuentan como firma vigente.
+      registros.push({
+        estado: d.status === 'current' ? 'active' : 'inactive',
+        fechaISO: d.date,
+        codigo: COD_CONSENTIMIENTO.atencion,
+      });
+    }
+    return registros;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * ¿Completó el cuestionario de ingreso (que incluye el screening HBOT/IHHT)?
+ * `undefined` = no se pudo averiguar. Solo se mira que EXISTA una respuesta
+ * completa: de acá no sale ni una sola respuesta del paciente.
+ */
+export async function leerScreeningCompleto(
+  medplum: MedplumClient,
+  pacienteRef: string,
+): Promise<boolean | undefined> {
+  try {
+    const respuestas = await medplum.searchResources('QuestionnaireResponse', {
+      subject: pacienteRef,
+      questionnaire: INTAKE_QUESTIONNAIRE_URL,
+      status: 'completed',
+      _count: 1,
+    });
+    return respuestas.length > 0;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Aptitud del paciente para reservar (R-20): consentimiento general firmado +
+ * cuestionario de ingreso completo. Cada campo puede venir `undefined` si no se
+ * pudo verificar, y `validarAptitudPaciente` bloquea igual — falla cerrado.
+ */
+export async function aptitudDePaciente(
+  medplum: MedplumClient,
+  pacienteRef: string,
+): Promise<{ consentimientoGeneralFirmado?: boolean; screeningCompleto?: boolean }> {
+  const [registros, screeningCompleto] = await Promise.all([
+    leerRegistrosConsentimiento(medplum, pacienteRef),
+    leerScreeningCompleto(medplum, pacienteRef),
+  ]);
+  const consentimientoGeneralFirmado =
+    registros === undefined
+      ? undefined
+      : estadoConsentimiento(registros, { codigo: COD_CONSENTIMIENTO.atencion }).estado === 'firmado';
+  return { consentimientoGeneralFirmado, screeningCompleto };
+}
+
 export async function disponibilidadDePaciente(
   medplum: MedplumClient,
   pacienteRef: string,

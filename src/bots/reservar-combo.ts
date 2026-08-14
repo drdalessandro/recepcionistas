@@ -22,13 +22,14 @@ import {
   combinar,
   validarContraindicaciones,
   validarBloqueoAdministrativo,
+  validarAptitudPaciente,
   validarOrdenHBOT,
   validarVentanaReserva,
   type Issue,
   type ReservaRecurso,
   type ResultadoValidacion,
 } from '../lib/reglas-turno.js';
-import { cargarReservasDelDia, consumirSesionDePlan, enviarWhatsApp, extraerCodigos, linkSena, resolverSolicitudTurno, scheduleIdDeRecurso, tieneBloqueoPago, type ConsumoPlan } from './_shared.js';
+import { aptitudDePaciente, cargarReservasDelDia, consumirSesionDePlan, enviarWhatsApp, extraerCodigos, linkSena, resolverSolicitudTurno, scheduleIdDeRecurso, tieneBloqueoPago, type ConsumoPlan } from './_shared.js';
 import { vencimientoSena } from '../lib/sena.js';
 
 export interface EntradaCombo {
@@ -178,11 +179,15 @@ export async function handler(medplum: MedplumClient, event: BotEvent<EntradaCom
   const reservasExistentes = await cargarReservasDelDia(medplum, inicio);
   const planRes = planificarCombo(combo, inicio, reservasExistentes);
 
+  // R-20 · consentimiento general + cuestionario de ingreso, leídos en el server.
+  const aptitud = await aptitudDePaciente(medplum, e.pacienteRef);
+
   const partes: ResultadoValidacion[] = [];
   if (inicio.getTime() <= ahora.getTime()) {
     partes.push({ ok: false, bloqueos: [{ regla: 'R-13', nivel: 'bloqueo', mensaje: 'El turno está en el pasado.' }], advertencias: [] });
   }
   partes.push(validarOrdenHBOT(categorias));
+  partes.push(validarAptitudPaciente(aptitud));
   partes.push(validarBloqueoAdministrativo(tieneBloqueoPago(flags)));
   partes.push(validarContraindicaciones([...new Set(categorias)], contraindicaciones, { autorizacionMedica: e.autorizacionMedica ?? false }));
   if (e.perfil) {
