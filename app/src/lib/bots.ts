@@ -1,5 +1,6 @@
 import type { Communication, Invoice } from '@medplum/fhirtypes';
 import type { EstadoConsentimiento } from '@bw/lib/consentimiento';
+import type { ColorSeguridad, EstadoSeguridad } from '@bw/lib/seguridad';
 import { medplum } from '../medplum';
 
 /**
@@ -359,5 +360,42 @@ export async function estadoConsentimientoPaciente(
     return r?.estado ? r : { ok: false, estado: 'no-verificable' };
   } catch (e) {
     return { ok: false, estado: 'no-verificable', mensaje: mensajeError(e) };
+  }
+}
+
+export interface EstadoSeguridadBot {
+  ok: boolean;
+  estado: EstadoSeguridad;
+  color: ColorSeguridad;
+  puedeAvanzar: boolean;
+  mensaje?: string;
+}
+
+/**
+ * Estado de seguridad del paciente para el banner (bw-estado-seguridad).
+ *
+ * Va por bot y no por lectura directa porque distinguir "apto" de "nunca
+ * contestó nada" obliga a mirar el cuestionario de ingreso, y la policy de
+ * recepción no incluye `QuestionnaireResponse` (ni debe: sería abrirle la
+ * historia clínica). De acá sale un color, nunca el detalle.
+ *
+ * Falla CERRADO: sin bot, sin permisos o sin red devuelve 'no-verificable'.
+ * Antes este banner hacía `.catch(() => 'verde')` y un error de lectura se veía
+ * igual que "paciente apto" — el bug que este bot vino a cerrar.
+ */
+export async function estadoSeguridadPaciente(pacienteRef: string): Promise<EstadoSeguridadBot> {
+  const noVerificable = (mensaje?: string): EstadoSeguridadBot => ({
+    ok: false,
+    estado: 'no-verificable',
+    color: 'gris',
+    puedeAvanzar: false,
+    ...(mensaje ? { mensaje } : {}),
+  });
+  try {
+    const id = await botIdPorNombre('bw-estado-seguridad');
+    const r = (await medplum.executeBot(id, { pacienteRef })) as EstadoSeguridadBot;
+    return r?.estado ? r : noVerificable();
+  } catch (e) {
+    return noVerificable(mensajeError(e));
   }
 }

@@ -217,6 +217,17 @@ export const LOINC_CONSENTIMIENTO = 'http://loinc.org';
 export const COD_LOINC_CONSENTIMIENTO = '59284-0';
 
 /**
+ * URL canónica del **cuestionario de ingreso** del portal, que incluye el
+ * screening de contraindicaciones HBOT/IHHT. Es contrato con el portal
+ * (`portal/src/pages/intake.questionnaire.ts`): si cambia allá, el banner de
+ * seguridad de Recepción deja de reconocer los screenings completados y todos
+ * los pacientes pasan a 'sin-screening'.
+ *
+ * Lo usa `bw-estado-seguridad` para distinguir "apto" de "nunca contestó nada".
+ */
+export const INTAKE_QUESTIONNAIRE_URL = 'https://biowellness.ar/Questionnaire/intake-clinico';
+
+/**
  * Subtipo del aviso (input `tipo` del Task): habilita acciones específicas en
  * la vista Avisos. Sin subtipo, el aviso se muestra igual con "Resolver".
  */
