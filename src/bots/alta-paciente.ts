@@ -9,8 +9,17 @@
  * `Patient` por su AccessPolicy.
  */
 import type { BotEvent, MedplumClient } from '@medplum/core';
-import type { ContactPoint, Patient } from '@medplum/fhirtypes';
-import { EXT, SYSTEM, esOrigenLead } from '../fhir/identifiers.js';
+import type { ContactPoint, Patient, Task } from '@medplum/fhirtypes';
+import {
+  EXT,
+  EXT_CICLO_VIDA,
+  SYSTEM,
+  SYSTEM_CICLO_VIDA,
+  SYSTEM_ETAPA_PIPELINE,
+  esOrigenLead,
+  type CicloVida,
+} from '../fhir/identifiers.js';
+import { descripcionLead, nombreDeLead } from '../lib/lead.js';
 import { partirNombre, validarEmail } from '../lib/onboarding.js';
 
 export interface EntradaAltaPaciente {
@@ -25,6 +34,15 @@ export interface EntradaAltaPaciente {
   tipoCliente?: string;
   /** Canal por el que llegó (lista cerrada ORIGENES_LEAD; otro valor → 'otro'). */
   origenLead?: string;
+  /**
+   * Ciclo de vida (contrato del CRM): `lead` = todavía no es cliente, solo
+   * preguntó. Sin esto, la ficha nace como `activo` (el comportamiento de
+   * siempre). Un lead entra por ACÁ y no por un alta paralela para heredar la
+   * deduplicación: si el curioso vuelve en un mes, se lo encuentra.
+   */
+  cicloVida?: CicloVida;
+  /** Qué vino a preguntar. Va en la Task del pipeline; no es dato clínico. */
+  interes?: string;
 }
 
 export interface ResultadoAltaPaciente {
@@ -33,13 +51,16 @@ export interface ResultadoAltaPaciente {
   patientId?: string;
   /** true si se creó; false si se actualizó uno existente. */
   creado?: boolean;
+  /** Task del pipeline del CRM, si se registró como lead. */
+  taskPipelineId?: string;
 }
 
-function extensionAlta(tipoCliente?: string, origen?: string, fechaAlta?: string): Patient['extension'] {
+function extensionAlta(tipoCliente?: string, origen?: string, fechaAlta?: string, cicloVida?: CicloVida): Patient['extension'] {
   const ext = [
     ...(tipoCliente ? [{ url: EXT.tipoCliente, valueCode: tipoCliente }] : []),
     ...(origen ? [{ url: EXT.origenLead, valueString: origen }] : []),
     ...(fechaAlta ? [{ url: EXT.fechaAlta, valueDate: fechaAlta }] : []),
+    ...(cicloVida ? [{ url: EXT_CICLO_VIDA, valueCode: cicloVida }] : []),
   ];
   return ext.length ? ext : undefined;
 }
@@ -92,14 +113,23 @@ export async function handler(
         ? { firstName: e.firstName ?? '', lastName: e.lastName ?? '' }
         : partirNombre(e.nombre ?? '');
 
-    if (!firstName && !lastName) {
+    // Un LEAD puede no tener nombre: el curioso del mostrador muchas veces no lo
+    // deja, y el registro igual sirve para medir. Se le pone una etiqueta
+    // descriptiva con la fecha (nunca un nombre inventado, que quedaría en la
+    // ficha como si fuera el suyo). Para un alta normal el nombre sigue siendo
+    // obligatorio.
+    const esLead = e.cicloVida === 'lead';
+    if (!firstName && !lastName && !esLead) {
       return { ok: false, mensaje: 'Falta el nombre del paciente.' };
     }
     if (e.email && !validarEmail(e.email)) {
       return { ok: false, mensaje: 'El email no es válido.' };
     }
 
-    const nombreText = [firstName, lastName].filter(Boolean).join(' ');
+    const ahora = new Date();
+    const nombreText =
+      [firstName, lastName].filter(Boolean).join(' ') ||
+      nombreDeLead({ nombre: undefined, telefono: e.telefono, interes: e.interes }, ahora);
     const existente = await buscarExistente(medplum, e);
 
     // Código canónico del canal (lista cerrada); un valor desconocido cae a 'otro'.
@@ -135,14 +165,43 @@ export async function handler(
     const creado = await medplum.createResource<Patient>({
       resourceType: 'Patient',
       active: true,
+      // Ciclo de vida del CRM: extensión + espejo en meta.tag (así lo lee su
+      // pipeline). Sin `cicloVida` la ficha nace como siempre, sin la marca.
+      ...(e.cicloVida
+        ? {
+            meta: { tag: [{ system: SYSTEM_CICLO_VIDA, code: e.cicloVida }] },
+          }
+        : {}),
       name: [{ text: nombreText, given: [firstName], family: lastName }],
       identifier: e.dni ? [{ system: SYSTEM.dni, value: e.dni.trim() }] : undefined,
       telecom: telecom(e.telefono, e.email),
       // fecha-alta: cohortes mensuales del CRM. Solo al CREAR (las fichas
       // viejas quedan sin fecha, decisión 2026-07: no se retro-etiqueta).
-      extension: extensionAlta(e.tipoCliente, origen, new Date().toISOString().slice(0, 10)),
+      extension: extensionAlta(e.tipoCliente, origen, ahora.toISOString().slice(0, 10), e.cicloVida),
     });
-    return { ok: true, patientId: creado.id, creado: true };
+
+    // Tarjeta en el kanban del CRM (etapa 'nuevo'). Es lo que hace que el lead
+    // exista para alguien: sin esto queda una ficha que nadie mira. Best-effort:
+    // si falla, el lead igual quedó registrado y medible.
+    let taskPipelineId: string | undefined;
+    if (esLead) {
+      try {
+        const tarea = await medplum.createResource<Task>({
+          resourceType: 'Task',
+          status: 'requested',
+          intent: 'order',
+          businessStatus: { coding: [{ system: SYSTEM_ETAPA_PIPELINE, code: 'nuevo' }] },
+          code: { text: 'Lead' },
+          description: descripcionLead({ nombre: nombreText, telefono: e.telefono, interes: e.interes }),
+          for: { reference: `Patient/${creado.id}` },
+          authoredOn: ahora.toISOString(),
+        });
+        taskPipelineId = tarea.id;
+      } catch {
+        // el CRM puede tomarlo igual desde la ficha (ciclo-vida = lead)
+      }
+    }
+    return { ok: true, patientId: creado.id, creado: true, ...(taskPipelineId ? { taskPipelineId } : {}) };
   } catch (err) {
     return { ok: false, mensaje: err instanceof Error ? err.message : 'No se pudo dar de alta el paciente.' };
   }

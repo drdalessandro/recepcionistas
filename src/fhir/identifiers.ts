@@ -241,6 +241,37 @@ export const TIPO_AVISO = {
  * en `Patient.extension` origen-lead como uno de estos códigos, nunca texto
  * libre — así el CRM puede comparar canales.
  */
+/**
+ * Contrato del CRM (repo `administracion`) — **NO es nuestro, no inventar acá**.
+ *
+ * El CRM ya modela los leads y este repo los alimenta. Un lead **es un
+ * `Patient`** distinguido por su ciclo de vida, no un recurso aparte: por eso el
+ * curioso del mostrador entra por el mismo alta que todos y hereda su
+ * deduplicación (si vuelve en un mes, se lo encuentra en vez de duplicarlo).
+ *
+ * Ojo con el namespace: el CRM usa `bio.medplum.com.ar`, distinto del `bw` de
+ * este repo. Y no confundir `bio/lead-origen` (Provenance, atribución del CRM)
+ * con nuestro `bw/origen-lead` (Patient, canal de adquisición): conviven a
+ * propósito, cada uno con su semántica.
+ *
+ * Fuente: `administracion/src/fhir/systems.ts`. Renombrar rompe su pipeline.
+ */
+const NS_CRM = 'https://bio.medplum.com.ar/fhir';
+
+/** `Patient.extension` (valueCode) + espejo en `meta.tag`: 'lead' | 'activo'. */
+export const EXT_CICLO_VIDA = `${NS_CRM}/StructureDefinition/ciclo-vida-cliente`;
+export const SYSTEM_CICLO_VIDA = `${NS_CRM}/CodeSystem/ciclo-vida-cliente`;
+export const CICLO_VIDA = ['lead', 'activo'] as const;
+export type CicloVida = (typeof CICLO_VIDA)[number];
+
+/** `Task.businessStatus.coding.system` del kanban de leads del CRM. */
+export const SYSTEM_ETAPA_PIPELINE = `${NS_CRM}/CodeSystem/etapa-pipeline`;
+export const ETAPAS_PIPELINE = ['nuevo', 'contactado', 'evaluacion-agendada', 'convertido', 'perdido'] as const;
+export type EtapaPipeline = (typeof ETAPAS_PIPELINE)[number];
+
+/** `Task.input[].type.text` con la próxima acción del pipeline. */
+export const TASK_INPUT_PROXIMA_ACCION = 'próxima-acción';
+
 export const ORIGENES_LEAD = [
   'instagram',
   'linkedin',
