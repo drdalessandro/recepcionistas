@@ -1,7 +1,7 @@
 /**
  * Bot · Recordatorios automáticos de turnos (cron, 48 h y 2 h).
  *
- * Pensado para ejecutarse seguido (cronTimer, p. ej. cada 30 min). Busca los
+ * Pensado para ejecutarse seguido (cronString, p. ej. cada 30 min). Busca los
  * turnos CONFIRMADOS (`booked`) que arrancan dentro de la ventana máxima (48 h) y,
  * para cada uno, manda el recordatorio que corresponda (48 h → 2 h) por WhatsApp.
  *

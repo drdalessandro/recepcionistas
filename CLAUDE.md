@@ -58,8 +58,13 @@ Bloque 0). Backend **Medplum (FHIR R4)**, todo en **TypeScript**.
 npm run verify             # gate completo: typecheck (src y app) + tests + build del app
 npm run seed -- --dry-run  # construye el catálogo sin servidor
 npm run seed               # carga el catálogo en Medplum (credenciales en .env)
-npm run deploy:bots        # deploy de bots (medplum CLI)
+npm run bots:bundle        # bundlea los bots sin conectarse (dry-run)
+npm run deploy:bots        # crea + bundlea (esbuild) + deploya los bots — NO usa el CLI de Medplum
+npm run bots:check         # ¿están todos creados y con código deployado?
 ```
+
+> Puesta en producción (deploy, cron, build del app, prueba end-to-end):
+> [`docs/puesta-en-produccion.md`](docs/puesta-en-produccion.md).
 
 ## Secretos
 
@@ -73,13 +78,17 @@ tarjeta.
 
 Ver [`docs/decisiones-pendientes.md`](docs/decisiones-pendientes.md). Horario y
 salas ya están definidos (agenda operativa) y el **bloque de gestión de sesiones
-está cerrado**: dashboard de saldo, pre-agenda de membresías y recordatorios
-(turnos + saldo en riesgo) implementados, testeados y deployados
+está cerrado**: dashboard de saldo (con filtro "en riesgo"), pre-agenda de
+membresías y recordatorios de turno **48 h / 2 h por WhatsApp**
+(`bw-recordatorios`) implementados, testeados y deployados
 (ver [`docs/app-recepcion.md`](docs/app-recepcion.md) y [`docs/bots.md`](docs/bots.md)).
+El saldo en riesgo **se ve en el dashboard; no se avisa por mensaje**: el bot no
+lo manda (2026-08-14, verificado contra `src/bots/recordatorios.ts`).
 
 Twilio y SES ya están **operativos** (Project Secrets cargados y verificados,
 2026-07: los WhatsApp y emails salen de verdad). La tabla de contraindicaciones
 está **validada** por el Director Médico (Dr. Conrado López Alonso, 2026-08-09).
-Lo que queda hoy **no frena el desarrollo**: configurar los `cronTiming` de los
-bots (recordatorios/cobros/demo), aprobar la plantilla de WhatsApp para
-producción y confirmar el precio de consulta del Dr. Conrado.
+Lo que queda hoy **no frena el desarrollo**: configurar el `cronString` de los
+bots de cron (paso a paso en [`docs/puesta-en-produccion.md`](docs/puesta-en-produccion.md)),
+aprobar la plantilla de WhatsApp para producción y confirmar el precio de
+consulta del Dr. Conrado.

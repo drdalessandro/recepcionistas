@@ -88,7 +88,7 @@ inteligencia vive en los Bots y el backend; el front solo orquesta.
 
 ```bash
 npm install                       # instala backend + front (workspaces)
-cp app/.env.example app/.env      # VITE_MEDPLUM_BASE_URL=https://api.medplum.com.ar/
+cp app/.env.example app/.env      # MEDPLUM_BASE_URL=https://api.medplum.com.ar/ (sin prefijo VITE_: lo expone envPrefix)
 npm run dev                       # abre http://localhost:5173
 ```
 

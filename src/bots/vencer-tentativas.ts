@@ -1,7 +1,8 @@
 /**
  * Bot · Vencimiento de tentativas (cron, R-19 "seña autoservicio").
  *
- * Pensado para ejecutarse seguido (cronTiming, p. ej. cada 10 min). Recorre los
+ * Pensado para ejecutarse seguido (campo `cronString` del Bot, cada ~10 min; el
+ * valor exacto está en docs/puesta-en-produccion.md). Recorre los
  * turnos TENTATIVOS (`pending`) con vencimiento de seña (`vence-sena`) y:
  *
  *  - **Recordatorio**: si falta menos que la ventana de aviso y todavía no pagó,

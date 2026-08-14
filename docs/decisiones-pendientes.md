@@ -86,7 +86,8 @@ Ver [`docs/app-recepcion.md`](app-recepcion.md) y [`docs/bots.md`](bots.md).
 
 > **Para que los avisos se envíen** (hoy quedan registrados como `Communication` en
 > estado `preparation` hasta que estén las cuentas) falta lo de abajo + configurar
-> el `cronTimer` del Bot `bw-recordatorios` (`0 * * * *`).
+> el `cronString` del Bot `bw-recordatorios` (valor y procedimiento en
+> [`puesta-en-produccion.md`](puesta-en-produccion.md)).
 
 ## Integraciones / cuentas (en paralelo)
 
