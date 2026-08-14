@@ -3,6 +3,26 @@
 Definiciones que dependen de Andrés u otras fuentes. Las **bloqueantes** frenan
 una parte del avance; el resto se resuelve en paralelo.
 
+## Walk-in · referidos y derivaciones — POSTERGADO hasta septiembre (2026-08-14)
+
+Decisión de Andrés: **no se construyen hasta la segunda quincena de septiembre**.
+
+Motivo: con las campañas online y las redes personales se espera **lista de
+espera**. Con demanda por encima de la capacidad, un programa de referidos y un
+circuito de derivadores **agregan operación sin resolver el cuello** — y el
+cuello no es conseguir gente, es atenderla.
+
+Qué queda pendiente para esa fecha:
+
+| Caso | Qué falta | Por qué está bloqueado |
+|---|---|---|
+| **Referido** ("me mandó Fulano") | Definir **qué gana el que refiere**. La atribución ya existe (`origen-lead=referido`); sin el incentivo definido solo se puede construir la mitad. | Decisión de negocio |
+| **Derivado** (médico, gimnasio, empresa) | Circuito de convenios: quién deriva, si saltea la consulta, si hay condiciones comerciales. | Decisión de negocio |
+
+> Revisar en la **segunda quincena de septiembre 2026**. Si para entonces NO hay
+> lista de espera, la prioridad de estos dos sube: pasan de "más trabajo" a
+> "canal de adquisición barato".
+
 ## Agenda — RESUELTO ✅ (2026-06-20)
 
 | # | Decisión | Definición confirmada por Andrés |
