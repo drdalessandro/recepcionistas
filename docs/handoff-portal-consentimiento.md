@@ -1,50 +1,34 @@
-# Handoff: consentimiento informado firmado desde el portal
+# Consentimiento informado: contrato Portal ↔ Recepción
 
-> **Qué es este documento.** Dos cosas: (1) un **aviso urgente** de una entrada
-> de AccessPolicy que se estaba perdiendo en cada seed y les rompía la firma con
-> 403, y (2) la **propuesta de contrato** para que Recepción pueda ver si el
-> paciente firmó — hoy no puede, porque nadie definió qué se escribe al firmar.
+> **Estado: ACORDADO con Alejandro (MedTech) el 2026-08-14.** El recurso legal
+> es **`Consent` (FHIR R4)** para los dos flujos; el `DocumentReference` sigue
+> siendo la evidencia firmada. Este documento fija la forma exacta, el cambio
+> mínimo del lado del portal y lo que ya está hecho del lado de Recepción.
 >
-> Interlocutor: repo del portal del paciente (`app.biowellness.ar`). Este repo:
-> `recepcion.biowellness.ar`.
+> Repos: portal del paciente (`app.biowellness.ar`) ↔ `recepcion.biowellness.ar`.
 
 ---
 
-## 1. ⚠️ Urgente: `Consent` no estaba en la policy del seed
+## 1. La decisión: `Consent` **y** `DocumentReference`, no uno u otro
 
-`docs/recepcionistaschequeohandoff.md` decía que el espejo del portal tenía una
-entrada `Consent` **aplicada a mano en el servidor**, y el docstring de nuestra
-policy prometía que el paciente escribe "sus consentimientos"… pero la entrada
-**no estaba en `src/fhir/access-policies.ts`**, que es la fuente de verdad del
-seed (upsert por `name`). O sea: **cada `npm run seed` la borraba** y la firma
-del portal quedaba en 403 hasta que alguien la volviera a poner a mano.
+No compiten, cumplen roles distintos y por eso conviene tener los dos:
 
-Ya está arreglado en este repo, con el mismo patrón de dos entradas que usamos
-para Coverage y ServiceRequest:
+| Recurso | Qué es | Para qué sirve |
+| --- | --- | --- |
+| **`Consent`** | El **hecho jurídico**: quién consintió, a qué, cuándo, y si sigue vigente. | Es *consultable* y *revocable*. Permite preguntar "¿este paciente tiene consentimiento vigente?" sin abrir un documento, y revocar con `status: 'inactive'`. |
+| **`DocumentReference`** | La **evidencia**: el texto exacto que la persona leyó y firmó, con nombre, DNI y timestamp. | Es lo que se presenta ante un reclamo. Inmutable, versionado por el propio texto. |
 
-```jsonc
-{ "resourceType": "Consent", "readonly": true, "criteria": "Consent?patient=%patient" },
-{ "resourceType": "Consent", "criteria": "Consent?patient=%patient" }
-```
+Se enlazan con **`Consent.sourceReference` → `DocumentReference`**. Así el hecho
+legal siempre puede recuperar la prueba, y la prueba nunca queda huérfana.
 
-- **Lee** todos sus consentimientos (también los que cargue el equipo médico).
-- **Firma** los suyos; el criteria por paciente es la protección real.
+Sin el `Consent`, "¿está vigente?" obliga a leer documentos (y a Recepción a
+tener permiso sobre toda la historia documental). Sin el `DocumentReference`, el
+`Consent` no prueba **qué** texto se firmó. Por eso van juntos.
 
-> ⚠️ La primera versión de esta entrada acotaba la escritura por `category` con
-> el system de Biowellness. **Estaba mal y habría roto la firma con 403**: el
-> portal usa la categoría estándar de HL7 (`v3-ActCode|IDSCL`) y pone el código
-> de BW en `policyRule`. Corregido el 2026-08-14 contra el recurso real.
+## 2. Lo que ya existe (verificado contra el servidor)
 
-**Acción para ustedes:** actualizar el espejo
-`portal/docs/medplum/access-policy-paciente-portal.json` con estas dos entradas
-y **mandarnos ese JSON** para diffearlo contra el código. Ya van tres entradas
-que vivieron solo en el servidor (Coverage HIP, ServiceRequest y esta): mientras
-el espejo no se compare, cada seed es una ruleta.
-
-## 2. Lo que el portal escribe HOY (verificado 2026-08-14)
-
-Contra un recurso real del servidor: la subida de un PDF de laboratorio crea un
-`Consent` con esta forma —
+**Flujo A — autorización al subir un PDF de laboratorio.** Ya crea `Consent`, y
+está bien:
 
 ```jsonc
 {
@@ -52,78 +36,117 @@ Contra un recurso real del servidor: la subida de un PDF de laboratorio crea un
   "status": "active",
   "scope":    { "coding": [{ "system": "…/consentscope", "code": "patient-privacy" }] },
   "category": [{ "coding": [{ "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode",
-                              "code": "IDSCL" }] }],          // ← categoría ESTÁNDAR
+                              "code": "IDSCL" }] }],
   "patient":  { "reference": "Patient/…" },
   "dateTime": "2026-07-25T11:34:22.665Z",
-  "policyRule": { "coding": [{                                 // ← el código de BW vive ACÁ
-    "system": "https://biowellness.ar/fhir/CodeSystem/consentimiento",
-    "code": "procesamiento-datos-salud"
-  }] },
+  "policyRule": { "coding": [{ "system": "https://biowellness.ar/fhir/CodeSystem/consentimiento",
+                               "code": "procesamiento-datos-salud" }] },
   "provision": { "type": "permit", "data": [{ "meaning": "instance",
-    "reference": { "reference": "DocumentReference/…" } }] }   // ← el estudio autorizado
+                 "reference": { "reference": "DocumentReference/…" } }] }
 }
 ```
 
-**El dato que nos faltaba: el código de Biowellness va en `policyRule`, no en
-`category`.** Nuestro lado ya está adaptado: la policy no filtra por category
-(lo hacía y habría dado 403, ver §1) y el bot busca por paciente y filtra por
-`policyRule`.
+**Flujo B — consentimiento general (onboarding / `/health-record/consent`).**
+Hoy `firmarConsentimiento()` crea **solo** el `DocumentReference` (LOINC
+`59284-0`, texto completo en el adjunto). Falta el `Consent`.
 
-### Lo que falta confirmar: el consentimiento GENERAL
+## 3. El cambio mínimo en el portal
 
-El otro flujo —el onboarding paso a paso que termina en "Firmar y aceptar" en
-`/health-record/consent`— parece registrar la firma como **`DocumentReference`**
-(el Network muestra un `POST DocumentReference` 201 en el momento exacto en que
-aparece "Consentimiento firmado"), no como `Consent`. Si es así, necesitamos:
+En `firmarConsentimiento()`, después del `createResource<DocumentReference>`,
+agregar el `Consent` que lo referencia. **No se toca nada de lo que ya existe**:
 
-1. Confirmarlo, y
-2. **Con qué `type`/`category` se marca ese DocumentReference**, para que el bot
-   pueda reconocerlo sin leer el resto de la historia documental.
+```ts
+await medplum.createResource<Consent>({
+  resourceType: 'Consent',
+  status: 'active',
+  // 'treatment': es un consentimiento de ATENCIÓN. (El de laboratorio usa
+  // 'patient-privacy' porque autoriza tratamiento de datos: son cosas distintas
+  // y conviene que el scope lo diga.)
+  scope: { coding: [{ system: 'http://terminology.hl7.org/CodeSystem/consentscope', code: 'treatment' }] },
+  // Misma codificación que el DocumentReference.type: LOINC Patient Consent.
+  category: [{ coding: [{ system: CONSENT_TYPE_SYSTEM, code: CONSENT_TYPE_CODE, display: 'Patient Consent' }] }],
+  patient: createReference(patient),
+  dateTime: timestamp,
+  performer: [createReference(patient)],
+  // ← el enlace al documento firmado: el hecho legal apunta a su evidencia.
+  sourceReference: createReference(doc),
+  policyRule: {
+    coding: [{ system: 'https://biowellness.ar/fhir/CodeSystem/consentimiento', code: 'atencion' }],
+    text: `Consentimiento Informado BIOWELLNESS (texto ${USO_DATOS_VERSION})`,
+  },
+  provision: { type: 'permit' },
+});
+```
 
-Alternativa más limpia, si les resulta barato: que ese flujo **además** cree un
-`Consent` con `policyRule` = `atencion` (mismo patrón que ya usan para el PDF).
-Con eso Recepción lo ve sin tocar `DocumentReference` y el modelo queda uniforme.
+Tres detalles que valen la pena:
 
-## 3. Códigos de Biowellness (`policyRule`)
+1. **`policyRule.text` con la versión del texto.** Ya manejan versión (`Texto v1`
+   en la página): dejarla ahí permite responder "¿qué versión firmó?" sin abrir
+   el adjunto. Si el texto cambia, la firma vieja sigue siendo válida para su
+   versión y se puede pedir refirma solo a quien corresponda.
+2. **Revocación.** Hoy la página dice "escribí a info@biowellness.ar". Con
+   `Consent`, revocar es `status: 'inactive'` (o un `Consent` nuevo que
+   reemplace al anterior). Nuestro lado ya lo respeta: un consentimiento
+   `inactive` deja de contar como firmado.
+3. **Refirma.** Al firmar una versión nueva, conviene pasar el `Consent` anterior
+   a `inactive` y el `DocumentReference` viejo a `superseded`.
+
+## 4. Sugerencia: el uso secundario también como `Consent`
+
+`guardarUsoDatos()` guarda la decisión de uso secundario (Ley 25.326) como un
+campo en la ficha del paciente. Funciona, pero como es una autorización
+**opcional y revocable**, gana bastante siendo su propio `Consent`:
+
+```jsonc
+{
+  "scope":      { "coding": [{ "system": "…/consentscope", "code": "patient-privacy" }] },
+  "policyRule": { "coding": [{ "system": "…/CodeSystem/consentimiento", "code": "uso-secundario" }] },
+  "provision":  { "type": "permit" }   // o "deny" si no acepta
+}
+```
+
+Ventaja concreta: queda el **historial** de decisiones (aceptó, revocó, volvió a
+aceptar) con fecha, que es justo lo que se necesita si alguien reclama. El campo
+de la ficha puede quedar como caché de lectura rápida. **No es bloqueante** — el
+Flujo B es lo que destraba la pantalla de Recepción.
+
+## 5. Lo que ya está hecho de este lado
+
+- **AccessPolicy del paciente**: `Consent` con lectura y escritura acotadas por
+  paciente. ⚠️ **Sin filtrar por `category`** — la primera versión filtraba por
+  el system de BW y habría rechazado con 403 el Consent del Flujo A, porque el
+  código de Biowellness va en `policyRule`, no en `category`. La entrada además
+  faltaba en el seed: cada `npm run seed` la borraba (hay que **actualizar el
+  espejo** `portal/docs/medplum/access-policy-paciente-portal.json`).
+- **Bot `bw-estado-consentimiento`** (solo lectura): busca por paciente y
+  devuelve **solo** `{ estado: 'firmado' | 'no-registrado' | 'no-verificable',
+  fechaISO }`. Nunca el documento ni el contenido. Recepción ve la señal sin que
+  su policy toque recursos clínicos.
+- **Compatibilidad hacia atrás**: el bot también reconoce el `DocumentReference`
+  LOINC `59284-0` como firma del consentimiento general. Así, **las firmas que ya
+  existen cuentan desde hoy** y nadie tiene que volver a firmar. Cuando el portal
+  cree el `Consent`, ese manda.
+- **Pantalla "Atender"**: badge junto al nombre (firmado con fecha / sin firmar /
+  no verificable) y, al elegir una Terapia Biológica, el switch de R-03
+  precargado si el paciente ya firmó.
+
+## 6. Códigos de Biowellness (`policyRule`)
 
 | Código | Cuándo | Estado |
 | --- | --- | --- |
-| `procesamiento-datos-salud` | El paciente sube un PDF de laboratorio y autoriza procesarlo (Ley 25.326). | ✅ CONFIRMADO |
-| `atencion` | Consentimiento general de atención (onboarding). | ⏳ A confirmar (¿hoy es DocumentReference?) |
-| `terapia-biologica` | El que exige **R-03** para TB (péptidos, PRP, exosomas…). | ⏳ A definir |
+| `procesamiento-datos-salud` | Sube un PDF de laboratorio y autoriza procesarlo (Ley 25.326). | ✅ En producción |
+| `atencion` | Consentimiento general de atención (onboarding). | ⏳ Falta el `Consent` (§3) |
+| `uso-secundario` | Uso secundario de datos, opcional y revocable. | 💡 Sugerido (§4) |
+| `terapia-biologica` | El que exige **R-03** para TB (péptidos, PRP, exosomas…). | ⏳ A definir si existe |
 
-Están en `src/fhir/identifiers.ts` (`COD_CONSENTIMIENTO`): si usan otros, se
-cambian ahí y nada más.
+Viven en `src/fhir/identifiers.ts` (`COD_CONSENTIMIENTO`).
 
-## 4. Qué hace Recepción con eso (y qué NO ve)
+## 7. Resumen para su backlog
 
-Recepción **no lee el `Consent`**: su AccessPolicy no incluye `Consent`, ni
-`DocumentReference`, ni `QuestionnaireResponse`, y no las va a incluir — abrirlas
-daría toda la historia documental del paciente (CLAUDE.md, principio 3).
-
-En su lugar hay un bot de solo lectura, **`bw-estado-consentimiento`**, que corre
-con identidad de proyecto y devuelve **únicamente**:
-
-```jsonc
-{ "ok": true, "estado": "firmado" | "no-registrado" | "no-verificable", "fechaISO": "…" }
-```
-
-Con eso la pantalla "Atender paciente" muestra un badge junto al nombre y, al
-elegir una Terapia Biológica, precarga el switch de R-03. Nunca el documento, ni
-el contenido, ni quién lo indicó.
-
-Detalle que importa: **`no-verificable` ≠ `no-registrado`**. Si la consulta
-falla, lo decimos; jamás damos por firmado lo que no se pudo leer, porque eso
-habilitaría una TB sin respaldo.
-
-## 5. Resumen para su backlog
-
-1. ⚠️ **Actualizar el espejo** de la policy con las dos entradas `Consent` del §1
-   y mandarnos el JSON para diffear.
-2. **Confirmar el consentimiento general** (§2): ¿es un `DocumentReference`? ¿con
-   qué `type`/`category`? ¿o pueden crear además un `Consent` con
-   `policyRule` = `atencion`?
-3. **Definir si existe el de Terapias Biológicas** (R-03) y con qué código.
-4. Si el consentimiento se puede **revocar** desde el portal, que el `Consent`
-   pase a `status: 'inactive'` — nuestra lógica ya lo contempla y deja de
-   contarlo como firmado.
+1. **Flujo B**: agregar el `Consent` de §3 (≈15 líneas, no toca lo existente).
+2. **Actualizar el espejo** de la AccessPolicy y mandárnoslo para diffear — van
+   tres entradas que vivieron solo en el servidor (Coverage HIP, ServiceRequest
+   y Consent).
+3. Evaluar §4 (uso secundario como `Consent`).
+4. Definir si existe un consentimiento específico de **Terapias Biológicas**
+   (R-03) y con qué código.

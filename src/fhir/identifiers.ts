@@ -207,6 +207,16 @@ export const COD_CONSENTIMIENTO = {
 export type CodigoConsentimiento = (typeof COD_CONSENTIMIENTO)[keyof typeof COD_CONSENTIMIENTO];
 
 /**
+ * LOINC del documento de consentimiento del paciente. Lo usa el portal como
+ * `DocumentReference.type` del consentimiento general firmado, y es el código
+ * estándar (interoperable) para "Patient Consent". Acordado con Alejandro
+ * (MedTech) el 2026-08-14: el `Consent` es el hecho legal y el
+ * `DocumentReference` es la evidencia firmada; se enlazan por `sourceReference`.
+ */
+export const LOINC_CONSENTIMIENTO = 'http://loinc.org';
+export const COD_LOINC_CONSENTIMIENTO = '59284-0';
+
+/**
  * Subtipo del aviso (input `tipo` del Task): habilita acciones específicas en
  * la vista Avisos. Sin subtipo, el aviso se muestra igual con "Resolver".
  */

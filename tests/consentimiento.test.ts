@@ -111,3 +111,37 @@ describe('textoConsentimiento — lo que lee la recepcionista', () => {
     expect(sin).not.toBe(error);
   });
 });
+
+describe('Compatibilidad: firmas que ya existen (DocumentReference LOINC 59284-0)', () => {
+  // El portal firma el consentimiento general creando un DocumentReference con
+  // el texto completo; el Consent se agrega ahora (handoff §3). El bot mapea
+  // esos documentos a registros para que quien YA firmó no aparezca como
+  // "sin consentimiento" hasta refirmar.
+  it('un documento vigente cuenta como consentimiento de atención firmado', () => {
+    const desdeDoc = [{ estado: 'active', fechaISO: '2026-08-14T11:08:29-03:00', codigo: COD_CONSENTIMIENTO.atencion }];
+    const r = estadoConsentimiento(desdeDoc, { ahora: AHORA, codigo: COD_CONSENTIMIENTO.atencion });
+    expect(r.estado).toBe('firmado');
+    expect(r.fechaISO).toBe('2026-08-14T11:08:29-03:00');
+  });
+
+  it('un documento reemplazado (superseded → inactive) NO cuenta', () => {
+    const viejo = [{ estado: 'inactive', fechaISO: '2026-01-01T10:00:00-03:00', codigo: COD_CONSENTIMIENTO.atencion }];
+    expect(estadoConsentimiento(viejo, { ahora: AHORA, codigo: COD_CONSENTIMIENTO.atencion }).estado).toBe(
+      'no-registrado',
+    );
+  });
+
+  it('la autorización de laboratorio NO se hace pasar por el consentimiento general', () => {
+    // Los dos son Consent válidos, pero autorizan cosas distintas: si el badge
+    // de la ficha no filtrara por código, subir un PDF haría decir "firmado".
+    const soloLab = [
+      { estado: 'active', fechaISO: '2026-07-25T11:34:22-03:00', codigo: COD_CONSENTIMIENTO.procesamientoDatosSalud },
+    ];
+    expect(estadoConsentimiento(soloLab, { ahora: AHORA, codigo: COD_CONSENTIMIENTO.atencion }).estado).toBe(
+      'no-registrado',
+    );
+    expect(
+      estadoConsentimiento(soloLab, { ahora: AHORA, codigo: COD_CONSENTIMIENTO.procesamientoDatosSalud }).estado,
+    ).toBe('firmado');
+  });
+});
