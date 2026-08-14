@@ -9,6 +9,7 @@ import type {
   CodeSystem,
   CodeSystemConcept,
   Extension,
+  Library,
   Location,
   PlanDefinition,
   PlanDefinitionAction,
@@ -25,6 +26,14 @@ import { COMBOS } from '../config/combos.js';
 import { MEMBRESIAS } from '../config/membresias.js';
 import { PAQUETES } from '../config/paquetes.js';
 import { CONTRAINDICACIONES } from '../config/contraindicaciones.js';
+import {
+  CONSENTIMIENTO_LIBRARY_URL,
+  VERSION_CONSENTIMIENTO,
+  consentFooter,
+  consentSections,
+  consentSubtitle,
+  consentTitle,
+} from '../config/consentimiento-texto.js';
 import { RECURSOS } from '../config/recursos.js';
 import { TC_DEFAULT } from '../config/tipo-cambio.js';
 import type { SlotDescriptor } from '../lib/slots.js';
@@ -179,6 +188,45 @@ export function buildContraindicacionesCodeSystem(): CodeSystem {
   };
 }
 
+/**
+ * Publica el texto del Consentimiento Informado como `Library` versionada.
+ *
+ * Por qué en FHIR y no en cada app: el documento firmado tiene que ser el MISMO
+ * por los dos canales (el portal desde casa y el kiosco del mostrador). Vivía
+ * solo en el portal; si se copiaba al otro repo, dos versiones de un documento
+ * legal se separan con el tiempo y la diferencia recién aparece en un juicio.
+ *
+ * `Library` es el recurso canónico de FHIR para un artefacto de conocimiento
+ * versionado con contenido adjunto. No lleva PHI: las dos AccessPolicies lo leen
+ * como definicional (igual que ActivityDefinition o Questionnaire).
+ */
+export function buildConsentimientoLibrary(): Library {
+  const contenido = JSON.stringify(
+    { titulo: consentTitle, subtitulo: consentSubtitle, secciones: consentSections, pie: consentFooter },
+    null,
+    2,
+  );
+  return {
+    resourceType: 'Library',
+    url: CONSENTIMIENTO_LIBRARY_URL,
+    version: VERSION_CONSENTIMIENTO,
+    name: 'ConsentimientoInformadoBiowellness',
+    title: consentTitle,
+    status: 'active',
+    type: { coding: [{ system: 'http://terminology.hl7.org/CodeSystem/library-type', code: 'documentation' }] },
+    subjectCodeableConcept: { text: 'Patient' },
+    publisher: 'Biowellness San Isidro (Shanti Om SRL)',
+    description: consentSubtitle,
+    content: [
+      {
+        contentType: 'application/json',
+        title: 'Secciones del Consentimiento Informado',
+        data: Buffer.from(contenido, 'utf-8').toString('base64'),
+      },
+    ],
+  };
+}
+
 export function buildTcConfig(): Basic {
   return {
     resourceType: 'Basic',
@@ -316,6 +364,8 @@ export interface RecursosSeed {
   membresias: PlanDefinition[];
   paquetes: PlanDefinition[];
   contraindicaciones: CodeSystem;
+  /** Texto del Consentimiento Informado (fuente única para portal y kiosco). */
+  consentimiento: Library;
   locations: Location[];
   schedules: Schedule[];
   practitioners: Practitioner[];
@@ -333,6 +383,7 @@ export function buildSeed(): RecursosSeed {
     membresias: MEMBRESIAS.map((m) => buildMembresiaPlanDefinition(m.codigo)),
     paquetes: PAQUETES.map((p) => buildPaquetePlanDefinition(p.codigo)),
     contraindicaciones: buildContraindicacionesCodeSystem(),
+    consentimiento: buildConsentimientoLibrary(),
     locations: RECURSOS.map((r) => buildLocation(r.codigo)),
     schedules: [
       ...RECURSOS.map((r) => buildSchedule(r.codigo)),

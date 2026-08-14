@@ -40,6 +40,7 @@ async function main(): Promise<void> {
     ['PlanDefinition (membresías)', seed.membresias],
     ['PlanDefinition (paquetes)', seed.paquetes],
     ['CodeSystem (contraindicaciones)', [seed.contraindicaciones]],
+    ['Library (consentimiento informado)', [seed.consentimiento]],
     // ⚠️ ORDEN IMPORTA: los Schedule referencian por referencia CONDICIONAL a
     // su actor (Location la sala; Practitioner la agenda de un médico). El
     // actor tiene que existir CON su identifier antes de upsertear el
