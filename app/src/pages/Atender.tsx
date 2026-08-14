@@ -52,6 +52,7 @@ import {
 import { cargarPlanesActivos, planUsable, type PlanPaciente } from '../lib/planes';
 import { MEDIOS_SELECT } from '../lib/medios';
 import { SYSTEM } from '@bw/fhir/identifiers';
+import { busquedasPara } from '@bw/lib/busqueda-paciente';
 import { PreAgendaModal } from '../components/PreAgendaModal';
 import { InvitarPortal } from '../components/InvitarPortal';
 import { KioscoIngreso } from '../components/KioscoIngreso';
@@ -124,9 +125,24 @@ export function Atender({
     setBuscando(true);
     setSeleccionado(null);
     try {
-      const esDni = /^\d+$/.test(query.trim());
-      const params = esDni ? { identifier: query.trim() } : { name: query.trim() };
-      setResultados(await medplum.searchResources('Patient', { ...params, _count: 10 }));
+      // Se lanzan TODAS las búsquedas que apliquen (nombre, DNI, teléfono) y se
+      // juntan sin repetir. Antes decidía una sola regla —dígitos = DNI, si no
+      // nombre— y con eso era imposible encontrar a alguien por su teléfono:
+      // justo lo único que tiene la ficha creada desde un aviso de WhatsApp.
+      // Esa búsqueda vacía es la que terminaba en una ficha duplicada.
+      const porId = new Map<string, Patient>();
+      for (const b of busquedasPara(query)) {
+        for (const valor of b.valores) {
+          const campo = b.tipo === 'nombre' ? 'name' : b.tipo === 'dni' ? 'identifier' : 'telecom';
+          const encontrados = await medplum.searchResources('Patient', { [campo]: valor, _count: 10 });
+          for (const p of encontrados) {
+            if (p.id) {
+              porId.set(p.id, p);
+            }
+          }
+        }
+      }
+      setResultados([...porId.values()]);
     } finally {
       setBuscando(false);
     }
@@ -155,12 +171,12 @@ export function Atender({
 
       <Group align="flex-end">
         <TextInput
-          label="Buscar por nombre o DNI"
-          placeholder="Ej.: Pérez o 30123456"
+          label="Buscar por nombre, DNI o teléfono"
+          placeholder="Ej.: Pérez · 30123456 · 11 6931-5830"
           value={query}
           onChange={(e) => setQuery(e.currentTarget.value)}
           onKeyDown={(e) => e.key === 'Enter' && void buscar()}
-          w={360}
+          w={420}
           size="md"
         />
         <Button leftSection={<IconSearch size={16} />} onClick={() => void buscar()} loading={buscando}>
