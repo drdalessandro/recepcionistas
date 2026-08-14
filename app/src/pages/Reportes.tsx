@@ -160,8 +160,59 @@ export function Reportes(): JSX.Element {
               </Stack>
             )}
           </Card>
+
+          {/* Caso 11 · el único cuadro que mide lo que NO podemos vender. */}
+          <Card withBorder radius="md" padding="lg">
+            <Group justify="space-between" align="flex-start" mb="sm">
+              <div>
+                <Text fw={600}>Nos piden y no tenemos</Text>
+                <Text size="sm" c="dimmed">
+                  Pedidos del mostrador fuera del catálogo · últimos {data.demanda.dias} días
+                </Text>
+              </div>
+              {data.demanda.total > 0 && (
+                <Badge size="lg" variant="light" color="grape">
+                  {data.demanda.total}
+                </Badge>
+              )}
+            </Group>
+            {data.demanda.pedidos.length === 0 ? (
+              <Text c="dimmed" size="sm">
+                Todavía no se registró ninguno. Se cargan solos al elegir “Otra cosa” en Registrar consulta.
+              </Text>
+            ) : (
+              <Stack gap="xs">
+                {data.demanda.pedidos.map((p) => (
+                  <Group key={p.clave} justify="space-between" wrap="nowrap">
+                    <Text size="sm" style={{ textTransform: 'capitalize' }}>
+                      {p.etiqueta}
+                    </Text>
+                    <Group gap="xs" wrap="nowrap">
+                      {p.ultimaFechaISO && (
+                        <Text size="xs" c="dimmed">
+                          últ. {diaMes(p.ultimaFechaISO)}
+                        </Text>
+                      )}
+                      <Badge variant="light" color={p.n > 1 ? 'grape' : 'gray'}>
+                        {p.n}
+                      </Badge>
+                    </Group>
+                  </Group>
+                ))}
+              </Stack>
+            )}
+          </Card>
         </>
       )}
     </Stack>
   );
+}
+
+/**
+ * `dd/mm` a partir del string ISO, sin pasar por `Date`: `new Date('2026-08-14')`
+ * se interpreta como medianoche UTC y en Argentina se muestra un día antes.
+ */
+function diaMes(iso: string): string {
+  const [, mes, dia] = iso.slice(0, 10).split('-');
+  return `${dia}/${mes}`;
 }

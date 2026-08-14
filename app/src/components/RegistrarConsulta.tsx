@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Alert, Button, Group, Modal, Select, Stack, Text, TextInput } from '@mantine/core';
 import { IconInfoCircle, IconMessageQuestion } from '@tabler/icons-react';
 import { SERVICIOS, CATEGORIA_COMERCIAL } from '@bw/config/catalogo';
+import { PEDIDO_OTRA_COSA, PEDIDO_MAX } from '@bw/lib/demanda';
 import { validarLead } from '@bw/lib/lead';
 import { useMedplumProfile } from '@medplum/react';
 import { getReferenceString } from '@medplum/core';
@@ -41,6 +42,7 @@ export function RegistrarConsulta({
   // sabe quién lo llamó, así que se lo manda la app.
   const perfil = useMedplumProfile();
   const [interes, setInteres] = useState<string | null>(null);
+  const [pedido, setPedido] = useState('');
   const [nombre, setNombre] = useState('');
   const [telefono, setTelefono] = useState('');
   const [guardando, setGuardando] = useState(false);
@@ -54,18 +56,30 @@ export function RegistrarConsulta({
       label: c,
     })),
     { value: 'Precios y planes', label: 'Precios y planes' },
-    { value: 'Otra cosa', label: 'Otra cosa' },
+    { value: PEDIDO_OTRA_COSA, label: 'Otra cosa (algo que no ofrecemos)' },
   ];
+
+  // Caso 11: pidió algo que no está en el catálogo. Es el único dato que este
+  // formulario NO puede perder — nadie más nos dice qué nos están pidiendo y no
+  // vendemos.
+  const esOtraCosa = interes === PEDIDO_OTRA_COSA;
 
   function limpiar(): void {
     setInteres(null);
+    setPedido('');
     setNombre('');
     setTelefono('');
     setError(null);
   }
 
   async function registrar(): Promise<void> {
-    const datos = { nombre: nombre.trim(), telefono: telefono.trim(), interes: interes ?? undefined, acompanaA };
+    const datos = {
+      nombre: nombre.trim(),
+      telefono: telefono.trim(),
+      interes: interes ?? undefined,
+      pedido: esOtraCosa ? pedido.trim() : undefined,
+      acompanaA,
+    };
     const v = validarLead(datos);
     if (!v.ok) {
       setError(v.error);
@@ -78,6 +92,7 @@ export function RegistrarConsulta({
         nombre: datos.nombre || undefined,
         telefono: datos.telefono || undefined,
         interes: datos.interes,
+        pedido: datos.pedido,
         acompanaA,
         // Contrato del CRM: nace como lead, no como cliente.
         cicloVida: 'lead',
@@ -123,6 +138,18 @@ export function RegistrarConsulta({
           onChange={setInteres}
           searchable
         />
+
+        {esOtraCosa && (
+          <TextInput
+            label="¿Qué pidió exactamente?"
+            description="Con las palabras que usó. Es lo que después nos dice qué nos están pidiendo y no tenemos."
+            placeholder="Ej.: nutricionista, crioterapia de cuerpo entero, masajes deportivos"
+            value={pedido}
+            maxLength={PEDIDO_MAX}
+            onChange={(e) => setPedido(e.currentTarget.value)}
+            data-autofocus
+          />
+        )}
 
         <Group grow align="flex-start">
           <TextInput

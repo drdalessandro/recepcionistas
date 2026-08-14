@@ -22,7 +22,7 @@ Naming: **kebab-case**.
 | **Communication** | WhatsApp y emails | `canal`, `template-usado` |
 | **Location** | Recurso físico (sala/equipo) | (identificado por `SYSTEM.recursoCodigo`) |
 | **CodeSystem** | Tabla de contraindicaciones | propiedades `severidad`, `aplicaA`, `borrador` |
-| **Basic** | Configuración (TC vigente) | `tc-aplicado` |
+| **Basic** | Configuración (TC vigente) · caja chica · **demanda no cubierta** | `tc-aplicado`, `caja-monto-ars`, `demanda-clave` |
 | **AuditEvent** | Log regulatorio (nativo Medplum) | — |
 
 ## Decisiones de modelado del Bloque 0
@@ -36,6 +36,13 @@ Naming: **kebab-case**.
 - **Tipo de cambio:** recurso `Basic` con identifier `config-tipo-cambio` y la
   extensión `tc-aplicado`; el bot de cobro lo lee como TC vigente (configurable
   por el admin).
+- **Demanda no cubierta** (lo que piden en el mostrador y no ofrecemos):
+  `Basic` con code `CodeSystem/demanda|no-disponible`, el pedido textual en
+  `code.text`, la clave de agregación en `demanda-clave` y `subject` = quien lo
+  pidió (para poder avisarle si algún día lo sumamos). Recurso propio y no un
+  campo del lead a propósito: el lead solo se crea si la persona es nueva, y así
+  se cuenta con una búsqueda estándar (`Basic?code=…|no-disponible`) en vez de
+  leer las tarjetas del CRM una por una.
 - **Contraindicaciones:** `CodeSystem` en estado `active` — tabla validada por el
   Director Médico (Dr. Conrado López Alonso, 2026-08-09). Una entrada nueva sin
   validar (`borradorPendienteRevision`) lo vuelve a `draft` hasta su aprobación.

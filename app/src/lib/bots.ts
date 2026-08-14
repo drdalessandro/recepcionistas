@@ -236,6 +236,8 @@ export interface AltaPacienteInput {
   cicloVida?: CicloVida;
   /** Qué vino a consultar; va en la tarjeta del pipeline del CRM. */
   interes?: string;
+  /** Qué pidió, si pidió algo que NO ofrecemos (caso 11 del walk-in). */
+  pedido?: string;
   /** Quién lo registró (Practitioner/…), para el Provenance del CRM. */
   registradoPorRef?: string;
   /** A quién acompañaba, si el lead vino con un paciente. */
@@ -249,6 +251,8 @@ export interface ResultadoAltaPaciente {
   creado?: boolean;
   /** Tarjeta creada en el kanban del CRM, si se registró como lead. */
   taskPipelineId?: string;
+  /** Registro de demanda no cubierta, si pidió algo que no ofrecemos. */
+  demandaId?: string;
 }
 
 /** Da de alta (o actualiza, sin duplicar) el paciente. No le da acceso al portal. */

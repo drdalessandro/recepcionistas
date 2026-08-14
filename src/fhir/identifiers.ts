@@ -97,6 +97,13 @@ export const EXT = {
   /** Arqueo: diferencia contado − esperado en ARS (valueDecimal). */
   cajaDiferencia: `${BASE}/StructureDefinition/caja-diferencia`,
   /**
+   * Demanda no cubierta: clave normalizada del pedido (`valueString`), la
+   * dimensión por la que se AGRUPA el reporte. Se guarda además del texto
+   * original para que un cambio futuro en el normalizador no re-agrupe en
+   * silencio lo ya registrado.
+   */
+  demandaClave: `${BASE}/StructureDefinition/demanda-clave`,
+  /**
    * R-03 · de dónde salió la afirmación del consentimiento en un turno de
    * Terapia Biológica (`valueCode`: portal | declarado-recepcion). Sin esto el
    * booleano se evaporaba al validar y no quedaba auditoría de quién lo afirmó.
@@ -159,6 +166,14 @@ export const SYSTEM = {
    * también es Basic y no debe ser tocable desde el mostrador).
    */
   caja: `${BASE}/CodeSystem/caja`,
+  /**
+   * Demanda no cubierta (`Basic.code`): lo que se pide en el mostrador y NO
+   * está en el catálogo. Es el único canal que produce este dato —el que
+   * pregunta por Instagram y no lo encuentra se va sin escribir— y por eso
+   * tiene su propio code: se lista con `Basic?code=<este system>|` sin
+   * mezclarse con la caja chica.
+   */
+  demanda: `${BASE}/CodeSystem/demanda`,
   /**
    * Consentimientos informados que firma el paciente (`Consent.category`).
    * Acota los permisos por los dos lados: el paciente solo puede firmar

@@ -9,7 +9,7 @@
  * `Patient` por su AccessPolicy.
  */
 import type { BotEvent, MedplumClient } from '@medplum/core';
-import type { ContactPoint, Patient, Provenance, Task } from '@medplum/fhirtypes';
+import type { Basic, ContactPoint, Patient, Provenance, Task } from '@medplum/fhirtypes';
 import {
   EXT,
   EXT_CICLO_VIDA,
@@ -22,6 +22,8 @@ import {
   esOrigenLead,
   type CicloVida,
 } from '../fhir/identifiers.js';
+import { demandaABasic } from '../fhir/demanda.js';
+import { validarPedido } from '../lib/demanda.js';
 import { descripcionLead, fuenteDeLead, nombreDeLead, proximaAccionLead } from '../lib/lead.js';
 import { partirNombre, validarEmail } from '../lib/onboarding.js';
 
@@ -46,6 +48,13 @@ export interface EntradaAltaPaciente {
   cicloVida?: CicloVida;
   /** Qué vino a preguntar. Va en la Task del pipeline; no es dato clínico. */
   interes?: string;
+  /**
+   * Caso 11: qué pidió, cuando pidió algo que NO ofrecemos. Deja su propio
+   * registro (`Basic` con code `demanda`) además del texto de la tarjeta —
+   * porque la tarjeta solo existe si el lead es nuevo, y el pedido vale igual
+   * cuando lo hace alguien que ya tiene ficha.
+   */
+  pedido?: string;
   /** A quién acompañaba (nombre), si vino con un paciente. Solo texto de la tarjeta. */
   acompanaA?: string;
   /**
@@ -63,6 +72,43 @@ export interface ResultadoAltaPaciente {
   creado?: boolean;
   /** Task del pipeline del CRM, si se registró como lead. */
   taskPipelineId?: string;
+  /** Registro de demanda no cubierta, si pidió algo que no ofrecemos. */
+  demandaId?: string;
+}
+
+/**
+ * Caso 11 · deja registrado que alguien pidió algo que no tenemos.
+ *
+ * Corre para pacientes nuevos Y existentes: el que ya tiene ficha no genera
+ * tarjeta de lead, y si el pedido viviera solo en la tarjeta se perdería
+ * justamente el de quien ya nos conoce y viene a preguntar por otra cosa.
+ *
+ * Best-effort: el alta no puede fallar por esto.
+ */
+async function registrarDemanda(
+  medplum: MedplumClient,
+  e: EntradaAltaPaciente,
+  pacienteId: string | undefined,
+  ahora: Date,
+): Promise<string | undefined> {
+  const v = validarPedido(e.pedido);
+  if (!v.ok) {
+    return undefined;
+  }
+  try {
+    const basic = await medplum.createResource<Basic>(
+      demandaABasic({
+        texto: v.texto,
+        clave: v.clave,
+        pacienteRef: pacienteId ? `Patient/${pacienteId}` : undefined,
+        registradoPorRef: e.registradoPorRef,
+        fechaISO: ahora.toISOString(),
+      }),
+    );
+    return basic.id;
+  } catch {
+    return undefined;
+  }
 }
 
 function extensionAlta(tipoCliente?: string, origen?: string, fechaAlta?: string, cicloVida?: CicloVida): Patient['extension'] {
@@ -169,7 +215,8 @@ export async function handler(
         telecom: [...(existente.telecom ?? []), ...nuevosTelecom],
         extension: extension.length ? extension : undefined,
       });
-      return { ok: true, patientId: actualizado.id, creado: false };
+      const demandaId = await registrarDemanda(medplum, e, actualizado.id, ahora);
+      return { ok: true, patientId: actualizado.id, creado: false, ...(demandaId ? { demandaId } : {}) };
     }
 
     const creado = await medplum.createResource<Patient>({
@@ -202,13 +249,24 @@ export async function handler(
           intent: 'order',
           businessStatus: { coding: [{ system: SYSTEM_ETAPA_PIPELINE, code: 'nuevo' }] },
           code: { text: 'Lead' },
-          description: descripcionLead({ nombre: nombreText, telefono: e.telefono, interes: e.interes, acompanaA: e.acompanaA }),
+          description: descripcionLead({
+            nombre: nombreText,
+            telefono: e.telefono,
+            interes: e.interes,
+            pedido: e.pedido,
+            acompanaA: e.acompanaA,
+          }),
           // La tarjeta del kanban NO muestra `description`: muestra este input.
           // Sin él, quien trabaja el lead ve un nombre suelto y no sabe a qué vino.
           input: [
             {
               type: { text: TASK_INPUT_PROXIMA_ACCION },
-              valueString: proximaAccionLead({ telefono: e.telefono, interes: e.interes, acompanaA: e.acompanaA }),
+              valueString: proximaAccionLead({
+                telefono: e.telefono,
+                interes: e.interes,
+                pedido: e.pedido,
+                acompanaA: e.acompanaA,
+              }),
             },
           ],
           for: { reference: `Patient/${creado.id}` },
@@ -242,7 +300,14 @@ export async function handler(
         }
       }
     }
-    return { ok: true, patientId: creado.id, creado: true, ...(taskPipelineId ? { taskPipelineId } : {}) };
+    const demandaId = await registrarDemanda(medplum, e, creado.id, ahora);
+    return {
+      ok: true,
+      patientId: creado.id,
+      creado: true,
+      ...(taskPipelineId ? { taskPipelineId } : {}),
+      ...(demandaId ? { demandaId } : {}),
+    };
   } catch (err) {
     return { ok: false, mensaje: err instanceof Error ? err.message : 'No se pudo dar de alta el paciente.' };
   }

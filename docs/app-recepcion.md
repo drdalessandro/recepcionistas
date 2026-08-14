@@ -53,7 +53,7 @@ git pull && npm run build:app     # nginx no se toca: sirve el dist nuevo al ins
 | **Planes y sesiones** | `PlanesSesiones` | Dashboard de saldo de planes (ver abajo). |
 | **Atender paciente** | `Atender` | Busca al paciente y abre su ficha: banner de seguridad, **badge de consentimiento firmado en el portal** (firmado con fecha / sin firmar / no verificable — señal binaria vía `bw-estado-consentimiento`, nunca el documento), planes (asignar / **pre-agendar**), reserva de turno/combo y cobro. Al elegir una Terapia Biológica, el switch de R-03 viene **precargado** si el paciente ya firmó en el portal, y el turno guarda si el consentimiento fue verificado o declarado por Recepción. |
 | **Avisos** | `Avisos` | Avisos automáticos del sistema (`Task code=aviso-recepcion`): **WhatsApp de número desconocido** (con botones *Responder por WhatsApp* y *Crear ficha* prellenada), pago duplicado a devolver, pago acreditado sin registro, seña de reserva vencida, pagos rechazados y diferencia de arqueo. Badge rojo + campanita. **Hasta 2026-08-12 estas alertas se creaban solo con `code.text`: como las búsquedas FHIR por token no miran el texto, ninguna pantalla las listaba y el aviso moría en la base.** |
-| **Reportes** | `Reportes` | Indicadores de gestión. |
+| **Reportes** | `Reportes` | Indicadores de gestión + **"Nos piden y no tenemos"** (ver abajo). |
 | **Caja** | `Caja` | Caja chica: registrar gastos (lista cerrada de categorías + tope con autorización), reposiciones y ajustes, y **cerrar caja** (arqueo). El saldo esperado se DERIVA (contado del último arqueo + Invoices en efectivo − egresos): los ingresos nunca se re-registran. Diferencia de arqueo ≠ 0 → alerta urgente a Administración (Task). Movimientos = `Basic` (code `CodeSystem/caja`), arqueos = `PaymentReconciliation`; parámetros confirmados por Andrés (2026-08-10) en `src/config/caja.ts`. Contrato para Administración: [`handoff-caja-administracion.md`](handoff-caja-administracion.md). |
 
 El botón **"Atender"** del dashboard abre `Atender` con ese paciente ya cargado
@@ -88,6 +88,33 @@ semana).
   de resumen (no uno por sesión).
 - Cálculo de fechas puro y testeado: `src/lib/serie-turnos.ts`
   (`generarSerieFechas`, `diasSugeridos`). UI: `app/src/components/PreAgendaModal.tsx`.
+
+### "Nos piden y no tenemos" (demanda no cubierta)
+
+Caso 11 del recorrido del walk-in. En **Registrar consulta**, elegir *"Otra cosa
+(algo que no ofrecemos)"* abre un campo de texto **obligatorio**: qué pidió, con
+las palabras que usó. Es la única cosa obligatoria de más en ese formulario —
+todo lo demás sigue siendo opcional— porque *"Otra cosa"* sin el detalle es
+exactamente el registro que había hasta ahora: sabíamos que alguien pidió algo y
+nunca qué.
+
+- **Se guarda aparte del lead**: `Basic` con code `CodeSystem/demanda` +
+  `code.text` (el pedido tal como lo dijo), la clave normalizada en la extensión
+  `demanda-clave` y `subject` = quien lo pidió. Lo escribe `bw-alta-paciente`
+  **para pacientes nuevos y existentes**: la tarjeta de lead solo se crea si la
+  persona es nueva, así que si el pedido viviera únicamente ahí se perdería
+  justo el de quien ya nos conoce y viene a preguntar por otra cosa.
+- **Cambia lo que dice la tarjeta del CRM**: la próxima acción deja de ser
+  "Contactar" (no hay qué venderle) y pasa a *"Avisarle si sumamos X — hoy no lo
+  ofrecemos"*, y la descripción dice **"NO está en el catálogo hoy"** para que
+  nadie lo llame a ofrecerle algo que no existe.
+- **Se lee en Reportes**: cuadro *"Nos piden y no tenemos"* con los pedidos de
+  los últimos 90 días agrupados y contados, lo más pedido arriba. Que lo vea la
+  misma persona que lo carga no es decorativo: es lo que sostiene el registro.
+- Lógica pura y testeada en `src/lib/demanda.ts` (`normalizarPedido`,
+  `validarPedido`, `agruparDemanda`) y `src/fhir/demanda.ts` (el `Basic`).
+  La agrupación junta mayúsculas, tildes, signos y espacios; **no** inventa
+  sinónimos ni singular/plural, que con este volumen es una agrupación falsa.
 
 ### Modo oscuro / claro
 
