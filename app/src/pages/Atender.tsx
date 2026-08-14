@@ -505,7 +505,11 @@ function SenalConsentimiento({ pacienteId }: { pacienteId: string }): JSX.Elemen
   useEffect(() => {
     let activo = true;
     setResultado(null);
-    estadoConsentimientoPaciente(`Patient/${pacienteId}`)
+    // Se pregunta por el consentimiento GENERAL de atención, no por
+    // "cualquiera": si no se filtrara, la autorización que el paciente firma al
+    // subir un PDF de laboratorio haría decir "Consentimiento firmado" aunque
+    // nunca haya firmado el general. Serían dos cosas distintas con el mismo cartel.
+    estadoConsentimientoPaciente(`Patient/${pacienteId}`, COD_CONSENTIMIENTO.atencion)
       .then((r) => activo && setResultado(r))
       .catch(() => activo && setResultado({ ok: false, estado: 'no-verificable' }));
     return () => {

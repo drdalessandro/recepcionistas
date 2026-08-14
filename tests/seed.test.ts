@@ -148,7 +148,7 @@ describe('Seed — AccessPolicy Paciente — Portal (los dos usos de Coverage)',
     expect(escribible.criteria).not.toContain('intent=order');
   });
 
-  it('Consentimientos: lee los suyos y firma SOLO los de Biowellness (la entrada que el seed borraba)', () => {
+  it('Consentimientos: lee y firma los suyos, sin filtrar por category (la entrada que el seed borraba)', () => {
     // docs/recepcionistaschequeohandoff.md decía que el espejo del portal tenía
     // una entrada Consent aplicada A MANO que no estaba en este array: cada
     // `npm run seed` la borraba y dejaba la firma del portal en 403.
@@ -157,7 +157,11 @@ describe('Seed — AccessPolicy Paciente — Portal (los dos usos de Coverage)',
     expect(consents).toHaveLength(2);
     expect(consents.some((r) => r.readonly === true && r.criteria === 'Consent?patient=%patient')).toBe(true);
     const escribible = consents.find((r) => !r.readonly)!;
-    expect(escribible.criteria).toBe(`Consent?patient=%patient&category=${SYSTEM.consentimiento}|`);
+    expect(escribible.criteria).toBe('Consent?patient=%patient');
+    // NO acotar por category: el portal usa v3-ActCode|IDSCL y pone el código
+    // de BW en policyRule. Un criteria por category rompe la firma con 403
+    // (verificado contra el recurso real del servidor, 2026-08-14).
+    expect(escribible.criteria).not.toContain('category=');
   });
 
   it('El paciente solo puede ejecutar los bots del portal (solicitar-turno y disponibilidad)', () => {

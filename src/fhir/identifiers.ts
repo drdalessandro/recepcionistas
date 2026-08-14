@@ -182,23 +182,39 @@ export const COD = {
 } as const;
 
 /**
- * Consentimientos informados (código dentro de `SYSTEM.consentimiento`).
+ * Consentimientos informados del portal.
  *
- * - `atencion`: consentimiento general de atención, el que firma cualquier
- *   paciente al darse de alta en el portal.
- * - `terapia-biologica`: el que exige R-03 para las TB (péptidos, PRP,
- *   exosomas…), con la cadena de responsabilidad médica detrás.
+ * ⚠️ Dónde vive el código: el portal usa la categoría ESTÁNDAR de HL7 en
+ * `Consent.category` (`v3-ActCode|IDSCL`) y pone el código de Biowellness en
+ * **`Consent.policyRule.coding`** con `SYSTEM.consentimiento`. Por eso ni la
+ * policy ni el bot filtran por `category` (verificado contra el recurso real
+ * del servidor, 2026-08-14).
  *
- * ⚠️ PROVISORIO hasta que el portal confirme el contrato
- * (docs/handoff-portal-consentimiento.md): si el portal escribe otros códigos,
- * se cambian acá y nada más.
+ * - `procesamiento-datos-salud`: CONFIRMADO. Lo crea el portal cuando el
+ *   paciente sube un PDF de laboratorio y autoriza a procesarlo (Ley 25.326);
+ *   la `provision.data` referencia el DocumentReference del estudio.
+ * - `atencion` / `terapia-biologica`: PROVISORIOS. El consentimiento general
+ *   de atención (el del onboarding paso a paso) parece registrarse como
+ *   DocumentReference y no como Consent — pendiente de confirmar contra el
+ *   repo del portal (docs/handoff-portal-consentimiento.md).
  */
 export const COD_CONSENTIMIENTO = {
+  procesamientoDatosSalud: 'procesamiento-datos-salud',
   atencion: 'atencion',
   terapiaBiologica: 'terapia-biologica',
 } as const;
 
 export type CodigoConsentimiento = (typeof COD_CONSENTIMIENTO)[keyof typeof COD_CONSENTIMIENTO];
+
+/**
+ * LOINC del documento de consentimiento del paciente. Lo usa el portal como
+ * `DocumentReference.type` del consentimiento general firmado, y es el código
+ * estándar (interoperable) para "Patient Consent". Acordado con Alejandro
+ * (MedTech) el 2026-08-14: el `Consent` es el hecho legal y el
+ * `DocumentReference` es la evidencia firmada; se enlazan por `sourceReference`.
+ */
+export const LOINC_CONSENTIMIENTO = 'http://loinc.org';
+export const COD_LOINC_CONSENTIMIENTO = '59284-0';
 
 /**
  * Subtipo del aviso (input `tipo` del Task): habilita acciones específicas en

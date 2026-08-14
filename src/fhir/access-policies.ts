@@ -189,10 +189,16 @@ export const POLICY_PACIENTE_PORTAL: AccessPolicy = {
     // dejaba la firma del portal en 403. Mismo accidente que ya pasó con
     // Coverage HIP y con ServiceRequest.
     //  - lee TODOS sus consentimientos (también los que carga el equipo médico);
-    //  - firma SOLO los de Biowellness: el criteria por category le impide
-    //    fabricar Consent de cualquier otro tipo.
+    //  - firma los suyos: el criteria por paciente es la protección real.
+    //
+    // ⚠️ NO acotar por `category`: el portal usa la categoría estándar de HL7
+    // (`v3-ActCode|IDSCL`, information disclosure) y pone el código de
+    // Biowellness en `policyRule` (ej. `procesamiento-datos-salud` al subir un
+    // PDF de laboratorio). Un criteria por category con nuestro system
+    // rechazaría ese Consent con 403 y rompería la firma del portal — se probó
+    // contra el recurso real del servidor (2026-08-14).
     { resourceType: 'Consent', readonly: true, criteria: 'Consent?patient=%patient' },
-    { resourceType: 'Consent', criteria: `Consent?patient=%patient&category=${SYSTEM.consentimiento}|` },
+    { resourceType: 'Consent', criteria: 'Consent?patient=%patient' },
     // CarePlan escribible: "Mi plan" del portal marca acciones (Empezar/Lograda)
     // con updateResource (portal/src/pages/care-plan/ActionItems.tsx).
     { resourceType: 'CarePlan', criteria: 'CarePlan?subject=%patient' },
