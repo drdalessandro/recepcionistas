@@ -3,6 +3,21 @@
 > **Para**: la sesión que trabaje sobre `github.com/biowellness/administracion`.
 > **De**: `recepcionistas` (donde nace el dato).
 > Fecha: 2026-08-14. Sale del recorrido del walk-in, caso 1 ("el curioso").
+>
+> ## ✅ CERRADO — Administración respondió el 14/08/2026
+>
+> - **Toman los leads con la métrica honesta por defecto**: `walk-in` cuenta las
+>   consultas sin compra, con un interruptor *"Incluir consultas sin compra"*
+>   encendido por defecto y una columna **Leads** por canal. Apagarlo aplica el
+>   filtro `ciclo-vida-cliente != lead` y devuelve la serie anterior. **No hay
+>   nada que cambiar de nuestro lado.**
+> - **Las fichas sin nombre no rompen nada** (usan `getDisplayString`, que las
+>   tolera) y coinciden con no inventar nombres.
+> - **El `Provenance` era opcional** y nos pasaron la forma exacta: ya está
+>   implementado (ver §3). Detectan el ciclo de vida por la extensión y, si no
+>   está, por el `meta.tag` — escribimos las dos; ante diferencia manda la
+>   extensión.
+> - **No piden nada.**
 
 ## Qué cambió
 
@@ -65,11 +80,19 @@ canal `walk-in` con conversión 0 hasta que compren.
 > serie histórica**. Si prefieren la métrica anterior, filtren por
 > `ciclo-vida-cliente != lead`; nosotros no tocamos su panel.
 
-**3. No usamos su `Provenance` de atribución** (`bio/lead-origen`). El canal
-viaja en nuestro `bw/origen-lead = walk-in`, que es el contrato que ya existía
-entre nosotros (`docs/handoff-crm-canales.md`). Si quieren el Provenance
-también, decínos la forma exacta de las sub-extensiones y lo agregamos — no lo
-inferimos para no escribir algo que después les rompa el pipeline.
+**3. El `Provenance` de atribución** (`bio/lead-origen`) — *resuelto*. Nos
+pasaron la forma exacta y **ya lo escribimos**: un `Provenance` por lead, con
+`target` al Patient, `recorded`, `agent.who` = el Practitioner que lo registró y
+la sub-extensión `fuente` como **texto para mostrar** (el chip de la tarjeta).
+
+Ese texto sale de `ORIGENES_LEAD_LABELS` —el mismo mapa que ya usábamos— así que
+`walk-in` da exactamente `"Mostrador (walk-in)"` y agregar un canal nuevo no
+requiere tocar nada. El canal canónico para métricas sigue siendo
+`bw/origen-lead`, como acordamos.
+
+> `agent.who` es obligatorio en FHIR y solo acepta ciertos tipos. Si la app no
+> puede resolver un `Practitioner` válido, **no escribimos el Provenance**: un
+> recurso inválido sería peor que la tarjeta sin chip.
 
 ## Deduplicación (esto les sirve)
 

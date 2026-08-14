@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { descripcionLead, esLeadAnonimo, nombreDeLead, validarLead } from '../src/lib/lead.js';
+import { descripcionLead, esLeadAnonimo, fuenteDeLead, nombreDeLead, validarLead } from '../src/lib/lead.js';
+import { ORIGENES_LEAD_LABELS } from '../src/fhir/identifiers.js';
 
 // Caso 1 del walk-in: alguien pasa, entra, pregunta y se va. Hoy no deja rastro,
 // así que el local —el canal más caro— es el único que no se puede medir. El
@@ -57,5 +58,28 @@ describe('validarLead — de un clic, sin fricción', () => {
   it('solo se rechaza el vacío absoluto, que no sirve ni para medir', () => {
     expect(validarLead({}).ok).toBe(false);
     expect(validarLead({ nombre: '  ', interes: '' }).ok).toBe(false);
+  });
+});
+
+// Contrato del Provenance del CRM (su respuesta al handoff, 2026-08-14):
+// `fuente` es TEXTO PARA MOSTRAR — va como chip en la tarjeta del kanban—, no
+// un código. El canal canónico para métricas sigue siendo `origen-lead`.
+describe('fuenteDeLead — el chip de la tarjeta del CRM', () => {
+  it('walk-in sale exactamente como el ejemplo que nos pasaron', () => {
+    expect(fuenteDeLead('walk-in', ORIGENES_LEAD_LABELS)).toBe('Mostrador (walk-in)');
+  });
+
+  it('sale del mapa de etiquetas, no de un string suelto que se desincronice', () => {
+    for (const [codigo, etiqueta] of Object.entries(ORIGENES_LEAD_LABELS)) {
+      expect(fuenteDeLead(codigo, ORIGENES_LEAD_LABELS)).toBe(etiqueta);
+    }
+  });
+
+  it('un canal sin etiqueta cae al código (nunca undefined con origen presente)', () => {
+    expect(fuenteDeLead('canal-nuevo', ORIGENES_LEAD_LABELS)).toBe('canal-nuevo');
+  });
+
+  it('sin origen no hay chip: no se escribe un Provenance vacío', () => {
+    expect(fuenteDeLead(undefined, ORIGENES_LEAD_LABELS)).toBeUndefined();
   });
 });

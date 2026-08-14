@@ -269,6 +269,20 @@ export const SYSTEM_ETAPA_PIPELINE = `${NS_CRM}/CodeSystem/etapa-pipeline`;
 export const ETAPAS_PIPELINE = ['nuevo', 'contactado', 'evaluacion-agendada', 'convertido', 'perdido'] as const;
 export type EtapaPipeline = (typeof ETAPAS_PIPELINE)[number];
 
+/**
+ * `Provenance.extension` con la atribución del lead (sub-ext: `fuente`,
+ * `utm_source`, `campania`, `referido-por`).
+ *
+ * OPCIONAL: Administración confirmó (respuesta al handoff, 2026-08-14) que su
+ * panel de canales NO lo necesita —para métricas manda nuestro `origen-lead`—.
+ * Lo único que aporta es el **chip de fuente** en la tarjeta del kanban.
+ *
+ * `fuente` es texto PARA MOSTRAR, no un código. Su lector acepta `valueString`
+ * o `valueCode` y matchea por `url === 'fuente'`. Si hay más de un Provenance
+ * por paciente, toman el más reciente por `recorded`.
+ */
+export const EXT_LEAD_ORIGEN = `${NS_CRM}/StructureDefinition/lead-origen`;
+
 /** `Task.input[].type.text` con la próxima acción del pipeline. */
 export const TASK_INPUT_PROXIMA_ACCION = 'próxima-acción';
 

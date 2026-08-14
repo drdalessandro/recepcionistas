@@ -82,3 +82,18 @@ export function validarLead(datos: DatosLead): { ok: true } | { ok: false; error
   }
   return { ok: true };
 }
+
+/**
+ * Texto de la sub-extensión `fuente` del `Provenance` del CRM.
+ *
+ * Es **texto para mostrar** (va como chip en la tarjeta del kanban), no un
+ * código: el canal canónico para métricas sigue siendo `origen-lead`. Sale del
+ * mapa de etiquetas que ya existe, así que agregar un canal nuevo no requiere
+ * tocar nada acá — y no queda un string suelto que se desincronice.
+ */
+export function fuenteDeLead(origen: string | undefined, etiquetas: Record<string, string>): string | undefined {
+  if (!origen) {
+    return undefined;
+  }
+  return etiquetas[origen] ?? origen;
+}
