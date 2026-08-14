@@ -1,7 +1,11 @@
 import { useEffect, useState } from 'react';
-import { Alert, Button, Group, Modal, Select, Stack, TextInput } from '@mantine/core';
+import { Alert, Button, Group, Modal, Select, Stack, Text, TextInput } from '@mantine/core';
 import { IconInfoCircle, IconUserPlus } from '@tabler/icons-react';
 import { ORIGENES_LEAD, ORIGENES_LEAD_LABELS } from '@bw/fhir/identifiers';
+import type { Patient } from '@medplum/fhirtypes';
+import { getDisplayString } from '@medplum/core';
+import { medplum } from '../medplum';
+import { busquedasPara } from '@bw/lib/busqueda-paciente';
 import { altaPaciente, mensajeError } from '../lib/bots';
 
 /** Lista cerrada de canales (docs/canales-acceso.md): el CRM compara por código. */
@@ -34,6 +38,11 @@ export function NuevoPacienteModal({
   const [origen, setOrigen] = useState<string | null>(null);
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Fichas que ya existen con este teléfono o DNI. Se AVISA, nunca se bloquea:
+  // madre e hijo, o una pareja, comparten teléfono con toda naturalidad, y negar
+  // el alta por eso sería peor que el duplicado. La recepcionista es la única
+  // que puede distinguir un familiar de la misma persona.
+  const [posiblesDuplicados, setPosiblesDuplicados] = useState<Patient[]>([]);
 
   // Al abrirse con prellenado (desde Avisos), sembrar los campos una vez: el
   // teléfono viene en E.164 de Twilio, que es justo el formato con el que el
@@ -49,6 +58,45 @@ export function NuevoPacienteModal({
     }
   }, [abierto, telefonoInicial, nombreInicial]);
 
+  // Se busca mientras tipea (con una pausa), para que el aviso aparezca ANTES de
+  // crear. El caso que esto evita: la persona escribió por WhatsApp, ya tiene
+  // ficha con su teléfono, y se le crea una segunda con nombre + DNI — dos
+  // fichas sin ningún campo en común, que ni el alta ni bw-dedup-paciente ven.
+  useEffect(() => {
+    if (!abierto || (!telefono.trim() && !dni.trim())) {
+      setPosiblesDuplicados([]);
+      return;
+    }
+    let vigente = true;
+    const t = setTimeout(() => {
+      void (async () => {
+        const porId = new Map<string, Patient>();
+        for (const texto of [telefono, dni]) {
+          for (const b of busquedasPara(texto)) {
+            for (const valor of b.valores) {
+              const campo = b.tipo === 'dni' ? 'identifier' : 'telecom';
+              const encontrados = await medplum
+                .searchResources('Patient', { [campo]: valor, _count: 5 })
+                .catch(() => []);
+              for (const p of encontrados) {
+                if (p.id) {
+                  porId.set(p.id, p);
+                }
+              }
+            }
+          }
+        }
+        if (vigente) {
+          setPosiblesDuplicados([...porId.values()]);
+        }
+      })();
+    }, 500);
+    return () => {
+      vigente = false;
+      clearTimeout(t);
+    };
+  }, [abierto, telefono, dni]);
+
   function limpiar(): void {
     setNombre('');
     setDni('');
@@ -56,6 +104,7 @@ export function NuevoPacienteModal({
     setEmail('');
     setOrigen(null);
     setError(null);
+    setPosiblesDuplicados([]);
   }
 
   async function guardar(): Promise<void> {
@@ -122,6 +171,31 @@ export function NuevoPacienteModal({
           onChange={setOrigen}
           clearable
         />
+
+        {posiblesDuplicados.length > 0 && (
+          <Alert color="yellow" icon={<IconInfoCircle size={16} />} title="Ya hay una ficha con estos datos">
+            <Text size="sm" mb="xs">
+              Si es la misma persona, abrí la ficha que ya existe en vez de crear otra. Si son familiares que
+              comparten el teléfono, seguí con el alta.
+            </Text>
+            <Stack gap={4}>
+              {posiblesDuplicados.map((p) => (
+                <Button
+                  key={p.id}
+                  variant="light"
+                  size="compact-sm"
+                  justify="flex-start"
+                  onClick={() => {
+                    onCreado(p.id as string);
+                    onCerrar();
+                  }}
+                >
+                  Abrir {getDisplayString(p)}
+                </Button>
+              ))}
+            </Stack>
+          </Alert>
+        )}
 
         {error && (
           <Alert color="orange" icon={<IconInfoCircle size={16} />}>
