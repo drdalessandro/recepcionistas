@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { descripcionLead, esLeadAnonimo, fuenteDeLead, nombreDeLead, validarLead } from '../src/lib/lead.js';
+import { descripcionLead, esLeadAnonimo, fuenteDeLead, nombreDeLead, proximaAccionLead, validarLead } from '../src/lib/lead.js';
 import { ORIGENES_LEAD_LABELS } from '../src/fhir/identifiers.js';
 
 // Caso 1 del walk-in: alguien pasa, entra, pregunta y se va. Hoy no deja rastro,
@@ -81,5 +81,28 @@ describe('fuenteDeLead — el chip de la tarjeta del CRM', () => {
 
   it('sin origen no hay chip: no se escribe un Provenance vacío', () => {
     expect(fuenteDeLead(undefined, ORIGENES_LEAD_LABELS)).toBeUndefined();
+  });
+});
+
+// La tarjeta del kanban del CRM muestra nombre + chip de fuente + `próxima-acción`
+// + responsable, y NO muestra `Task.description`. O sea que este texto es lo
+// unico que le dice a quien trabaja el lead a que vino la persona.
+describe('proximaAccionLead — lo unico que se ve en la tarjeta', () => {
+  it('con telefono, dice que hay que contactarlo y por que', () => {
+    const t = proximaAccionLead({ interes: 'Cámara hiperbárica', telefono: '1169315830' });
+    expect(t).toContain('Contactar');
+    expect(t).toContain('Cámara hiperbárica');
+  });
+
+  it('sin telefono NO dice "contactar": no se puede, y prometerlo es peor', () => {
+    const t = proximaAccionLead({ interes: 'Cámara hiperbárica' });
+    expect(t).not.toContain('Contactar');
+    expect(t).toContain('no dejó datos de contacto');
+    expect(t).toContain('Cámara hiperbárica');
+  });
+
+  it('siempre devuelve algo: una tarjeta sin texto no dice nada', () => {
+    expect(proximaAccionLead({}).length).toBeGreaterThan(0);
+    expect(proximaAccionLead({ telefono: '1169315830' })).toContain('Contactar');
   });
 });

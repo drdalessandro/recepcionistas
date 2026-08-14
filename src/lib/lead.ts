@@ -97,3 +97,24 @@ export function fuenteDeLead(origen: string | undefined, etiquetas: Record<strin
   }
   return etiquetas[origen] ?? origen;
 }
+
+/**
+ * Texto de la sub-entrada `próxima-acción` del Task, que es **lo que el kanban
+ * del CRM muestra en la tarjeta**.
+ *
+ * Existe porque su tarjeta renderiza nombre + chip de fuente + `próxima-acción`
+ * + responsable, y **no muestra `Task.description`** — que era donde estaba el
+ * "preguntó por X". Sin esto, quien trabaja el lead ve un nombre suelto y no
+ * sabe a qué vino, que es justo el dato que hace vendible al lead.
+ *
+ * Dice la acción y el motivo juntos, porque en una tarjeta hay una sola línea:
+ * si no dejó cómo contactarlo, la acción honesta es ninguna y hay que decirlo.
+ */
+export function proximaAccionLead(datos: DatosLead): string {
+  const porQue = datos.interes?.trim();
+  const sePuedeContactar = Boolean(datos.telefono?.trim());
+  if (!sePuedeContactar) {
+    return porQue ? `Preguntó por ${porQue} — no dejó datos de contacto` : 'Consultó en el local — no dejó datos de contacto';
+  }
+  return porQue ? `Contactar — preguntó por ${porQue}` : 'Contactar — consultó en el local';
+}

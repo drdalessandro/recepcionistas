@@ -94,6 +94,29 @@ requiere tocar nada. El canal canónico para métricas sigue siendo
 > puede resolver un `Practitioner` válido, **no escribimos el Provenance**: un
 > recurso inválido sería peor que la tarjeta sin chip.
 
+## Lo que muestra la tarjeta (revisado contra su código)
+
+Miramos `PipelinePage.tsx` con las primeras tarjetas ya en producción: la
+tarjeta renderiza **nombre + chip de `fuente` + `próxima-acción` + responsable**,
+y **no muestra `Task.description`** — que era donde habíamos puesto "preguntó
+por X". O sea que las primeras tarjetas mostraban un nombre suelto y nada más:
+justo el dato que hace vendible al lead quedaba invisible.
+
+Corregido de nuestro lado: ahora escribimos también `Task.input` con
+`próxima-acción`, que es el campo que sí se ve.
+
+| Situación | Texto en la tarjeta |
+| --- | --- |
+| Dejó teléfono | `Contactar — preguntó por Cámara hiperbárica` |
+| No dejó nada | `Preguntó por Cámara hiperbárica — no dejó datos de contacto` |
+
+Cuando no hay forma de contactarlo **no decimos "Contactar"**: prometer una
+acción imposible es peor que no decir nada. `Task.description` sigue teniendo el
+detalle completo por si algún día lo quieren mostrar.
+
+**`Task.owner` lo dejamos vacío a propósito**: el responsable del lead lo asignan
+ustedes al trabajarlo, no Recepción. Por eso las tarjetas salen sin responsable.
+
 ## Deduplicación (esto les sirve)
 
 El lead entra por el **mismo** `bw-alta-paciente` que un alta normal, así que

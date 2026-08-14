@@ -18,10 +18,11 @@ import {
   SYSTEM,
   SYSTEM_CICLO_VIDA,
   SYSTEM_ETAPA_PIPELINE,
+  TASK_INPUT_PROXIMA_ACCION,
   esOrigenLead,
   type CicloVida,
 } from '../fhir/identifiers.js';
-import { descripcionLead, fuenteDeLead, nombreDeLead } from '../lib/lead.js';
+import { descripcionLead, fuenteDeLead, nombreDeLead, proximaAccionLead } from '../lib/lead.js';
 import { partirNombre, validarEmail } from '../lib/onboarding.js';
 
 export interface EntradaAltaPaciente {
@@ -200,6 +201,14 @@ export async function handler(
           businessStatus: { coding: [{ system: SYSTEM_ETAPA_PIPELINE, code: 'nuevo' }] },
           code: { text: 'Lead' },
           description: descripcionLead({ nombre: nombreText, telefono: e.telefono, interes: e.interes }),
+          // La tarjeta del kanban NO muestra `description`: muestra este input.
+          // Sin él, quien trabaja el lead ve un nombre suelto y no sabe a qué vino.
+          input: [
+            {
+              type: { text: TASK_INPUT_PROXIMA_ACCION },
+              valueString: proximaAccionLead({ telefono: e.telefono, interes: e.interes }),
+            },
+          ],
           for: { reference: `Patient/${creado.id}` },
           authoredOn: ahora.toISOString(),
         });
