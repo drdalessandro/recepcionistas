@@ -1,6 +1,7 @@
 import type { Communication, Invoice, QuestionnaireResponseItem } from '@medplum/fhirtypes';
 import type { EstadoConsentimiento } from '@bw/lib/consentimiento';
 import type { ColorSeguridad, EstadoSeguridad } from '@bw/lib/seguridad';
+import type { CicloVida } from '@bw/fhir/identifiers';
 import { medplum } from '../medplum';
 
 /**
@@ -223,6 +224,10 @@ export interface AltaPacienteInput {
   tipoCliente?: string;
   /** Canal de origen (lista cerrada ORIGENES_LEAD). */
   origenLead?: string;
+  /** 'lead' = todavía no es cliente, solo preguntó (contrato del CRM). */
+  cicloVida?: CicloVida;
+  /** Qué vino a consultar; va en la tarjeta del pipeline del CRM. */
+  interes?: string;
 }
 
 export interface ResultadoAltaPaciente {
@@ -230,6 +235,8 @@ export interface ResultadoAltaPaciente {
   mensaje?: string;
   patientId?: string;
   creado?: boolean;
+  /** Tarjeta creada en el kanban del CRM, si se registró como lead. */
+  taskPipelineId?: string;
 }
 
 /** Da de alta (o actualiza, sin duplicar) el paciente. No le da acceso al portal. */

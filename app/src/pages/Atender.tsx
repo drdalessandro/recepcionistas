@@ -27,6 +27,7 @@ import {
   IconInfoCircle,
   IconLicense,
   IconUserPlus,
+  IconMessageQuestion,
 } from '@tabler/icons-react';
 import type { Invoice, Patient } from '@medplum/fhirtypes';
 import { COD_CONSENTIMIENTO } from '@bw/fhir/identifiers';
@@ -57,6 +58,7 @@ import { PreAgendaModal } from '../components/PreAgendaModal';
 import { InvitarPortal } from '../components/InvitarPortal';
 import { KioscoIngreso } from '../components/KioscoIngreso';
 import { NuevoPacienteModal } from '../components/NuevoPacienteModal';
+import { RegistrarConsulta } from '../components/RegistrarConsulta';
 import { FoundingMember } from '../components/FoundingMember';
 import { esFm } from '@bw/fhir/founding';
 import { SERVICIOS, nombreServicioRecepcion } from '@bw/config/catalogo';
@@ -97,6 +99,7 @@ export function Atender({
   const [buscando, setBuscando] = useState(false);
   const [seleccionado, setSeleccionado] = useState<Patient | null>(null);
   const [altaAbierta, setAltaAbierta] = useState(false);
+  const [consultaAbierta, setConsultaAbierta] = useState(false);
 
   useEffect(() => {
     if (!pacienteInicialId) {
@@ -158,10 +161,33 @@ export function Atender({
     <Stack gap="lg">
       <Group justify="space-between" align="center">
         <Title order={2}>Atender paciente</Title>
-        <Button variant="light" leftSection={<IconUserPlus size={16} />} onClick={() => setAltaAbierta(true)}>
-          Nuevo paciente
-        </Button>
+        <Group gap="xs">
+          {/* El que pasó y preguntó: se registra para poder medir el local, sin
+              pedirle datos que no quiere dar. */}
+          <Button
+            variant="subtle"
+            leftSection={<IconMessageQuestion size={16} />}
+            onClick={() => setConsultaAbierta(true)}
+          >
+            Registrar consulta
+          </Button>
+          <Button variant="light" leftSection={<IconUserPlus size={16} />} onClick={() => setAltaAbierta(true)}>
+            Nuevo paciente
+          </Button>
+        </Group>
       </Group>
+
+      <RegistrarConsulta
+        abierto={consultaAbierta}
+        onCerrar={() => setConsultaAbierta(false)}
+        onRegistrado={(id, anonimo) => {
+          // Con datos se abre la ficha para seguir (invitar, reservar). Anónimo
+          // no tiene nada que hacer adentro: se queda en la búsqueda.
+          if (!anonimo) {
+            void abrirReciénCreado(id);
+          }
+        }}
+      />
 
       <NuevoPacienteModal
         abierto={altaAbierta}
