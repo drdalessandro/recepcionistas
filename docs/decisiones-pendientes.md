@@ -93,7 +93,7 @@ Ver [`docs/app-recepcion.md`](app-recepcion.md) y [`docs/bots.md`](bots.md).
 
 | Cuenta | Para qué | Estado |
 |---|---|---|
-| WhatsApp Business (Twilio) | ✅ **OPERATIVO** (2026-07-17): Project Secrets cargados, `whatsapp:test` recibido OK. Pendiente para producción: número WhatsApp aprobado (si hoy es sandbox, solo reciben los celulares que hicieron `join`) y plantillas aprobadas por Meta para mensajes iniciados por BW fuera de la ventana de 24 h. | Plantillas/número prod |
+| WhatsApp Business (Twilio) | ✅ **OPERATIVO**. 2026-07-17: Project Secrets cargados, `whatsapp:test` OK. **2026-08-14: las 10 plantillas están `approved` por Meta** (`npm run whatsapp:plantilla`) y se verificó un envío real entregado (`DELIVERED`) que salió **por la plantilla específica**, no por la genérica — o sea que los mensajes iniciados por BW fuera de la ventana de 24 h ya funcionan. Detalle y mapeo en [`whatsapp-plantillas.md`](whatsapp-plantillas.md). | ✅ Resuelto (2026-08-14) |
 | AWS SES | ✅ **OPERATIVO**: remitente `hola@medplum.com.ar` verificado (DKIM), emails llegan a bandeja principal. | Hecho |
 | MercadoPago | Cobro de membresías/sesiones (tokeniza tarjetas; no guardamos datos de tarjeta). | A gestionar |
 
