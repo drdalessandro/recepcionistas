@@ -46,6 +46,8 @@ export interface EntradaAltaPaciente {
   cicloVida?: CicloVida;
   /** Qué vino a preguntar. Va en la Task del pipeline; no es dato clínico. */
   interes?: string;
+  /** A quién acompañaba (nombre), si vino con un paciente. Solo texto de la tarjeta. */
+  acompanaA?: string;
   /**
    * Quién lo registró (`Practitioner/…`), para el `agent` del Provenance del
    * CRM. Lo manda la app con el perfil logueado: el bot no sabe quién lo llamó.
@@ -200,13 +202,13 @@ export async function handler(
           intent: 'order',
           businessStatus: { coding: [{ system: SYSTEM_ETAPA_PIPELINE, code: 'nuevo' }] },
           code: { text: 'Lead' },
-          description: descripcionLead({ nombre: nombreText, telefono: e.telefono, interes: e.interes }),
+          description: descripcionLead({ nombre: nombreText, telefono: e.telefono, interes: e.interes, acompanaA: e.acompanaA }),
           // La tarjeta del kanban NO muestra `description`: muestra este input.
           // Sin él, quien trabaja el lead ve un nombre suelto y no sabe a qué vino.
           input: [
             {
               type: { text: TASK_INPUT_PROXIMA_ACCION },
-              valueString: proximaAccionLead({ telefono: e.telefono, interes: e.interes }),
+              valueString: proximaAccionLead({ telefono: e.telefono, interes: e.interes, acompanaA: e.acompanaA }),
             },
           ],
           for: { reference: `Patient/${creado.id}` },

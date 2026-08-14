@@ -230,6 +230,8 @@ export interface AltaPacienteInput {
   interes?: string;
   /** Quién lo registró (Practitioner/…), para el Provenance del CRM. */
   registradoPorRef?: string;
+  /** A quién acompañaba, si el lead vino con un paciente. */
+  acompanaA?: string;
 }
 
 export interface ResultadoAltaPaciente {

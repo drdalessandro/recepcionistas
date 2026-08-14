@@ -106,3 +106,39 @@ describe('proximaAccionLead — lo unico que se ve en la tarjeta', () => {
     expect(proximaAccionLead({ telefono: '1169315830' })).toContain('Contactar');
   });
 });
+
+// El acompanante: vino con alguien que se atiende, tiene 40 minutos de espera y
+// ya vio el lugar por dentro. El vinculo es su dato de mas valor comercial.
+describe('acompañante — el vínculo es lo que abre la conversación', () => {
+  it('el vínculo va PRIMERO: "vino con Julio" abre mejor que el servicio', () => {
+    const t = proximaAccionLead({ acompanaA: "Julio D'Alessandro", interes: 'IHHT', telefono: '1169315830' });
+    expect(t).toContain('Contactar');
+    expect(t.indexOf("Julio D'Alessandro")).toBeLessThan(t.indexOf('IHHT'));
+  });
+
+  it('sin teléfono tampoco promete contactar, pero conserva el vínculo', () => {
+    const t = proximaAccionLead({ acompanaA: "Julio D'Alessandro", interes: 'IHHT' });
+    expect(t).not.toContain('Contactar');
+    expect(t).toContain("Julio D'Alessandro");
+    expect(t).toContain('no dejó datos de contacto');
+  });
+
+  it('acompañante sin interés declarado igual dice con quién vino', () => {
+    expect(proximaAccionLead({ acompanaA: 'Ana', telefono: '1169315830' })).toContain('Ana');
+  });
+
+  it('el vínculo alcanza para registrar: ya es un lead trabajable', () => {
+    expect(validarLead({ acompanaA: 'Ana' }).ok).toBe(true);
+    // Sin nada sigue sin registrarse.
+    expect(validarLead({}).ok).toBe(false);
+  });
+
+  it('la descripción deja el vínculo para quien abra el detalle', () => {
+    expect(descripcionLead({ acompanaA: 'Ana', interes: 'IHHT' })).toContain('Acompañó a Ana');
+  });
+
+  it('sin vínculo, los textos siguen exactamente como antes', () => {
+    expect(proximaAccionLead({ interes: 'IHHT', telefono: '1' })).toBe('Contactar — preguntó por IHHT');
+    expect(descripcionLead({ interes: 'IHHT' })).toContain('Consulta presencial en el local');
+  });
+});

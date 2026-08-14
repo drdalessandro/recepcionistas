@@ -19,6 +19,13 @@ export interface DatosLead {
   telefono?: string;
   /** Qué vino a preguntar (servicio, categoría o texto libre). */
   interes?: string;
+  /**
+   * A quién acompañaba, si vino con un paciente. Es el dato de más valor
+   * comercial de este lead: le da a quien lo trabaja un ángulo de conversación
+   * ("viniste con Julio") y prueba social. Va en el texto, no en un recurso
+   * nuevo: el CRM no leería una extensión que no conoce.
+   */
+  acompanaA?: string;
 }
 
 /**
@@ -58,7 +65,11 @@ export function esLeadAnonimo(nombre: string | undefined): boolean {
  * que dice de dónde salió y qué preguntó — sin eso, "Nuevo" no significa nada.
  */
 export function descripcionLead(datos: DatosLead): string {
-  const partes = ['Consulta presencial en el local'];
+  const partes = [
+    datos.acompanaA?.trim()
+      ? `Acompañó a ${datos.acompanaA.trim()} y consultó en el local`
+      : 'Consulta presencial en el local',
+  ];
   if (datos.interes?.trim()) {
     partes.push(`Preguntó por: ${datos.interes.trim()}`);
   }
@@ -76,7 +87,9 @@ export function descripcionLead(datos: DatosLead): string {
  * teléfono, ni interés—, que no aporta nada ni para medir.
  */
 export function validarLead(datos: DatosLead): { ok: true } | { ok: false; error: string } {
-  const algo = [datos.nombre, datos.telefono, datos.interes].some((v) => v?.trim());
+  // El vínculo cuenta como dato: "acompañó a Julio" ya es un lead trabajable
+  // aunque no haya dicho a qué vino.
+  const algo = [datos.nombre, datos.telefono, datos.interes, datos.acompanaA].some((v) => v?.trim());
   if (!algo) {
     return { ok: false, error: 'Elegí al menos qué vino a consultar.' };
   }
@@ -112,9 +125,20 @@ export function fuenteDeLead(origen: string | undefined, etiquetas: Record<strin
  */
 export function proximaAccionLead(datos: DatosLead): string {
   const porQue = datos.interes?.trim();
-  const sePuedeContactar = Boolean(datos.telefono?.trim());
-  if (!sePuedeContactar) {
-    return porQue ? `Preguntó por ${porQue} — no dejó datos de contacto` : 'Consultó en el local — no dejó datos de contacto';
+  const conQuien = datos.acompanaA?.trim();
+  // El acompañante va primero: "vino con Julio" es lo que abre la conversación,
+  // más que el servicio por el que preguntó.
+  const contexto = conQuien
+    ? `acompañó a ${conQuien}${porQue ? ` y preguntó por ${porQue}` : ''}`
+    : porQue
+      ? `preguntó por ${porQue}`
+      : 'consultó en el local';
+  if (!datos.telefono?.trim()) {
+    return `${mayuscula(contexto)} — no dejó datos de contacto`;
   }
-  return porQue ? `Contactar — preguntó por ${porQue}` : 'Contactar — consultó en el local';
+  return `Contactar — ${contexto}`;
+}
+
+function mayuscula(s: string): string {
+  return s.charAt(0).toUpperCase() + s.slice(1);
 }

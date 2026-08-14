@@ -25,11 +25,17 @@ export function RegistrarConsulta({
   abierto,
   onCerrar,
   onRegistrado,
+  acompanaA,
 }: {
   abierto: boolean;
   onCerrar: () => void;
   /** Se llama con el id del lead creado (para poder abrir su ficha). */
   onRegistrado: (patientId: string, anonimo: boolean) => void;
+  /**
+   * Nombre del paciente al que acompaña, si se abre desde su ficha. Cambia el
+   * canal a `acompanante` y agrega el vínculo al texto de la tarjeta del CRM.
+   */
+  acompanaA?: string;
 }): JSX.Element {
   // Quién está registrando: va como `agent` del Provenance del CRM. El bot no
   // sabe quién lo llamó, así que se lo manda la app.
@@ -59,7 +65,7 @@ export function RegistrarConsulta({
   }
 
   async function registrar(): Promise<void> {
-    const datos = { nombre: nombre.trim(), telefono: telefono.trim(), interes: interes ?? undefined };
+    const datos = { nombre: nombre.trim(), telefono: telefono.trim(), interes: interes ?? undefined, acompanaA };
     const v = validarLead(datos);
     if (!v.ok) {
       setError(v.error);
@@ -72,9 +78,13 @@ export function RegistrarConsulta({
         nombre: datos.nombre || undefined,
         telefono: datos.telefono || undefined,
         interes: datos.interes,
+        acompanaA,
         // Contrato del CRM: nace como lead, no como cliente.
         cicloVida: 'lead',
-        origenLead: 'walk-in',
+        // Canal distinto del walk-in: no vino por su cuenta, vino traído. Y
+        // convierte distinto —ya vio el lugar por dentro— así que medirlo
+        // aparte es justamente el punto.
+        origenLead: acompanaA ? 'acompanante' : 'walk-in',
         registradoPorRef: perfil ? getReferenceString(perfil) : undefined,
       });
       if (!r.ok || !r.patientId) {
@@ -92,11 +102,17 @@ export function RegistrarConsulta({
   }
 
   return (
-    <Modal opened={abierto} onClose={onCerrar} title="Registrar una consulta del mostrador" size="md">
+    <Modal
+      opened={abierto}
+      onClose={onCerrar}
+      title={acompanaA ? `Registrar acompañante de ${acompanaA}` : 'Registrar una consulta del mostrador'}
+      size="md"
+    >
       <Stack gap="sm">
         <Text size="sm" c="dimmed">
-          Para saber cuánta gente entra y qué pregunta. Si no quiere dejar sus datos, registrala igual: con el
-          interés alcanza.
+          {acompanaA
+            ? `Vino acompañando a ${acompanaA} y preguntó por algo. Queda como lead con ese vínculo, que es lo que le da contexto a quien lo contacte.`
+            : 'Para saber cuánta gente entra y qué pregunta. Si no quiere dejar sus datos, registrala igual: con el interés alcanza.'}
         </Text>
 
         <Select

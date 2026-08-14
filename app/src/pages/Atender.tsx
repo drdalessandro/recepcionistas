@@ -256,6 +256,7 @@ function FichaPaciente({
   // Se incrementa al volver del kiosco, para que el banner relea la señal.
   const [versionSeguridad, setVersionSeguridad] = useState(0);
   const [kiosco, setKiosco] = useState(false);
+  const [acompanante, setAcompanante] = useState(false);
   // Copia viva del Patient: marcar/quitar Founding lo actualiza sin re-buscar.
   const [pacienteActual, setPacienteActual] = useState(paciente);
 
@@ -298,7 +299,23 @@ function FichaPaciente({
         >
           Consentimiento y cuestionario (darle la tablet al paciente)
         </Button>
+        {/* El que vino acompañando y pregunta mientras espera. Se registra desde
+            ACÁ y no desde el header porque este es el momento en que pasa: la
+            recepcionista está en la ficha del paciente al que acompaña. */}
+        <Button
+          variant="subtle"
+          leftSection={<IconMessageQuestion size={16} />}
+          onClick={() => setAcompanante(true)}
+        >
+          Vino acompañado: registrar al acompañante
+        </Button>
       </Group>
+      <RegistrarConsulta
+        abierto={acompanante}
+        onCerrar={() => setAcompanante(false)}
+        acompanaA={getDisplayString(pacienteActual)}
+        onRegistrado={() => undefined}
+      />
       <KioscoIngreso
         paciente={paciente}
         abierto={kiosco}

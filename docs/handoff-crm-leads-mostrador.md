@@ -117,6 +117,31 @@ detalle completo por si algún día lo quieren mostrar.
 **`Task.owner` lo dejamos vacío a propósito**: el responsable del lead lo asignan
 ustedes al trabajarlo, no Recepción. Por eso las tarjetas salen sin responsable.
 
+## Canal nuevo: `acompanante` (2026-08-14, segunda tanda)
+
+Sumamos un código al contrato de canales: **`acompanante`**, para el que viene
+acompañando a un paciente y pregunta mientras espera. No es `walk-in` —no vino
+por su cuenta, vino traído— y muy probablemente **convierte distinto**: ya vio
+el lugar por dentro y tuvo cuarenta minutos de exposición. Medirlo aparte es
+justamente el punto.
+
+Verificamos en su `canales.ts` que un canal nuevo no rompe nada:
+`canalLabel` cae al código crudo y `ordenContrato` lo manda al final. Así que
+**va a aparecer como `acompanante`** en el panel hasta que le agreguen la
+etiqueta. La nuestra es *"Acompañante de un paciente"*, por si quieren la misma.
+
+En la tarjeta del kanban el vínculo va primero, porque es lo que abre la
+conversación:
+
+| Situación | Texto en la tarjeta |
+| --- | --- |
+| Acompañante con teléfono | `Contactar — acompañó a Julio D'Alessandro y preguntó por IHHT` |
+| Acompañante sin datos | `Acompañó a Julio D'Alessandro y preguntó por IHHT — no dejó datos de contacto` |
+
+> El vínculo va **solo en el texto**, no en un recurso ni extensión nueva: nada
+> del lado de ustedes lo leería, y no quisimos inventar contrato para un dato
+> que es color de conversación, no métrica. Para medir alcanza con el canal.
+
 ## Deduplicación (esto les sirve)
 
 El lead entra por el **mismo** `bw-alta-paciente` que un alta normal, así que
