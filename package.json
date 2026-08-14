@@ -12,6 +12,7 @@
   ],
   "scripts": {
     "typecheck": "tsc -p tsconfig.json --noEmit",
+    "typecheck:app": "npm run typecheck --workspace @biowellness/recepcion-app",
     "test": "vitest run",
     "test:watch": "vitest",
     "seed": "tsx src/seed/index.ts",
@@ -33,7 +34,7 @@
     "qr:canales": "tsx src/seed/generar-qrs.ts",
     "crm:canales": "tsx src/seed/reporte-canales.ts",
     "agenda:check": "tsx src/seed/diagnostico-agenda.ts",
-    "verify": "npm run typecheck && npm run test",
+    "verify": "npm run typecheck && npm run typecheck:app && npm run test && npm run build:app",
     "dev": "npm run dev --workspace @biowellness/recepcion-app",
     "build:app": "npm run build --workspace @biowellness/recepcion-app",
     "app:typecheck": "npm run typecheck --workspace @biowellness/recepcion-app"

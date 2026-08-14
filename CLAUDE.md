@@ -43,15 +43,19 @@ Bloque 0). Backend **Medplum (FHIR R4)**, todo en **TypeScript**.
 ## Flujo de trabajo
 
 - Ramas: `main` y `staging` con deploy automático (CI: `.github/workflows/ci.yml`).
-- Gate de CI (y antes de pushear): `npm run verify` (typecheck + tests) y
-  `npm run seed -- --dry-run`.
+- Gate de CI (y antes de pushear): `npm run verify` y `npm run seed -- --dry-run`.
+  `verify` cubre **las dos apps**: typecheck de `src`+`tests`, typecheck de
+  `app/` (tiene su propio tsconfig y quedaba afuera), los tests, y el **build
+  del app** — que no es redundante: `vite build` es lo único que detecta
+  problemas de empaquetado, como un import que arrastre `node:crypto` al bundle
+  del navegador.
 - Construcción por **slices verticales**: cada pieza se entrega "verde" (sus casos
   AC pasan) antes de seguir.
 
 ## Comandos
 
 ```bash
-npm run verify             # typecheck + tests (gate)
+npm run verify             # gate completo: typecheck (src y app) + tests + build del app
 npm run seed -- --dry-run  # construye el catálogo sin servidor
 npm run seed               # carga el catálogo en Medplum (credenciales en .env)
 npm run deploy:bots        # deploy de bots (medplum CLI)
