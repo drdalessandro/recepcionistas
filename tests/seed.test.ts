@@ -4,7 +4,8 @@ import { generarSlots } from '../src/lib/slots.js';
 import { getServicio } from '../src/config/catalogo.js';
 import { MEDICOS } from '../src/config/medicos.js';
 import { SYSTEM } from '../src/fhir/identifiers.js';
-import { EXT } from '../src/fhir/identifiers.js';
+import { EXT, INTAKE_QUESTIONNAIRE_URL } from '../src/fhir/identifiers.js';
+import { CONSENTIMIENTO_LIBRARY_URL, VERSION_CONSENTIMIENTO, consentSections } from '../src/config/consentimiento-texto.js';
 
 const seed = buildSeed();
 
@@ -276,5 +277,51 @@ describe('Seed — agendas de médicos (portal → Consulta médica)', () => {
   it('El seed solo publica Schedule de los médicos CON agenda declarada', () => {
     const publicados = seed.schedules.filter((s) => esScheduleDeMedico(s));
     expect(publicados).toHaveLength(MEDICOS.filter((m) => (m.agenda?.length ?? 0) > 0).length);
+  });
+
+  // El kiosco del mostrador y el portal dependen de que estos DOS recursos
+  // existan en el servidor con la URL canónica exacta. Si alguien cambia una y
+  // no la otra, el circuito se rompe en silencio: el kiosco se queda sin
+  // formulario y `bw-estado-seguridad` deja de encontrar los screenings
+  // completados — con lo cual TODO paciente pasa a 'sin-screening' y R-20
+  // bloquea todas las reservas. Falla cerrado, pero falla.
+  describe('contrato con el portal: consentimiento y cuestionario de ingreso', () => {
+    it('el Questionnaire se publica con la URL canónica que busca el bot', () => {
+      expect(seed.cuestionarioIngreso.url).toBe(INTAKE_QUESTIONNAIRE_URL);
+      expect(seed.cuestionarioIngreso.status).toBe('active');
+      expect(seed.cuestionarioIngreso.subjectType).toContain('Patient');
+    });
+
+    it('el Questionnaire conserva las preguntas de screening HBOT/IHHT', () => {
+      const linkIds = JSON.stringify(seed.cuestionarioIngreso.item ?? []);
+      // Sin estas, el cuestionario deja de ser un screening de contraindicaciones.
+      expect(linkIds).toContain('cirugia-reciente-ont');
+      expect(linkIds).toContain('medicacion');
+    });
+
+    it('el Library del consentimiento se publica versionado y con el texto adentro', () => {
+      expect(seed.consentimiento.url).toBe(CONSENTIMIENTO_LIBRARY_URL);
+      expect(seed.consentimiento.version).toBe(VERSION_CONSENTIMIENTO);
+      expect(seed.consentimiento.status).toBe('active');
+      const data = seed.consentimiento.content?.[0]?.data;
+      expect(data).toBeTruthy();
+      const contenido = JSON.parse(Buffer.from(data as string, 'base64').toString('utf-8'));
+      // Las ocho secciones del documento legal viajan completas.
+      expect(contenido.secciones).toHaveLength(consentSections.length);
+      expect(contenido.secciones.map((s: { heading: string }) => s.heading)).toEqual(
+        consentSections.map((s) => s.heading),
+      );
+    });
+
+    it('las dos apps pueden LEER los dos recursos (si no, el kiosco abre vacío)', () => {
+      const paciente = seed.accessPolicies.find((p) => p.name?.includes('Paciente'));
+      const recepcion = seed.accessPolicies.find((p) => p.name?.includes('Recepción'));
+      for (const policy of [paciente, recepcion]) {
+        expect(policy).toBeDefined();
+        const tipos = (policy!.resource ?? []).map((r) => r.resourceType);
+        expect(tipos).toContain('Library');
+        expect(tipos).toContain('Questionnaire');
+      }
+    });
   });
 });
