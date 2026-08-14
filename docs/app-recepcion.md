@@ -49,10 +49,10 @@ git pull && npm run build:app     # nginx no se toca: sirve el dist nuevo al ins
 
 | Vista | Componente | Qué hace |
 |---|---|---|
-| **Agenda** | `AgendaDelDia` | Línea de tiempo del día por sala (7/14 franjas), franjas libres clickeables para reservar y próximos turnos. |
+| **Agenda** | `AgendaDelDia` | Línea de tiempo del día por sala (7/14 franjas), franjas libres clickeables para reservar, próximos turnos y **quiénes están esperando lugar** (lista de espera, por orden de llegada). |
 | **Planes y sesiones** | `PlanesSesiones` | Dashboard de saldo de planes (ver abajo). |
 | **Atender paciente** | `Atender` | Busca al paciente y abre su ficha: banner de seguridad, **badge de consentimiento firmado en el portal** (firmado con fecha / sin firmar / no verificable — señal binaria vía `bw-estado-consentimiento`, nunca el documento), planes (asignar / **pre-agendar**), reserva de turno/combo y cobro. Al elegir una Terapia Biológica, el switch de R-03 viene **precargado** si el paciente ya firmó en el portal, y el turno guarda si el consentimiento fue verificado o declarado por Recepción. |
-| **Avisos** | `Avisos` | Avisos automáticos del sistema (`Task code=aviso-recepcion`): **WhatsApp de número desconocido** (con botones *Responder por WhatsApp* y *Crear ficha* prellenada), pago duplicado a devolver, pago acreditado sin registro, seña de reserva vencida, pagos rechazados y diferencia de arqueo. Badge rojo + campanita. **Hasta 2026-08-12 estas alertas se creaban solo con `code.text`: como las búsquedas FHIR por token no miran el texto, ninguna pantalla las listaba y el aviso moría en la base.** |
+| **Avisos** | `Avisos` | Avisos automáticos del sistema (`Task code=aviso-recepcion`): **WhatsApp de número desconocido** (con botones *Responder por WhatsApp* y *Crear ficha* prellenada), pago duplicado a devolver, pago acreditado sin registro, seña de reserva vencida, pagos rechazados, diferencia de arqueo y **turno liberado con gente esperándolo** (candidatos en orden, con botón *Ofrecer por WhatsApp* y *Reservarle*). Badge rojo + campanita. **Hasta 2026-08-12 estas alertas se creaban solo con `code.text`: como las búsquedas FHIR por token no miran el texto, ninguna pantalla las listaba y el aviso moría en la base.** |
 | **Reportes** | `Reportes` | Indicadores de gestión + **"Nos piden y no tenemos"** (ver abajo). |
 | **Caja** | `Caja` | Caja chica: registrar gastos (lista cerrada de categorías + tope con autorización), reposiciones y ajustes, y **cerrar caja** (arqueo). El saldo esperado se DERIVA (contado del último arqueo + Invoices en efectivo − egresos): los ingresos nunca se re-registran. Diferencia de arqueo ≠ 0 → alerta urgente a Administración (Task). Movimientos = `Basic` (code `CodeSystem/caja`), arqueos = `PaymentReconciliation`; parámetros confirmados por Andrés (2026-08-10) en `src/config/caja.ts`. Contrato para Administración: [`handoff-caja-administracion.md`](handoff-caja-administracion.md). |
 
@@ -115,6 +115,32 @@ nunca qué.
   `validarPedido`, `agruparDemanda`) y `src/fhir/demanda.ts` (el `Basic`).
   La agrupación junta mayúsculas, tildes, signos y espacios; **no** inventa
   sinónimos ni singular/plural, que con este volumen es una agrupación falsa.
+
+### Lista de espera (no hay lugar y quiere venir)
+
+El momento en que se anota es cuando falla la reserva: el botón **"No hay lugar:
+anotar en la lista de espera"** vive al lado del de reservar en `Atender`, y
+también aparece dentro del error *"No se pudo reservar"*.
+
+- **Qué se pide**: el servicio y hasta cuándo espera (por defecto 14 días). Los
+  días y la franja (mañana/tarde/noche) son **opcionales** pero cambian mucho el
+  resultado: sin ellos se lo llama por cualquier horario de esa terapia, y el
+  aviso que no sirve enseña a ignorar los avisos.
+- **Dónde se ve**: en la ficha del paciente (con *Quitar*) y en **Agenda →
+  "Esperando lugar"**, que es la pantalla donde está la recepcionista cuando se
+  corre un turno y sobra una franja.
+- **Qué pasa cuando se libera un lugar**: al cancelar un turno (o al vencer una
+  seña, R-19) el bot busca a quién le sirve ESE horario, ordena por llegada y
+  deja el aviso con los 3 primeros y el teléfono a mano. El WhatsApp lo manda
+  Recepción de un clic — el sistema **no** lo ofrece solo: el lugar no queda
+  reservado y elegir a quién ofrecérselo es una decisión comercial.
+- **Vence sola**: pasada la fecha deja de recibir avisos sin que nadie limpie la
+  lista. Al quitarla se cancela, no se borra: queda el rastro de que esa persona
+  quiso venir y no había lugar, que es la medida de la demanda que no atendemos.
+- Lógica pura y testeada en `src/lib/lista-espera.ts` (`sirveElHueco`,
+  `candidatosParaHueco`, `validarEspera`, textos) y `src/fhir/lista-espera.ts`
+  (el `Appointment` con `status: waitlist`). UI:
+  `app/src/components/ListaEsperaModal.tsx` y `EsperandoLugar.tsx`.
 
 ### Modo oscuro / claro
 

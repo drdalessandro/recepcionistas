@@ -23,6 +23,17 @@ Qué queda pendiente para esa fecha:
 > lista de espera, la prioridad de estos dos sube: pasan de "más trabajo" a
 > "canal de adquisición barato".
 
+## Lista de espera — 2 preguntas abiertas (2026-08-14)
+
+Se implementó la lista de espera (anotar a quien no consiguió lugar y avisar
+cuando se libera uno). Dos decisiones quedaron tomadas de la forma conservadora,
+a la espera de Andrés — **ninguna frena nada**:
+
+| Tema | Cómo está hoy | La pregunta |
+|---|---|---|
+| **¿Se le avisa solo al paciente?** | NO: el bot deja el aviso a Recepción con los candidatos y el texto listo, y el WhatsApp lo manda una persona de un clic. | Avisar automáticamente al primero es más rápido y cumple mejor la promesa del portal, pero el lugar **no queda reservado**: dos personas pueden decir que sí al mismo turno. Con una reserva provisoria (tipo R-19, con vencimiento) sí se podría automatizar. |
+| **¿En qué orden?** | Orden de llegada (FIFO), tomando los 3 primeros. | Si Pareja/Prime tiene prioridad (ver Catálogo v9), la regla tiene que estar escrita: hoy no se inventa acá. |
+
 ## Agenda — RESUELTO ✅ (2026-06-20)
 
 | # | Decisión | Definición confirmada por Andrés |
@@ -47,7 +58,7 @@ Esferoides dado de baja).
 | Tema | Detalle | Estado |
 |---|---|---|
 | IHHT en pareja (combos Pareja) | Físicamente usa los 2 puestos JAY-20H, pero la reserva de combo Pareja hoy ocupa 1 puesto (una reserva con `ocupantes: 2`); el otro puesto queda reservable. Pendiente: asignación multi-puesto en `planificarCombo`. | Mejora pendiente |
-| Prioridad de reserva Pareja | v9: "Miembros PAREJA tienen prioridad de reserva en Membresías Prime y Healthspan". Es cualitativo (sin ventana ni número). ¿Cómo se operativiza? (¿más días de anticipación? ¿prioridad en lista de espera?) | ⚠️ Preguntar a Andrés |
+| Prioridad de reserva Pareja | v9: "Miembros PAREJA tienen prioridad de reserva en Membresías Prime y Healthspan". Es cualitativo (sin ventana ni número). ¿Cómo se operativiza? (¿más días de anticipación? ¿prioridad en lista de espera?) **La lista de espera ya existe (2026-08-14) y ordena por LLEGADA**: el que pidió primero, primero. Es la única regla que no se discute en el mostrador; si Pareja tiene que saltearla, hace falta la regla escrita. | ⚠️ Preguntar a Andrés |
 | FM en masajes/osteopatía | ¿El 20% FM aplica a masajes/osteopatía sueltos? Hoy `fmAplica = false` para ellos. | A confirmar |
 | Insumos Regenerar (cascada TB) | La cascada de IV/TB (R-08) necesita el costo de insumo por terapia (lista Regenerar) para el neto real de BW. Hoy se pasa como parámetro. | A confirmar |
 | Parámetros de caja chica | Diseño aprobado (opción 2, 2026-08-09) e implementado (vista **Caja**). **Confirmados por Andrés vía Administración el 2026-08-10, sin cambios**: fondo fijo **$200.000**, tope por gasto sin autorización **$25.000**, arqueo **diario al cierre**, reposición la registra recepción (auditada por `meta.author`). El tablero de Admin ya lee la caja y la alerta de diferencia está activa en pantalla (la `Subscription` en tiempo real queda para cuando definan endpoint). Valores en `src/config/caja.ts`. | ✅ Resuelto (2026-08-10) |

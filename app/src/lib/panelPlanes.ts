@@ -44,7 +44,10 @@ export interface PanelPlanes {
   enRiesgo: number;
 }
 
-const ESTADOS_OCULTOS = new Set(['cancelled', 'entered-in-error']);
+// 'waitlist' es una espera, no un turno: no tiene horario y no ocupa nada.
+// Las búsquedas por `date=ge…` ya la dejan afuera (no tiene `start`); esto
+// es el segundo cerrojo, para que un cambio de índice no la meta en la agenda.
+const ESTADOS_OCULTOS = new Set(['cancelled', 'entered-in-error', 'waitlist']);
 const ORDEN_NIVEL: Record<NivelUrgencia, number> = { critico: 0, pronto: 1, tranquilo: 2, sinAccion: 3 };
 
 const DIA_MS = 86_400_000;

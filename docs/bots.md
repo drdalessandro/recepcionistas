@@ -29,11 +29,11 @@ deployan al runtime **`awslambda`** de Medplum (configurable con la env
 | `bw-validar-turno` | Valida un turno (orden HBOT, contraindicaciones, prescripción, capacidad/desfasaje, ventana, saldo). | `executeBot` al reservar/confirmar. |
 | `bw-reservar-turno` | Valida y, si está OK, **crea** el turno (`Appointment` + `Slot` ocupado). Sin plan, la tentativa nace con vencimiento de seña (R-19) y el WhatsApp sale con monto + link de MP + hora límite. | `executeBot` desde el front (Reservar turno). |
 | `bw-reservar-combo` | Agenda un **combo** en secuencia (HBOT primero), auto-asignando sala por componente. | `executeBot` desde el front (Reservar combo). |
-| `bw-estado-turno` | Check-in/out: cambia el estado del turno, gestiona el `Encounter` y libera la sala al completar/cancelar. | `executeBot` desde el front (clic en el turno). |
+| `bw-estado-turno` | Check-in/out: cambia el estado del turno, gestiona el `Encounter` y libera la sala al completar/cancelar. Al **cancelar** aplica R-14 (devuelve la sesión al plan si canceló a tiempo) y, si hay gente en la **lista de espera** a la que le sirve ese horario, deja el aviso a Recepción con los candidatos en orden. | `executeBot` desde el front (clic en el turno). |
 | `bw-pagar-sena` | Registra la seña (50%), confirma el turno (pending→booked), **emite el Invoice pendiente del saldo restante** (`saldo-{turno}`, `issued`) y envía WhatsApp de confirmación (informa el saldo). Si la tentativa ya venció/canceló, NO confirma (R-19). | `executeBot` (clic en turno tentativo). |
 | `bw-link-mercadopago` | Genera un link de MercadoPago por la seña (`concepto:'sena'`, default; expira con la tentativa, R-19) o por el **saldo restante** (`concepto:'saldo'`, lee el Invoice pendiente). | `executeBot` (turno tentativo → seña · turno confirmado → saldo). |
 | `bw-webhook-mercadopago` | Webhook de MP: verifica el pago contra la API de MP y confirma el turno automáticamente al acreditarse. Un pago tardío sobre una tentativa vencida NO confirma: alerta a Recepción (devolver o reagendar). | URL pública que llama MercadoPago. |
-| `bw-vencer-tentativas` | **Cron R-19 (seña autoservicio):** a los 60 min del vencimiento manda el último recordatorio con el mismo link; al vencer (2 h de la reserva, nunca después del inicio del turno) cancela el/los turno(s), libera las salas y avisa al paciente (WhatsApp + portal). Antes de cancelar relee el turno (no pisa una seña que entró en el medio). | `cronTimer` del Bot (cada ~10 min). |
+| `bw-vencer-tentativas` | **Cron R-19 (seña autoservicio):** a los 60 min del vencimiento manda el último recordatorio con el mismo link; al vencer (2 h de la reserva, nunca después del inicio del turno) cancela el/los turno(s), libera las salas y avisa al paciente (WhatsApp + portal). Antes de cancelar relee el turno (no pisa una seña que entró en el medio). El lugar liberado se ofrece a la **lista de espera** por la misma vía que una cancelación. | `cronTimer` del Bot (cada ~10 min). |
 | `bw-asignar-plan` | Asigna una membresía/paquete. **Presencial** (efectivo/tarjeta/transferencia): Coverage `active` + Invoice `balanced` + bienvenida. **MercadoPago**: Coverage `draft` (PENDIENTE, sin sesiones por R-10) + Invoice `issued` sin ChargeItem + link de pago por WhatsApp; la activación, la bienvenida y el ChargeItem salen recién cuando el webhook acredita el pago (`resolverInvoicePlan`). Anti-duplicado: si el mismo plan ya está pendiente, regenera el link en vez de crear otro. | `executeBot` desde el front (Atender → Planes). |
 | `bw-cobro-membresias` | **Cron días 1-5:** renueva cada membresía activa (reset de sesiones + cobro mensual + WhatsApp). | `cronTimer` del Bot (a diario). |
 | `bw-recordatorios` | **Cron:** recuerda los turnos confirmados a 48 h y 2 h por WhatsApp. | `cronTimer` del Bot (cada ~30 min). |
@@ -50,6 +50,32 @@ deployan al runtime **`awslambda`** de Medplum (configurable con la env
 | `bw-fusionar-paciente` | Fusiona un duplicado en la canónica: valida estados (no invierte fusiones viejas), inactiva+enlaza el duplicado PRIMERO (evita tareas espurias del propio dedup), completa datos sin pisar, reapunta el login, reasigna lo del interín paginando (incl. `recipient` de Communication y solicitudes de turno) y cierra la Task + cancela las espejo. **Requiere membership admin.** | `executeBot` (vista Duplicados). |
 | `bw-whatsapp-entrante` | Webhook de Twilio: un WhatsApp del paciente entra a su hilo activo de Mensajes (match por teléfono con variantes AR; número desconocido → aviso `Task code=aviso-recepcion` tipo `whatsapp-desconocido`, con teléfono y texto en `input`: aparece en la vista **Avisos**, desde donde se le responde por WhatsApp o se le crea la ficha). Los adjuntos (fotos, PDFs, audios) se descargan de Twilio y quedan como Binary en el hilo. Valida la firma X-Twilio-Signature. Idempotente por MessageSid. | nginx `/webhooks/twilio-whatsapp` (ver abajo). |
 | `bw-recordatorios` | **Cron horario:** recordatorios de turno (24h/1h) y de saldo en riesgo, por WhatsApp **y** email. | `cronTimer` del Bot (cada hora). |
+
+## Lista de espera: qué pasa cuando se libera un lugar
+
+Una espera es un `Appointment` con `status: waitlist` (ver
+[`modelo-datos-fhir.md`](modelo-datos-fhir.md)). Los dos bots que **liberan**
+lugar —`bw-estado-turno` al cancelar y `bw-vencer-tentativas` al vencer la seña
+(R-19)— llaman al mismo helper (`avisarListaDeEspera`, `src/bots/_shared.ts`):
+
+1. Arma el hueco (inicio, fin, **terapia**) del turno que se liberó.
+2. Busca las esperas vivas y se queda con las que ese horario les sirve: misma
+   terapia, dentro de su ventana, y respetando los días/franjas que pidieron.
+   Excluye al que acaba de cancelar — ofrecerle el turno que largó es el aviso
+   que hace desconfiar del sistema.
+3. Ordena por **llegada** (el que pidió primero, primero) y toma los 3 primeros.
+4. Lee el teléfono de esos 3 (vive en la ficha, no en la espera: una copia
+   envejece) y crea **un** aviso `Task code=aviso-recepcion` tipo
+   `hueco-liberado`, con los candidatos y el texto del ofrecimiento ya escrito
+   en `input`. Idempotente por turno (`clave: hueco-{appointmentId}`).
+
+**No le escribe al paciente por su cuenta, a propósito.** El lugar no queda
+tomado: sin reserva provisoria, dos personas pueden decir que sí al mismo turno,
+y elegir a quién ofrecerle un lugar es una decisión comercial. El bot deja todo
+listo y Recepción manda el WhatsApp de un clic desde la vista **Avisos**.
+
+Todo el paso es *best-effort*: liberar el turno nunca puede fallar por la lista
+de espera. Si algo sale mal, no hay aviso — y la lista sigue visible en Agenda.
 
 ## Deploy
 

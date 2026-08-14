@@ -6,6 +6,7 @@ import { Timeline } from '../components/Timeline';
 import { ProximosTurnos } from '../components/ProximosTurnos';
 import { ReservaModal, type PresetReserva } from '../components/ReservaModal';
 import { TurnoModal } from '../components/TurnoModal';
+import { EsperandoLugar } from '../components/EsperandoLugar';
 import { colorEstado, labelEstado } from '../lib/estados';
 
 const REFRESCO_MS = 60_000;
@@ -98,6 +99,10 @@ export function AgendaDelDia(): JSX.Element {
       ) : (
         <ProximosTurnos dias={Number(rango)} />
       )}
+
+      {/* Debajo de la grilla: cuando se libera una franja, acá está a quién
+          ofrecérsela sin salir de la agenda. */}
+      <EsperandoLugar />
 
       <ReservaModal preset={preset} onClose={() => setPreset(null)} onReservado={() => void refrescar()} />
       <TurnoModal turno={turnoSel} onClose={() => setTurnoSel(null)} onCambiado={() => void refrescar()} />
