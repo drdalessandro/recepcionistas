@@ -2,8 +2,9 @@
  * Catálogo de servicios — Manual de Protocolos v9 (documento final).
  * Todos los precios en USD. Fuente de verdad de precios: el Manual.
  *
- * v9 final: IHHT vuelve a ser una única sesión (45 min / USD 90); las variantes
- * Express/Premium del changelog intermedio quedaron descartadas.
+ * v9 final: IHHT vuelve a ser una única sesión (30 min / USD 90); las variantes
+ * Express/Premium del changelog intermedio quedaron descartadas. La duración
+ * pasó de 45 a 30 el 2026-08-15 (Andrés): ver la nota del servicio.
  *
  * Catálogo COMERCIAL (handoff v2, 2026-07-21): la góndola del portal se ordena
  * por valor y prestigio, no alfabético (`orden`, de a 10 para intercalar), los
@@ -117,7 +118,13 @@ export const SERVICIOS: Servicio[] = [
     codigo: 'IHHT',
     nombre: 'Entrenamiento Hipóxico-Hiperóxico Intermitente (IHHT)',
     categoria: 'IHHT',
-    duracionMin: 45,
+    // 30 y no 45 (Andrés, 2026-08-15). Hasta acá el catálogo decía 45 para la
+    // sesión suelta y 30 dentro de los combos, y las dos cosas eran ciertas a la
+    // vez en la misma app: `/servicios` mostraba "45 minutos" y `/combos` armaba
+    // los bloques con 30. Además 30 es **el único valor que hace verdaderas las
+    // seis duraciones de combo publicadas** (60/60/60/90/120/150): con 45, Bio
+    // Energy daría 75 y Bio Longevity 165. El precio no cambia: sigue USD 90.
+    duracionMin: 30,
     precioUSD: 90,
     requierePrescripcion: false,
     reglaPricing: 'POR_SESION',
@@ -126,8 +133,8 @@ export const SERVICIOS: Servicio[] = [
     orden: 30,
     descripcion:
       'Como entrenar tus células en la altura de los Andes sin salir de San Isidro: ciclos de hipoxia e ' +
-      'hiperoxia que fortalecen tus mitocondrias en 45 minutos.',
-    nota: 'Sesión individual 45 min. En combos dura 30 min pero lista a precio de sesión (USD 90).',
+      'hiperoxia que fortalecen tus mitocondrias en 30 minutos.',
+    nota: 'Sesión de 30 min, suelta o dentro de un combo. USD 90 en los dos casos.',
   },
 
   // ---------------------- 03 · RED LIGHT ----------------------

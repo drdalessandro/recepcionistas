@@ -92,8 +92,23 @@ export function buildComboPlanDefinition(codigo: string): PlanDefinition {
   const combo = COMBOS.find((c) => c.codigo === codigo)!;
   const action: PlanDefinitionAction[] = combo.componentes.map((c) => ({
     title: c.servicioCodigo,
+    // `code` con el CodeSystem de servicio: es el contrato de códigos que ya
+    // comparten portal, recepción y bots, y no depende de que el recurso
+    // apuntado tenga `url`. El canonical va ADEMÁS —acá sí resuelve, porque el
+    // seed emite `url` en cada ActivityDefinition— y no reemplaza al code.
+    code: [{ coding: [{ system: SYSTEM.servicioCodigo, code: c.servicioCodigo }] }],
     definitionCanonical: canonical('ActivityDefinition', c.servicioCodigo),
-    extension: [{ url: EXT.ordenProtocolo, valueInteger: c.orden }],
+    extension: [
+      { url: EXT.ordenProtocolo, valueInteger: c.orden },
+      // Cuántas personas ocupa ESTE paso. En los combos de pareja los dos IHHT
+      // son un paso con `ocupantes: 2`, no dos pasos en paralelo: es la misma
+      // información —se cobran dos, se hacen a la vez en dos equipos— pero
+      // dicha como la lee el resto del sistema (R-07 valida capacidad por
+      // `ocupantes`, y `bw-disponibilidad` reserva por bloque, que ya va
+      // explícito en `duracion-min`). Sin esta extensión, el recurso seedeado
+      // no distingue un combo de pareja de uno individual salvo por el precio.
+      { url: EXT.ocupantes, valueInteger: c.ocupantes },
+    ],
   }));
   return {
     resourceType: 'PlanDefinition',
@@ -131,15 +146,32 @@ export function buildMembresiaPlanDefinition(codigo: string): PlanDefinition {
     status: 'active',
     type: { text: 'membership' },
     identifier: [{ system: SYSTEM.membresiaCodigo, value: codigo }],
+    // La bajada en voz de paciente vive en el DATO. Estaba hardcodeada en el
+    // portal (`TIER_INTRO` de PlanesPage), donde además había quedado peor que
+    // la de la página: la de Prime se olvidaba de la cámara hiperbárica.
+    description: m.descripcion,
     extension: [
       { url: EXT.tier, valueCode: m.tier },
       { url: EXT.sesionesMes, valueInteger: m.sesionesMes },
       { url: EXT.precioUsd, valueDecimal: m.precioMesUSD },
+      // El ancla que vende el plan: lo que costarían esas sesiones sueltas.
+      { url: EXT.precioUsdLista, valueDecimal: m.precioListaMesUSD },
       { url: EXT.descuentoCombo, valueDecimal: m.descuentoContinuidad },
+      // Para que el front pueda decir "por mes, LOS DOS" y no se lea como
+      // precio por persona: hoy muestra "USD 1.920 / mes" sin aclararlo.
+      ...(m.variante === 'PAREJA' ? [{ url: EXT.esPareja, valueBoolean: true }] : []),
+      // El descuento del socio sobre lo que compre suelto. Sin esto el portal
+      // le muestra USD 165 la Monoplaza a un socio Prime que paga 148,50.
+      { url: EXT.descuentoALaCarte, valueDecimal: m.descuentoALaCarte },
     ],
     action: [
       {
         title: m.comboBaseCodigo,
+        // Doble enganche al combo: `code` con el CodeSystem —que es el contrato
+        // que ya comparten portal, recepción y bots— y el canonical, que acá sí
+        // resuelve porque el seed emite `url` en cada PlanDefinition. Con el
+        // code, `/planes` puede explicar qué es Bio Energy sin copy nuevo.
+        code: [{ coding: [{ system: SYSTEM.comboCodigo, code: m.comboBaseCodigo }] }],
         definitionCanonical: canonical('PlanDefinition', m.comboBaseCodigo),
       },
     ],
@@ -171,6 +203,9 @@ export function buildPaquetePlanDefinition(codigo: string): PlanDefinition {
     action: [
       {
         title: p.servicioBaseCodigo,
+        // Igual que en los combos: el `code` es lo que engancha el paquete con
+        // el catálogo para cualquier front, sin depender del canonical.
+        code: [{ coding: [{ system: SYSTEM.servicioCodigo, code: p.servicioBaseCodigo }] }],
         definitionCanonical: canonical('ActivityDefinition', p.servicioBaseCodigo),
       },
     ],

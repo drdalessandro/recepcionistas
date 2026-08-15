@@ -16,7 +16,7 @@ Naming: **kebab-case**.
 | **Encounter** | Visita ejecutada (check-in/out) | `recursos-usados`, `duracion-real` *(slices posteriores)* |
 | **CarePlan** | Protocolo de tratamiento | `ciclo-semanas`, `perfil-clinico` |
 | **ActivityDefinition** | Catálogo de servicios | `precio-usd`, `regla-pricing-recurso`, `split-bw`, `requiere-prescripcion` |
-| **PlanDefinition** | Combos / membresías / paquetes | `secuencia-ordenada`, `descuento-combo`, `tier`, `sesiones-mes`, `precio-usd` |
+| **PlanDefinition** | Combos / membresías / paquetes | `secuencia-ordenada`, `descuento-combo`, `tier`, `sesiones-mes`, `precio-usd`, `precio-usd-lista`, `duracion-min`, `sesiones`, `vigencia-dias`, `descuento-fm`, `descuento-a-la-carte`, `es-pareja` |
 | **Coverage / Contract** | Membresía activa (por paciente) | `tier`, `version`, `sesiones-mes`, `sesiones-usadas`, `precio-bloqueado-fm` |
 | **Invoice / ChargeItem** | Cobros y splits | `monto-split-bw`, `monto-split-profesional`, `tc-aplicado` |
 | **Communication** | WhatsApp y emails | `canal`, `template-usado` |
