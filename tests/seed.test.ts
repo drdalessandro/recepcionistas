@@ -16,7 +16,7 @@ describe('Seed — composición', () => {
     expect(seed.activityDefinitions.length).toBe(36); // 32 + 3 consultas médicas + Chequeo BW (v9: IHHT única)
     expect(seed.combos.length).toBe(9);
     expect(seed.membresias.length).toBe(10);
-    expect(seed.paquetes.length).toBe(18);
+    expect(seed.paquetes.length).toBe(24); // 8 servicios base × 3 tramos (Multiplaza y Recovery Pro sumados 2026-08-15)
     expect(seed.locations.length).toBe(14); // 13 + Puesto IV 2 (handoff v9)
     // 14 salas + las 3 agendas médicas publicadas (Conrado, D'Alessandro, Dos Santos).
     expect(seed.schedules.length).toBe(17);

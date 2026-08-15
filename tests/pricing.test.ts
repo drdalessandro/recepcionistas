@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { getServicio, nombreServicioRecepcion, SERVICIOS } from '../src/config/catalogo.js';
 import { COMBOS, getCombo } from '../src/config/combos.js';
 import { getMembresia } from '../src/config/membresias.js';
-import { getPaquete } from '../src/config/paquetes.js';
+import { PAQUETES, getPaquete } from '../src/config/paquetes.js';
 import {
   precioSueltoUSD,
   cascadaTB,
@@ -99,11 +99,31 @@ describe('Catálogo — Membresías v9', () => {
 });
 
 describe('Catálogo — Paquetes', () => {
-  it('HBOT mono x5 = 784; FM = 627 (AC-06: FM sí aplica a paquetes)', () => {
+  // AC-06 del Anexo A decía 784, que es el número REDONDEADO del Manual v9. El
+  // PO decidió (2026-08-15) no redondear: el exacto es 783,75. El precio FM no
+  // se mueve —783,75 × 0,80 = 627, lo mismo que daba redondeando— y ese es
+  // justamente el punto: sin redondeo la derivación es exacta y alcanza con
+  // guardar un solo número por producto.
+  it('HBOT mono x5 = 783,75 (AC-06 sin redondeo); FM = 627, que no cambió', () => {
     const p = getPaquete('PAQ_HBOT_MONO_X5');
     expect(p.nombre).toBe('HBOT MONO — Starter');
-    expect(p.totalUSD).toBe(784);
+    expect(p.totalListaUSD).toBe(825);
+    expect(p.totalUSD).toBe(783.75);
     expect(p.totalFMUSD).toBe(627);
+  });
+
+  it('el precio FM se DERIVA exacto del total en los 24 paquetes (por eso no se guarda dos veces)', () => {
+    for (const p of PAQUETES) {
+      expect(p.totalFMUSD).toBe(Number((p.totalUSD * 0.8).toFixed(4)));
+      expect(p.precioSesionUSD * p.tamano).toBeCloseTo(p.totalUSD, 4);
+      expect(p.totalUSD).toBeLessThan(p.totalListaUSD);
+    }
+  });
+
+  it('los dos paquetes que faltaban: Multiplaza (por persona) y Recovery Pro (por gabinete)', () => {
+    expect(PAQUETES.length).toBe(24);
+    expect(getPaquete('PAQ_HBOT_MULTIPLAZA_X5').totalUSD).toBe(380); // 80 × 5 × 0,95
+    expect(getPaquete('PAQ_RECOVERY_PRO_X5').totalUSD).toBe(950); // 200 × 5 × 0,95
   });
 
   it('IHHT (base v9 USD 90): Core = 810; Pro FM = 1224', () => {
