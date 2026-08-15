@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { getServicio, nombreServicioRecepcion, SERVICIOS } from '../src/config/catalogo.js';
 import { COMBOS, getCombo } from '../src/config/combos.js';
-import { getMembresia } from '../src/config/membresias.js';
+import { MEMBRESIAS, getMembresia } from '../src/config/membresias.js';
 import { PAQUETES, getPaquete } from '../src/config/paquetes.js';
 import {
   precioSueltoUSD,
@@ -45,10 +45,32 @@ describe('Pricing — Recovery Pro indivisible', () => {
 });
 
 describe('Pricing — IHHT v9', () => {
-  it('Sesión única 45 min = USD 90', () => {
+  // 30 y no 45 (Andrés, 2026-08-15): antes la suelta duraba 45 y en combo 30, y
+  // las dos cosas se mostraban en la misma app. El precio no cambió.
+  it('Sesión única 30 min = USD 90 (mismo precio suelta que en combo)', () => {
     const ihht = getServicio('IHHT');
     expect(precioSueltoUSD(ihht)).toBe(90);
-    expect(ihht.duracionMin).toBe(45);
+    expect(ihht.duracionMin).toBe(30);
+    expect(ihht.descripcion).not.toMatch(/45/);
+  });
+
+  it('30 min es el ÚNICO valor que hace verdaderas las 6 duraciones publicadas', () => {
+    // Con 45, Bio Energy daría 75' y Bio Longevity 165'.
+    const publicadas: Record<string, number> = {
+      BIO_ENERGY: 60,
+      BIO_COMPRESS: 60,
+      BIO_CRYO: 60,
+      BIO_OXYGEN: 90,
+      BIO_RECOVERY: 120,
+      BIO_LONGEVITY: 150,
+    };
+    for (const [codigo, minutos] of Object.entries(publicadas)) {
+      expect(getCombo(codigo).duracionTotalMin, codigo).toBe(minutos);
+    }
+    // Y el componente IHHT del combo dura lo mismo que la sesión suelta: ya no
+    // hay dos duraciones para el mismo servicio.
+    const ihhtEnCombo = getCombo('BIO_ENERGY').componentes.find((c) => c.servicioCodigo === 'IHHT');
+    expect(ihhtEnCombo?.duracionMin).toBe(getServicio('IHHT').duracionMin);
   });
 });
 
@@ -70,6 +92,30 @@ describe('Catálogo — Combos v9', () => {
     }
   });
 
+  // El precio de lista tiene que RECONSTRUIRSE comprando las partes sueltas con
+  // los `ocupantes` de cada paso. Es lo que prueba que los combos de pareja
+  // están bien modelados: la Biplaza y el Recovery Pro se cobran UNA vez (son
+  // por gabinete, van los dos) y el IHHT DOS (es por persona, son dos equipos).
+  // Un `ocupantes` mal puesto rompe acá y no en ningún otro lado.
+  it('la lista se reconstruye comprando las partes con sus ocupantes (los 9)', () => {
+    for (const c of COMBOS) {
+      const suelto = c.componentes.reduce(
+        (a, x) => a + precioSueltoUSD(getServicio(x.servicioCodigo), { ocupantes: x.ocupantes }),
+        0,
+      );
+      expect(suelto, c.codigo).toBe(c.precioListaUSD);
+    }
+  });
+
+  it('en pareja: el gabinete se cobra una vez y el IHHT dos', () => {
+    const ox = getCombo('BIO_OXYGEN_PAREJA');
+    // 200 (Biplaza, la cabina para los dos) + 90 × 2 (un IHHT por cabeza) = 380
+    expect(ox.precioListaUSD).toBe(200 + 90 * 2);
+    const rec = getCombo('BIO_RECOVERY_PAREJA');
+    // Recovery Pro es indivisible: 200 por el gabinete, vayan 1 o 2.
+    expect(rec.precioListaUSD).toBe(200 + 200);
+  });
+
   it('Los combos no reciben descuento FM (no aplica a combos)', () => {
     // Un combo se cobra a su precio fijo (sin la rama FM de sueltas).
     const r = calcularCobro([{ tipo: 'combo', codigo: 'BIO_LONGEVITY' }], { tc: 1450 });
@@ -84,17 +130,73 @@ describe('Catálogo — Combos v9', () => {
 });
 
 describe('Catálogo — Membresías v9', () => {
-  it('Precios v9 conocidos (tabla Sección 4 del Manual)', () => {
-    expect(getMembresia('FOCUS_STD_IND').precioMesUSD).toBe(718);
+  // Los precios ya NO se escriben a mano: se derivan de `combo × sesiones ×
+  // (1 − continuidad)`. Cuatro estaban redondeados hacia arriba y no cerraban
+  // con la cuenta — FOCUS_STD_IND decía 718 cuando da 716,80.
+  it('Precios v9 (tabla Sección 4 del Manual), exactos', () => {
+    expect(getMembresia('FOCUS_STD_IND').precioMesUSD).toBe(716.8); // decía 718
     expect(getMembresia('FOCUS_INT_IND').precioMesUSD).toBe(1008);
-    expect(getMembresia('PRIME_INT_IND').precioMesUSD).toBe(2453); // PRIME sin cambios
+    expect(getMembresia('PRIME_STD_IND').precioMesUSD).toBe(1752);
+    expect(getMembresia('PRIME_INT_IND').precioMesUSD).toBe(2452.8); // decía 2453
+    expect(getMembresia('PRIME_STD_PAR').precioMesUSD).toBe(1920);
+    expect(getMembresia('PRIME_INT_PAR').precioMesUSD).toBe(2688);
     expect(getMembresia('HEALTHSPAN_STD_IND').precioMesUSD).toBe(2184);
-    expect(getMembresia('HEALTHSPAN_INT_PAR').precioMesUSD).toBe(3898);
+    expect(getMembresia('HEALTHSPAN_INT_IND').precioMesUSD).toBe(3057.6); // decía 3058
+    expect(getMembresia('HEALTHSPAN_STD_PAR').precioMesUSD).toBe(2784);
+    expect(getMembresia('HEALTHSPAN_INT_PAR').precioMesUSD).toBe(3897.6); // decía 3898
+  });
+
+  it('el precio SALE del combo base: si cambia el combo, cambian las 10 solas', () => {
+    for (const m of MEMBRESIAS) {
+      const combo = getCombo(m.comboBaseCodigo);
+      expect(m.precioMesUSD, m.codigo).toBe(
+        Number((combo.precioUSD * m.sesionesMes * (1 - m.descuentoContinuidad)).toFixed(4)),
+      );
+      expect(m.precioListaMesUSD, m.codigo).toBe(combo.precioListaUSD * m.sesionesMes);
+    }
+  });
+
+  // El "44,02%" que aparecía en la página era puro redondeo. Con los valores
+  // exactos la grilla cierra clavada, y ése es el mejor chequeo de que los diez
+  // precios están bien: un error de centavos rompe el 36/40/44.
+  it('el ahorro contra sesiones sueltas da 36 / 40 / 44 % EXACTO en las 10', () => {
+    // Focus está un escalón abajo en LAS DOS intensidades, de forma regular:
+    // 36/40 contra 40/44 de Prime y Healthspan.
+    const esperado = (m: (typeof MEMBRESIAS)[number]): number =>
+      m.tier === 'FOCUS' ? (m.intensidad === 'STANDARD' ? 36 : 40) : m.intensidad === 'STANDARD' ? 40 : 44;
+    for (const m of MEMBRESIAS) {
+      const ahorro = (1 - m.precioMesUSD / m.precioListaMesUSD) * 100;
+      expect(Number(ahorro.toFixed(6)), m.codigo).toBe(esperado(m));
+    }
+  });
+
+  // El 36% de Focus Standard NO es un error: con el 25% costaría 672, o sea 84
+  // por sesión — idéntico al Intensivo — y se cae el escalón entre intensidades.
+  it('Focus Standard está un escalón abajo a propósito: con 25% empataría al Intensivo', () => {
+    const std = getMembresia('FOCUS_STD_IND');
+    const int = getMembresia('FOCUS_INT_IND');
+    expect(std.precioMesUSD / std.sesionesMes).toBeGreaterThan(int.precioMesUSD / int.sesionesMes);
+    const siFuera25 = getCombo('BIO_ENERGY').precioUSD * std.sesionesMes * 0.75;
+    expect(siFuera25 / std.sesionesMes).toBe(int.precioMesUSD / int.sesionesMes);
+  });
+
+  it('el socio tiene descuento sobre lo que compra suelto: 10 Standard / 15 Intensivo', () => {
+    for (const m of MEMBRESIAS) {
+      expect(m.descuentoALaCarte, m.codigo).toBe(m.intensidad === 'STANDARD' ? 10 : 15);
+    }
+  });
+
+  it('la bajada vive en el dato, y la de Prime no se olvida de la cámara', () => {
+    for (const m of MEMBRESIAS) {
+      expect(m.descripcion.length, m.codigo).toBeGreaterThan(20);
+    }
+    expect(getMembresia('PRIME_STD_IND').descripcion).toMatch(/cámara/i);
+    expect(getMembresia('HEALTHSPAN_STD_IND').descripcion).toMatch(/cámara/i);
   });
 
   it('AC-06: la membresía no recibe el 20% FM', () => {
     const r = calcularCobro([{ tipo: 'membresia', codigo: 'FOCUS_STD_IND', fm: true }], { tc: 1450 });
-    expect(r.totalUSD).toBe(718);
+    expect(r.totalUSD).toBe(716.8);
   });
 });
 

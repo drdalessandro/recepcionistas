@@ -126,8 +126,18 @@ export interface Membresia {
   frecuenciaSemanal: number;
   /** Precio mensual en USD. */
   precioMesUSD: number;
-  /** Descuento por continuidad aplicado vs. lista (fracción). */
+  /** Lo que costarían esas mismas sesiones sueltas (USD/mes). Es el ancla que vende el plan. */
+  precioListaMesUSD: number;
+  /** Descuento por continuidad aplicado vs. el combo (fracción). */
   descuentoContinuidad: number;
+  /**
+   * Descuento del socio sobre las sesiones sueltas que compre **fuera** del
+   * plan, en porcentaje (10 Standard / 15 Intensivo). Sin esto el portal le
+   * muestra el precio de lista a un socio que en realidad paga menos.
+   */
+  descuentoALaCarte: number;
+  /** Bajada comercial, en voz de paciente. Vive en el dato, no en el front. */
+  descripcion: string;
 }
 
 export interface Paquete {

@@ -62,6 +62,13 @@ export const EXT = {
   duracionMin: `${BASE}/StructureDefinition/duracion-min`,
   /** Combo/plan de pareja: una sesión es una visita de los DOS. */
   esPareja: `${BASE}/StructureDefinition/es-pareja`,
+  /**
+   * Membresía: descuento del socio sobre las sesiones que compre **fuera** del
+   * plan, en porcentaje (10 Standard / 15 Intensivo). Vive en el dato porque
+   * sin él cada front tiene que reimplementar la regla — y hoy `/servicios` le
+   * muestra el precio de lista a un socio que en realidad paga menos.
+   */
+  descuentoALaCarte: `${BASE}/StructureDefinition/descuento-a-la-carte`,
   reglaPricingRecurso: `${BASE}/StructureDefinition/regla-pricing-recurso`,
   splitBw: `${BASE}/StructureDefinition/split-bw`,
   requierePrescripcion: `${BASE}/StructureDefinition/requiere-prescripcion`,

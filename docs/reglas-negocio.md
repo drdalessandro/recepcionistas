@@ -24,7 +24,7 @@ implementada y su caso de aceptación (AC) cuando aplica. Fuente de precios: Man
 | **R-04..R-06** | Cálculo del monto según tipo de cliente y reglas de recurso (HBOT por ocupación, Recovery Pro indivisible, etc.). | `precioSueltoUSD`, `calcularCobro` | AC-06 |
 | **R-08** | Splits: HBOT/IHHT/Recovery/Red Light/Compresión/Cryo = 100% BW; IV+TB = 85% BW / 15% médicos (cascada con costo fiscal 25% − insumo − USD 15 enfermería, piso 25% margen); Masajes/Osteopatía = 50/50. | `calcularSplit`, `cascadaTB` | AC-08 |
 | **R-15** | Combos: 20% off lista. | `src/config/combos.ts` | — |
-| **R-16** | Paquetes 5/10/20 → 5/10/15% off; vigencias 15/30/60 días; FM +20% adicional. | `src/config/paquetes.ts` | — |
+| **R-16** | Paquetes 5/10/20 → 5/10/15% off; vigencias 15/30/60 días; FM +20% adicional. **Sin redondeo desde 2026-08-15** (decisión del PO): el total sale exacto y de ahí se derivan el precio por sesión y el FM, así que hay **un solo número por producto** y no dos que se despeguen. Cambió 4 totales del tramo x5 (≤ 0,50 USD) y ningún precio FM. Son **24** paquetes: se sumaron Multiplaza y Recovery Pro, los únicos servicios que no tenían. | `src/config/paquetes.ts` | AC-06 |
 | **R-17** | Precios de lista en USD; cobro en ARS al TC vigente (default 1.450, configurable por admin). | `usdAArs`, `resolverTC` | AC-13 |
 
 ## Membresías / Founding Members
@@ -34,6 +34,7 @@ implementada y su caso de aceptación (AC) cuando aplica. Fuente de precios: Man
 | **R-09** | Founding Members — programa FM-100 en dos cohortes (Andrés, 2026-08-09): números 1–50 el 1 a 1 personal, 51–100 la Web (founding.html). 20% off lifetime en sueltas y paquetes (no combos/membresías/TB), precio bloqueado en USD, ventana 7 días. El cupo AVISA (alerta desde el 40, aviso de cohorte al 51, programa completo al 101) y nunca bloquea. La marca se pone en la ficha (extensión `tag-fm` + identifier `SYSTEM.fm` con el número). | `src/config/reglas.ts` (`FM`), `src/lib/fm.ts`, `src/fhir/founding.ts`, `precioSueltoUSD` (flag `fm`) |
 | **R-11** | Cobro adelantado de membresías días 1-5 (MercadoPago); si falla, alerta + bloqueo de reservas. | `src/config/reglas.ts` (`MEMBRESIA`); bot de cobro recurrente (próximo) |
 | **R-12** | Compromiso mínimo 3 meses; renovación automática; baja avisando 15 días antes; 1 pausa de 30 días/año. | `src/config/reglas.ts` (`MEMBRESIA`) |
+| **R-21** | **El precio de la membresía se DERIVA del combo base**: `combo × sesiones/mes × (1 − descuento por continuidad)`. Antes estaba escrito a mano y cuatro habían quedado redondeados hacia arriba —`FOCUS_STD_IND` decía 718 cuando da **716,80**, 1,20 de más por mes sin explicación—. Derivado, el día que cambie un combo se mueven las diez solas. El socio además tiene **descuento a la carta** sobre lo que compre suelto (10 % Standard / 15 % Intensivo), que vive en el dato (`descuento-a-la-carte`) y no en cada front. Invariante que lo cuida: el ahorro contra sesiones sueltas da **36 / 40 / 44 % exacto** en las diez. | `src/config/membresias.ts`; `buildMembresiaPlanDefinition` | — |
 
 ## Reglas fuera del alcance del Bloque 0 (referencia)
 
