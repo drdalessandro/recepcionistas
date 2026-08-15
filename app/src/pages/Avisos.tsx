@@ -311,7 +311,16 @@ export function Avisos({ onAtender }: { onAtender: (pacienteId: string) => void 
                     minRows={2}
                     placeholder="Escribí la respuesta que le llega por WhatsApp…"
                     value={borradores[id] ?? ''}
-                    onChange={(e) => setBorradores((prev) => ({ ...prev, [id]: e.currentTarget.value }))}
+                    onChange={(e) => {
+                      // El valor se lee ACÁ, no adentro del updater: React
+                      // ejecuta el updater después (en la fase de render) y
+                      // para entonces ya puso `currentTarget` en null. Leerlo
+                      // ahí tiraba "Cannot read properties of null" durante el
+                      // render, y un error en render se lleva puesta TODA la
+                      // app (pantalla en blanco), no solo esta tarjeta.
+                      const texto = e.currentTarget.value;
+                      setBorradores((prev) => ({ ...prev, [id]: texto }));
+                    }}
                   />
                   <Group justify="space-between">
                     <Text size="xs" c="dimmed">
