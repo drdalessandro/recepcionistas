@@ -143,6 +143,8 @@ export interface Paquete {
   descuento: number;
   /** Precio por sesión (USD) ya con descuento. */
   precioSesionUSD: number;
+  /** Lo que costarían las mismas sesiones sueltas (USD). Es el ancla del descuento. */
+  totalListaUSD: number;
   /** Total del paquete (USD). */
   totalUSD: number;
   /** Total para Founding Member (20% adicional, USD). */

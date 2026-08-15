@@ -41,6 +41,27 @@ export const EXT = {
   precioArs: `${BASE}/StructureDefinition/precio-ars`,
   /** Posición del servicio en la góndola del portal (menor = más arriba). */
   orden: `${BASE}/StructureDefinition/orden`,
+  /**
+   * Precio de lista: lo que costaría comprando las sesiones sueltas. Es el
+   * ancla del descuento en combos y paquetes ("sueltas te costarían X"). El
+   * PORCENTAJE no se guarda a propósito: se deriva de `precio-usd` contra
+   * este, así que no puede haber dos números que se contradigan.
+   */
+  precioUsdLista: `${BASE}/StructureDefinition/precio-usd-lista`,
+  /** Paquete: cantidad de sesiones que incluye. */
+  sesiones: `${BASE}/StructureDefinition/sesiones`,
+  /** Paquete: días de vigencia desde la primera sesión. */
+  vigenciaDias: `${BASE}/StructureDefinition/vigencia-dias`,
+  /**
+   * Descuento Founding Member, en porcentaje. Su AUSENCIA es la regla: está en
+   * los paquetes y NO en combos ni membresías, así que ningún front tiene que
+   * acordarse de la excepción — si no está la extensión, no hay descuento.
+   */
+  descuentoFm: `${BASE}/StructureDefinition/descuento-fm`,
+  /** Minutos que la agenda tiene que reservar para el combo (no es la suma de las partes). */
+  duracionMin: `${BASE}/StructureDefinition/duracion-min`,
+  /** Combo/plan de pareja: una sesión es una visita de los DOS. */
+  esPareja: `${BASE}/StructureDefinition/es-pareja`,
   reglaPricingRecurso: `${BASE}/StructureDefinition/regla-pricing-recurso`,
   splitBw: `${BASE}/StructureDefinition/split-bw`,
   requierePrescripcion: `${BASE}/StructureDefinition/requiere-prescripcion`,

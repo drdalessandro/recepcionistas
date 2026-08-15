@@ -4,8 +4,17 @@
  * Descuento por volumen: x5 = 5% · x10 = 10% · x20 = 15%.
  * Vigencias: 15 / 30 / 60 días. Founding Member: 20% adicional sobre el paquete.
  *
- * Los totales generados coinciden EXACTOS con las tablas del Manual (redondeo
- * Math.round sobre precioSesión × sesiones, y sobre total × 0.8 para FM).
+ * **No se redondea** (decisión del PO, 2026-08-15). Los USD se cobran en pesos
+ * al cambio del día, así que el número redondo no aporta nada y el exacto sí:
+ * con el total exacto, el precio Founding Member se DERIVA (`total × 0,80`) sin
+ * error, y alcanza con guardar un número por producto en vez de dos que se
+ * pueden desfasar.
+ *
+ * Cambia 4 de los 24 totales, y sólo en el tramo x5: 784 → 783,75 · 428 → 427,5
+ * · 238 → 237,5 · 428 → 427,5. **Ningún precio FM se mueve** (783,75 × 0,80 =
+ * 627, que es lo mismo que daba redondeando). El Manual v9 trae los redondeados
+ * y por convención del repo le gana al código; ésta es una decisión posterior y
+ * explícita, no una diferencia que haya que "arreglar" contra el Manual.
  */
 import type { Paquete } from '../domain/types.js';
 
@@ -25,6 +34,11 @@ const BASES: BasePaquete[] = [
   { servicioBaseCodigo: 'RED_LIGHT', etiqueta: 'RED_LIGHT', nombreBase: 'RED LIGHT', precioBaseUSD: 50 },
   { servicioBaseCodigo: 'COMPRESION', etiqueta: 'BOTAS_COMP', nombreBase: 'BOTAS COMP', precioBaseUSD: 60 },
   { servicioBaseCodigo: 'CRIO', etiqueta: 'BOTAS_CRYO', nombreBase: 'BOTAS CRYO', precioBaseUSD: 90 },
+  // Los dos que faltaban (Andrés, 2026-08-15): eran los únicos servicios sin
+  // paquete, sin una razón. El Multiplaza es POR PERSONA (80); el Recovery Pro
+  // es por gabinete e indivisible (200), o sea que su paquete también.
+  { servicioBaseCodigo: 'HBOT_MULTIPLAZA', etiqueta: 'HBOT_MULTIPLAZA', nombreBase: 'HBOT MULTIPLAZA', precioBaseUSD: 80 },
+  { servicioBaseCodigo: 'RECOVERY_PRO', etiqueta: 'RECOVERY_PRO', nombreBase: 'RECOVERY PRO', precioBaseUSD: 200 },
 ];
 
 const TRAMOS: Array<{ tamano: number; nombre: string; descuento: number; vigenciaDias: number }> = [
@@ -35,15 +49,20 @@ const TRAMOS: Array<{ tamano: number; nombre: string; descuento: number; vigenci
 
 const FM_DESC = 0.2;
 
-function round2(n: number): number {
-  return Math.round(n * 100) / 100;
+/**
+ * Cuatro decimales alcanzan para cualquier precio y matan el ruido de coma
+ * flotante (`783.75 * 0.8` no da 627 exacto en binario).
+ */
+function exacto(n: number): number {
+  return Number(n.toFixed(4));
 }
 
 export const PAQUETES: Paquete[] = BASES.flatMap((base) =>
   TRAMOS.map((t): Paquete => {
-    const precioSesionUSD = round2(base.precioBaseUSD * (1 - t.descuento));
-    const totalUSD = Math.round(precioSesionUSD * t.tamano);
-    const totalFMUSD = Math.round(totalUSD * (1 - FM_DESC));
+    // Se deriva TODO del total, en este orden, para que los tres números sean
+    // consistentes entre sí por construcción y no por coincidencia.
+    const totalListaUSD = exacto(base.precioBaseUSD * t.tamano);
+    const totalUSD = exacto(totalListaUSD * (1 - t.descuento));
     return {
       codigo: `PAQ_${base.etiqueta}_X${t.tamano}`,
       nombre: `${base.nombreBase} — ${t.nombre}`,
@@ -51,9 +70,10 @@ export const PAQUETES: Paquete[] = BASES.flatMap((base) =>
       tamano: t.tamano,
       vigenciaDias: t.vigenciaDias,
       descuento: t.descuento,
-      precioSesionUSD,
+      precioSesionUSD: exacto(totalUSD / t.tamano),
+      totalListaUSD,
       totalUSD,
-      totalFMUSD,
+      totalFMUSD: exacto(totalUSD * (1 - FM_DESC)),
     };
   }),
 );

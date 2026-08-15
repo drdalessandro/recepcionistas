@@ -26,6 +26,7 @@ import { CATEGORIA_COMERCIAL, SERVICIOS } from '../config/catalogo.js';
 import { COMBOS } from '../config/combos.js';
 import { MEMBRESIAS } from '../config/membresias.js';
 import { PAQUETES } from '../config/paquetes.js';
+import { FM } from '../config/reglas.js';
 import { CONTRAINDICACIONES } from '../config/contraindicaciones.js';
 import { CUESTIONARIO_INGRESO } from '../config/cuestionario-ingreso.js';
 import {
@@ -104,7 +105,16 @@ export function buildComboPlanDefinition(codigo: string): PlanDefinition {
     identifier: [{ system: SYSTEM.comboCodigo, value: codigo }],
     extension: [
       { url: EXT.precioUsd, valueDecimal: combo.precioUSD },
+      // El ancla del descuento: lo que costarían las sesiones sueltas. Sin esto
+      // el portal no puede mostrar "sueltas te costarían X" y el combo parece
+      // sólo un precio más. El PORCENTAJE no se guarda: se deriva de los dos.
+      { url: EXT.precioUsdLista, valueDecimal: combo.precioListaUSD },
       { url: EXT.descuentoCombo, valueDecimal: combo.descuento },
+      // Minutos que la agenda tiene que reservar. NO es la suma de las partes:
+      // en las versiones de pareja los dos IHHT corren en paralelo y el
+      // Recovery Pro es UNA sesión para los dos.
+      { url: EXT.duracionMin, valueInteger: combo.duracionTotalMin },
+      ...(combo.variante === 'PAREJA' ? [{ url: EXT.esPareja, valueBoolean: true }] : []),
       { url: EXT.secuenciaOrdenada, valueBoolean: true },
     ],
     action,
@@ -144,9 +154,20 @@ export function buildPaquetePlanDefinition(codigo: string): PlanDefinition {
     name: codigo,
     title: `Paquete ${p.nombre}`,
     status: 'active',
-    type: { text: 'package' },
+    // 'paquete' y no 'package': es la etiqueta con la que se los cuenta y se
+    // los filtra en los dos fronts, y el resto del contrato está en español.
+    type: { text: 'paquete' },
     identifier: [{ system: SYSTEM.paqueteCodigo, value: codigo }],
-    extension: [{ url: EXT.precioUsd, valueDecimal: p.totalUSD }],
+    extension: [
+      { url: EXT.precioUsd, valueDecimal: p.totalUSD },
+      { url: EXT.precioUsdLista, valueDecimal: p.totalListaUSD },
+      { url: EXT.sesiones, valueInteger: p.tamano },
+      { url: EXT.vigenciaDias, valueInteger: p.vigenciaDias },
+      // Los paquetes SÍ llevan el 20% Founding Member; combos y membresías no.
+      // La ausencia de la extensión ES la regla: ningún front tiene que
+      // acordarse de la excepción.
+      { url: EXT.descuentoFm, valueDecimal: FM.descuento * 100 },
+    ],
     action: [
       {
         title: p.servicioBaseCodigo,
