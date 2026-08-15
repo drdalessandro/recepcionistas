@@ -27,9 +27,18 @@ const fmtVence = new Intl.DateTimeFormat('es-AR', {
   timeZone: 'America/Argentina/Buenos_Aires',
 });
 
+/**
+ * Estados que puede marcar Recepción. "En curso" (`checked-in`) se sacó el
+ * 2026-08-15: era un clic de más sin consecuencia — el Encounter de la visita
+ * ya lo abre "Llegó", y nada financiero ni de reportes depende de ese estado.
+ *
+ * El código `checked-in` NO se borra del resto de la app (labels y colores en
+ * `lib/estados.ts`, leyenda de la agenda): los turnos históricos que quedaron
+ * en ese estado tienen que seguir mostrándose bien, y desde ahí se puede pasar
+ * a "Completó" igual.
+ */
 const ACCIONES: Array<{ estado: EstadoTurno; label: string; color: string }> = [
   { estado: 'arrived', label: 'Llegó', color: 'orange' },
-  { estado: 'checked-in', label: 'En curso', color: 'bio' },
   { estado: 'fulfilled', label: 'Completó', color: 'gray' },
   { estado: 'cancelled', label: 'Cancelar', color: 'red' },
 ];
