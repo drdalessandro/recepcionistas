@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { Fragment, useEffect, useState } from 'react';
 import {
   Alert,
   Button,
@@ -117,6 +117,7 @@ export function KioscoIngreso({
                 <Text size="sm" c="dimmed" mb="sm">
                   {texto.subtitulo}
                 </Text>
+                <DatosDelCliente paciente={paciente} nombreFirma={nombreFirma} dni={dni} />
                 {texto.secciones.map((s) => (
                   <div key={s.heading}>
                     <Text fw={600} mt="sm">
@@ -268,4 +269,85 @@ async function cargarTexto(): Promise<SeccionesConsentimiento | null> {
 function dniDeFicha(paciente: Patient): string {
   const ident = paciente.identifier?.find((i) => /dni|documento/i.test(i.system ?? i.type?.text ?? ''));
   return ident?.value ?? '';
+}
+
+/** Mail de la ficha. Misma búsqueda que hace el bot al armar el documento. */
+function emailDeFicha(paciente: Patient): string | undefined {
+  return paciente.telecom?.find((t) => t.system === 'email')?.value;
+}
+
+/**
+ * `birthDate` (YYYY-MM-DD) en formato argentino.
+ *
+ * A mano y no con `new Date()`: FHIR manda una fecha sin hora, que JS
+ * interpreta como medianoche UTC y en Buenos Aires (-03:00) retrocede un día.
+ * Un consentimiento con la fecha de nacimiento corrida es un documento mal
+ * emitido. Las fechas parciales que FHIR permite ('1988', '1988-04') se
+ * muestran tal cual.
+ */
+function fechaNacimientoLegible(birthDate: string | undefined): string | undefined {
+  if (!birthDate) {
+    return undefined;
+  }
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(birthDate);
+  return m ? `${m[3]}/${m[2]}/${m[1]}` : birthDate;
+}
+
+/**
+ * Sección 1 del documento: los datos de quien firma.
+ *
+ * No vive en `consentimiento-texto.ts` —que arranca en la 2— porque no es texto
+ * legal fijo: se completa con los datos del cliente. El documento firmado
+ * (`armarDocumentoConsentimiento`) siempre la tuvo; lo que faltaba era mostrarla,
+ * y el paciente leía en la tablet un consentimiento que empezaba en el punto 2.
+ *
+ * Es de SOLO LECTURA y espeja en vivo los campos de «Tu firma»: no se tipea nada
+ * dos veces, y lo que el paciente escribe abajo lo ve en su lugar dentro del
+ * documento, antes de firmarlo.
+ *
+ * Un dato que falte en la ficha no bloquea la firma (la validación sigue siendo
+ * nombre + DNI), pero queda a la vista para completarlo: hoy ese hueco recién
+ * aparecía en el documento ya emitido, como un '—'.
+ */
+function DatosDelCliente({
+  paciente,
+  nombreFirma,
+  dni,
+}: {
+  paciente: Patient;
+  nombreFirma: string;
+  dni: string;
+}): JSX.Element {
+  const datos: Array<{ etiqueta: string; valor: string | undefined; falta: string }> = [
+    { etiqueta: 'Apellido y nombre completo', valor: nombreFirma.trim(), falta: 'completalo abajo' },
+    {
+      etiqueta: 'Fecha de nacimiento',
+      valor: fechaNacimientoLegible(paciente.birthDate),
+      falta: 'no figura en tu ficha',
+    },
+    { etiqueta: 'DNI / Pasaporte N°', valor: dni.trim(), falta: 'completalo abajo' },
+    { etiqueta: 'Correo electrónico', valor: emailDeFicha(paciente), falta: 'no figura en tu ficha' },
+    // La pone el servidor al firmar: acá todavía no existe.
+    { etiqueta: 'Fecha de aceptación', valor: undefined, falta: 'se completa al firmar' },
+  ];
+
+  return (
+    <div>
+      <Text fw={600} mt="sm">
+        1. Datos del cliente
+      </Text>
+      <div style={{ display: 'grid', gridTemplateColumns: 'max-content 1fr', gap: '2px 16px', marginTop: 4 }}>
+        {datos.map((d) => (
+          <Fragment key={d.etiqueta}>
+            <Text size="sm" c="dimmed">
+              {d.etiqueta}
+            </Text>
+            <Text size="sm" c={d.valor ? undefined : 'dimmed'} fs={d.valor ? undefined : 'italic'}>
+              {d.valor || d.falta}
+            </Text>
+          </Fragment>
+        ))}
+      </div>
+    </div>
+  );
 }
