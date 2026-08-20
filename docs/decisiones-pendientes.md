@@ -95,7 +95,7 @@ Ver [`docs/app-recepcion.md`](app-recepcion.md) y [`docs/bots.md`](bots.md).
 |---|---|---|
 | WhatsApp Business (Twilio) | ✅ **OPERATIVO**. 2026-07-17: Project Secrets cargados, `whatsapp:test` OK. **2026-08-14: las 10 plantillas están `approved` por Meta** (`npm run whatsapp:plantilla`) y se verificó un envío real entregado (`DELIVERED`) que salió **por la plantilla específica**, no por la genérica — o sea que los mensajes iniciados por BW fuera de la ventana de 24 h ya funcionan. Detalle y mapeo en [`whatsapp-plantillas.md`](whatsapp-plantillas.md). | ✅ Resuelto (2026-08-14) |
 | AWS SES | ✅ **OPERATIVO**: remitente `hola@medplum.com.ar` verificado (DKIM), emails llegan a bandeja principal. | Hecho |
-| MercadoPago | Cobro de membresías/sesiones (tokeniza tarjetas; no guardamos datos de tarjeta). | A gestionar |
+| MercadoPago | Cobro de membresías/sesiones (tokeniza tarjetas; no guardamos datos de tarjeta). 2026-08-20: hay credenciales de prueba **y productivas**; el circuito (links, webhook con firma, cron) quedó endurecido para plata real. El pasaje de credenciales es operativo: checklist en [`puesta-en-produccion.md` §7](puesta-en-produccion.md). Decisión de UX pendiente: `back_urls` hoy vuelve a la app de recepción — ¿debería volver al portal del paciente? | Credenciales listas · cutover pendiente (§7) |
 
 ## Infra
 

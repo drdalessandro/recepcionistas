@@ -18,7 +18,15 @@ import { calcularCobro } from '../lib/pricing.js';
 import { cicloMes, debeRenovarMembresia } from '../lib/planes.js';
 import { esPlanBW, estadoDeCoverage, planCodigoDeCoverage } from '../fhir/coverage.js';
 import { EXT, SYSTEM } from '../fhir/identifiers.js';
-import { emitirInvoicePlan, enviarWhatsApp, leerTcVigente, notificarPortal, resolverInvoicePlan } from './_shared.js';
+import {
+  crearAlertaRecepcion,
+  crearPreferenciaMP,
+  emitirInvoicePlan,
+  enviarWhatsApp,
+  leerTcVigente,
+  notificarPortal,
+  resolverInvoicePlan,
+} from './_shared.js';
 
 export interface EntradaCobroMembresias {
   /** Fecha de referencia ISO (default: ahora). Útil para pruebas/reprocesos. */
@@ -141,22 +149,26 @@ export async function handler(
             pacienteRef,
             body: `Biowellness: no pudimos cobrar tu membresía de ${ciclo} (tarjeta rechazada). Regularizá el pago en recepción para seguir reservando.`,
           });
+        } else if (resultado === 'error') {
+          // ERROR DE SISTEMA (token mal cargado, MP caído) ≠ tarjeta rechazada:
+          // acá NO se aplica R-11 ni se le dice "rechazada" al socio — eso, con
+          // un token roto, bloqueaba en masa a todos los que tienen tarjeta
+          // guardada. El Invoice queda pendiente, se le manda el link (si se
+          // puede) y Recepción se entera: el cron NO reintenta este ciclo
+          // (el Invoice ya existe), así que sin alerta se perdía el cobro.
+          await crearAlertaRecepcion(medplum, {
+            titulo: 'Cobro automático de membresía FALLÓ (error de sistema)',
+            detalle: `No se pudo cobrar "${descripcion}" ($${totalARS.toLocaleString('es-AR')}) con la tarjeta guardada: MercadoPago no respondió un resultado de pago (¿token vencido o mal cargado? ¿MP caído?). NO es una tarjeta rechazada: no se bloqueó al socio. El Invoice queda pendiente; cobrarlo por link o en mostrador, y revisar MERCADOPAGO_ACCESS_TOKEN si pasa con varios socios.`,
+            pacienteRef,
+            ...(cobro.invoiceId ? { focusRef: `Invoice/${cobro.invoiceId}` } : {}),
+            clave: `mp-error-cobro-${cobro.clave}`,
+          });
+          await cobrarPorLink(medplum, event.secrets, { clave: cobro.clave, montoARS: totalARS, descripcion, pacienteRef, tier: m.tier, ciclo, invoiceId: cobro.invoiceId });
         }
         // 'pending' u otro estado no terminal: el webhook lo resuelve.
       } else if (mpToken) {
         // Sin tarjeta guardada: link de pago (el webhook confirma al acreditarse).
-        const url = await crearLinkPago(mpToken, event.secrets, {
-          montoARS: totalARS,
-          descripcion,
-          externalReference: cobro.clave,
-        });
-        await enviarWhatsApp(medplum, event.secrets, {
-          template: 'membresia-cobro-link',
-          pacienteRef,
-          body: url
-            ? `Biowellness: se renovó tu Membresía ${m.tier} (${ciclo}). Aboná $${totalARS.toLocaleString('es-AR')} acá: ${url}`
-            : `Biowellness: se renovó tu Membresía ${m.tier} (${ciclo}). Acercate a recepción para abonar $${totalARS.toLocaleString('es-AR')}.`,
-        });
+        await cobrarPorLink(medplum, event.secrets, { clave: cobro.clave, montoARS: totalARS, descripcion, pacienteRef, tier: m.tier, ciclo, invoiceId: cobro.invoiceId });
       } else {
         // Sin MP configurado: queda `issued`; se cobra en recepción (registrar-cobro
         // no aplica acá: la recepción resuelve el Invoice pendiente al cobrar).
@@ -176,20 +188,27 @@ export async function handler(
 /**
  * Cobro con tarjeta guardada de MP: genera un card_token efímero desde la tarjeta
  * tokenizada del customer y crea el pago. Devuelve el estado terminal simplificado.
+ *
+ * 'rejected' significa EXCLUSIVAMENTE que MercadoPago procesó el pago y lo
+ * rechazó (tarjeta sin fondos, vencida…): es lo único que dispara R-11 y el
+ * WhatsApp de "tarjeta rechazada". Un HTTP de error (401 token roto, 5xx MP
+ * caído, red) es 'error': tratarlo como rechazo bloqueaba en masa a todos los
+ * socios con tarjeta guardada por un token mal cargado.
  */
 async function cobrarTarjetaGuardada(
   mpToken: string,
   opts: { montoARS: number; descripcion: string; externalReference: string; customerId: string; cardId: string },
-): Promise<'approved' | 'rejected' | 'pending'> {
+): Promise<'approved' | 'rejected' | 'pending' | 'error'> {
   try {
     const tokenResp = await fetch(`https://api.mercadopago.com/v1/card_tokens`, {
       method: 'POST',
       headers: { Authorization: `Bearer ${mpToken}`, 'Content-Type': 'application/json' },
+      signal: AbortSignal.timeout(15_000),
       body: JSON.stringify({ card_id: opts.cardId }),
     });
     if (!tokenResp.ok) {
       console.error('cobro-membresias: card_tokens falló', tokenResp.status, await tokenResp.text().catch(() => ''));
-      return 'rejected';
+      return 'error';
     }
     const { id: cardToken } = (await tokenResp.json()) as { id: string };
 
@@ -200,6 +219,7 @@ async function cobrarTarjetaGuardada(
         'Content-Type': 'application/json',
         'X-Idempotency-Key': opts.externalReference,
       },
+      signal: AbortSignal.timeout(15_000),
       body: JSON.stringify({
         transaction_amount: opts.montoARS,
         token: cardToken,
@@ -212,7 +232,7 @@ async function cobrarTarjetaGuardada(
     const pago = (await pagoResp.json().catch(() => ({}))) as { status?: string };
     if (!pagoResp.ok) {
       console.error('cobro-membresias: payments falló', pagoResp.status, JSON.stringify(pago).slice(0, 300));
-      return 'rejected';
+      return 'error';
     }
     if (pago.status === 'approved') {
       return 'approved';
@@ -223,41 +243,42 @@ async function cobrarTarjetaGuardada(
     return 'pending';
   } catch (err) {
     console.error('cobro-membresias: error cobrando tarjeta guardada:', err instanceof Error ? err.message : err);
-    return 'pending'; // sin señal clara: no bloquear; el webhook/reintento resuelve
+    return 'error';
   }
 }
 
-/** Preferencia de checkout de MP para pagar la cuota (link). */
-async function crearLinkPago(
-  mpToken: string,
+/**
+ * Cuota por link de pago: preferencia compartida (`crearPreferenciaMP`, la
+ * misma del link de seña — antes había una copia local con OTRO default de
+ * APP_BASE_URL) + WhatsApp. Si el link no se pudo generar, el WhatsApp ofrece
+ * pagar en recepción Y queda una alerta: un fallo del cron era invisible y la
+ * cuota quedaba pendiente sin que nadie lo supiera.
+ */
+async function cobrarPorLink(
+  medplum: MedplumClient,
   secrets: BotEvent['secrets'],
-  opts: { montoARS: number; descripcion: string; externalReference: string },
-): Promise<string | undefined> {
-  try {
-    const appUrl = secrets['APP_BASE_URL']?.valueString ?? 'https://recepcion.biowellness.ar';
-    const notifUrl = secrets['MP_WEBHOOK_URL']?.valueString;
-    const resp = await fetch('https://api.mercadopago.com/checkout/preferences', {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${mpToken}`,
-        'Content-Type': 'application/json',
-        'X-Idempotency-Key': opts.externalReference,
-      },
-      body: JSON.stringify({
-        items: [{ title: opts.descripcion, quantity: 1, unit_price: opts.montoARS, currency_id: 'ARS' }],
-        external_reference: opts.externalReference,
-        back_urls: { success: appUrl, pending: appUrl, failure: appUrl },
-        auto_return: 'approved',
-        ...(notifUrl ? { notification_url: notifUrl } : {}),
-      }),
+  opts: { clave: string; montoARS: number; descripcion: string; pacienteRef?: string; tier: string; ciclo: string; invoiceId?: string },
+): Promise<void> {
+  const pref = await crearPreferenciaMP(secrets, {
+    titulo: opts.descripcion,
+    montoARS: opts.montoARS,
+    referencia: opts.clave,
+    idempotencia: opts.clave,
+  });
+  if (!pref.ok) {
+    await crearAlertaRecepcion(medplum, {
+      titulo: 'No se pudo generar el link de cobro de una membresía',
+      detalle: `"${opts.descripcion}" ($${opts.montoARS.toLocaleString('es-AR')}): ${pref.mensaje ?? 'MercadoPago no respondió.'} El Invoice queda pendiente: cobrar en mostrador o reintentar el link desde Atender.`,
+      pacienteRef: opts.pacienteRef,
+      ...(opts.invoiceId ? { focusRef: `Invoice/${opts.invoiceId}` } : {}),
+      clave: `mp-link-fallo-${opts.clave}`,
     });
-    if (!resp.ok) {
-      console.error('cobro-membresias: preferencia MP falló', resp.status);
-      return undefined;
-    }
-    const pref = (await resp.json()) as { init_point?: string; sandbox_init_point?: string };
-    return pref.init_point ?? pref.sandbox_init_point;
-  } catch {
-    return undefined;
   }
+  await enviarWhatsApp(medplum, secrets, {
+    template: 'membresia-cobro-link',
+    pacienteRef: opts.pacienteRef,
+    body: pref.url
+      ? `Biowellness: se renovó tu Membresía ${opts.tier} (${opts.ciclo}). Aboná $${opts.montoARS.toLocaleString('es-AR')} acá: ${pref.url}`
+      : `Biowellness: se renovó tu Membresía ${opts.tier} (${opts.ciclo}). Acercate a recepción para abonar $${opts.montoARS.toLocaleString('es-AR')}.`,
+  });
 }
