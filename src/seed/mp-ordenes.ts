@@ -31,7 +31,19 @@ async function main(): Promise<void> {
     process.exitCode = 1;
     return;
   }
-  const esTest = token.startsWith('TEST-');
+  // MP moderno: las credenciales de prueba son las de una CUENTA de prueba
+  // (tag test_user), sin prefijo TEST-. Se consulta /users/me para no rotular
+  // una cuenta de prueba como "productiva".
+  let esTest = token.startsWith('TEST-');
+  try {
+    const me = await fetch('https://api.mercadopago.com/users/me', { headers: { Authorization: `Bearer ${token}` } });
+    if (me.ok) {
+      const usuario = (await me.json()) as { nickname?: string; tags?: string[] };
+      esTest = esTest || Boolean(usuario.tags?.includes('test_user')) || Boolean(usuario.nickname?.startsWith('TESTUSER'));
+    }
+  } catch {
+    // sin red hacia /users/me: queda la heurística del prefijo
+  }
   console.log(`=== Últimos pagos de la cuenta (${esTest ? 'credenciales de PRUEBA' : 'credenciales PRODUCTIVAS'}) ===\n`);
 
   const resp = await fetch(

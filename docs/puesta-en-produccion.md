@@ -277,3 +277,62 @@ npm run agenda:check                # ¿existe el Schedule de cada sala? ¿cuán
 
 > `npm run whatsapp:crear-plantillas` **no es diagnóstico**: crea plantillas
 > reales en Twilio y las manda a aprobación de Meta. No usarlo para explorar.
+
+## 7. MercadoPago: pasaje de prueba a producción
+
+Los cobros tienen **dos juegos de credenciales** (Access Token) en
+[developers de MercadoPago](https://www.mercadopago.com.ar/developers): el de
+**prueba** (cuenta/usuario de prueba, dinero ficticio) y el **productivo** (los
+pagos son reales). El sistema no distingue entornos por código: **es el token
+cargado el que decide** si un link cobra de verdad.
+
+> ⚠️ El token vive en DOS lugares y **no se sincronizan solos**:
+> el `.env` local (lo usan `mp:test` / `mp:ordenes`) y los **Project Secrets**
+> de Medplum (lo usan los bots). `mp:test` compara ambos y avisa si difieren.
+
+### Checklist del cutover
+
+1. **Project Secrets** (Admin de Medplum → Project → Secrets):
+   - `MERCADOPAGO_ACCESS_TOKEN` → el token **productivo** de la aplicación.
+   - `MP_WEBHOOK_URL` → `https://api.medplum.com.ar/webhooks/mercadopago`.
+     **Obligatorio**: sin él los bots se niegan a generar links (un pago sin
+     webhook se acreditaría sin confirmar nada).
+   - `APP_BASE_URL` → adónde vuelve el pagador al terminar el checkout
+     (`back_urls`). Hoy: la app de recepción.
+   - Los secrets se leen en cada ejecución: **no hace falta redeployar bots**.
+2. **Panel de MP** (Tus integraciones → tu app → Webhooks → **modo
+   productivo**): evento **Pagos**, URL `https://api.medplum.com.ar/webhooks/mercadopago`.
+   Copiar la **clave secreta** del panel y cargarla como Project Secret
+   `MERCADOPAGO_WEBHOOK_SECRET` (el bot valida la firma `x-signature`).
+   > Usar **Webhooks**, no IPN: las notificaciones IPN viajan solo en la query
+   > string y el `$execute` de Medplum no se la pasa al bot.
+3. **`.env` local**: mismo token productivo (para que `mp:test` pruebe lo mismo
+   que usan los bots) y `MERCADOPAGO_WEBHOOK_SECRET` si se quiere a mano.
+4. **Prueba de humo**: `npm run mp:test`. Verifica endpoint del webhook, valida
+   el token (y dice si es de prueba o productivo), y **compara el `.env` con los
+   Project Secrets**. Con token productivo, el paso del link de ARS 100 frena
+   solo: correr `npm run mp:test -- --cobro-real` a conciencia, pagar el link
+   y **devolver el pago desde el panel** (Actividad → devolver dinero) — la
+   devolución además prueba la alerta de "pago devuelto" del webhook.
+5. **Prueba de negocio** (opcional pero recomendada): un turno tentativo real
+   de un servicio barato, pagar la seña por el link, verificar que el turno pasa
+   a confirmado y llega el WhatsApp; devolver el pago y cancelar el turno.
+6. `npm run mp:ordenes` lista los últimos pagos (dice si la cuenta es de prueba
+   o productiva): sirve para conciliar contra el panel de MP.
+
+### Después del cutover
+
+- **Cron `bw-cobro-membresias`**: con token productivo, los días 1-5 cobra
+  **plata real** a los socios con tarjeta guardada y manda links reales al
+  resto. Antes de habilitar su `cronString`, confirmar que el catálogo de
+  membresías y los `Coverage` activos del servidor son los reales.
+- **Rotación del token** (si se compromete o vence): generar uno nuevo en el
+  panel de MP y actualizarlo en Project Secrets **y** en el `.env`. Nada más:
+  las preferencias ya emitidas siguen funcionando (viven del lado de MP).
+- **Si se recrea el bot `bw-webhook-mercadopago`** cambia su id, y el bloque
+  nginx (`BOT_ID_WEBHOOK_MP` en `deploy/nginx-api-proxy.conf`) apunta al viejo:
+  actualizarlo y `sudo nginx -t && sudo systemctl reload nginx`.
+- Los reintentos de MP son la red de seguridad ante caídas: si el webhook
+  responde error (token faltante, MP caído), MP reintenta con backoff hasta
+  ~24 h. Más de eso (un pago acreditado que nunca entró) se ve en
+  `npm run mp:ordenes` y se registra a mano.

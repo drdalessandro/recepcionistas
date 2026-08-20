@@ -781,6 +781,13 @@ export async function crearPreferenciaMP(
     idempotencia: string;
     appointmentId?: string;
     expira?: Date;
+    /**
+     * Solo medios de aprobación inmediata (binary_mode de MP): el pago se
+     * aprueba o rechaza en el acto, sin quedar "pending". Para la seña es
+     * obligatorio: un ticket de Rapipago acredita en días y la tentativa vence
+     * en horas — el pago llegaría cuando el lugar ya se liberó.
+     */
+    soloAprobacionInmediata?: boolean;
   },
 ): Promise<PreferenciaMP> {
   const token = secrets['MERCADOPAGO_ACCESS_TOKEN']?.valueString;
@@ -789,6 +796,16 @@ export async function crearPreferenciaMP(
   }
   const appUrl = secrets['APP_BASE_URL']?.valueString ?? 'https://recepcion.medplum.com.ar';
   const notifUrl = secrets['MP_WEBHOOK_URL']?.valueString;
+  // Sin webhook NO se genera link: el pago real se acreditaría sin que el
+  // sistema se entere (la tentativa vencería con la seña ya cobrada). Antes
+  // esto degradaba en silencio; con plata real, mejor frenar con instrucción.
+  if (!notifUrl) {
+    return {
+      ok: false,
+      mensaje:
+        'Falta el Project Secret MP_WEBHOOK_URL (la URL pública del webhook): sin él, el pago se acreditaría sin confirmar nada. Cargarlo en Medplum (ver docs/puesta-en-produccion.md § MercadoPago) o cobrar en mostrador.',
+    };
+  }
 
   const resp = await fetch('https://api.mercadopago.com/checkout/preferences', {
     method: 'POST',
@@ -797,13 +814,17 @@ export async function crearPreferenciaMP(
       'Content-Type': 'application/json',
       'X-Idempotency-Key': opts.idempotencia,
     },
+    signal: AbortSignal.timeout(15_000),
     body: JSON.stringify({
       items: [{ title: opts.titulo, quantity: 1, unit_price: opts.montoARS, currency_id: 'ARS' }],
       external_reference: opts.referencia,
       ...(opts.appointmentId ? { metadata: { appointmentId: opts.appointmentId } } : {}),
+      // Lo que ve el cliente en el resumen de su tarjeta.
+      statement_descriptor: 'BIOWELLNESS',
+      ...(opts.soloAprobacionInmediata ? { binary_mode: true } : {}),
       back_urls: { success: appUrl, pending: appUrl, failure: appUrl },
       auto_return: 'approved',
-      ...(notifUrl ? { notification_url: notifUrl } : {}),
+      notification_url: notifUrl,
       ...(opts.expira ? { expires: true, expiration_date_to: isoArgentina(opts.expira) } : {}),
     }),
   });
@@ -847,9 +868,53 @@ export async function linkSena(
     referencia: appt.id,
     idempotencia: `sena-${appt.id}`,
     appointmentId: appt.id,
+    // La seña vence en horas: nada de medios que acrediten en días.
+    soloAprobacionInmediata: true,
     ...(venceIso ? { expira: new Date(venceIso) } : {}),
   });
   return { senaARS, url: pref.url, mensaje: pref.mensaje };
+}
+
+/**
+ * Una notificación de MP llegó por una seña YA registrada: ¿retry benigno o
+ * pago doble? Espejo de `autocurarInvoiceSaldado` §1, para señas:
+ *  - mismo `mp-{paymentId}` ya registrado → mudo;
+ *  - el Invoice era de MP pero sin id registrado (versión vieja) → solo
+ *    registra la huella;
+ *  - cualquier otro caso → el cliente pagó dos veces (o pagó por MP una seña
+ *    ya cobrada en mostrador): alerta idempotente para devolver.
+ */
+async function registrarPagoSenaMP(medplum: MedplumClient, invoice: Invoice, mpPaymentId: string | undefined): Promise<void> {
+  if (!mpPaymentId) {
+    return;
+  }
+  const idNuevo = `mp-${mpPaymentId}`;
+  const registrados = (invoice.identifier ?? [])
+    .map((i) => i.value)
+    .filter((v): v is string => Boolean(v?.startsWith('mp-')));
+  if (registrados.includes(idNuevo)) {
+    return;
+  }
+  const medio = invoice.extension?.find((x) => x.url === EXT.medioPago)?.valueString;
+  const descripcion = invoice.lineItem?.[0]?.chargeItemCodeableConcept?.text ?? invoice.lineItem?.[0]?.chargeItemReference?.display ?? 'la seña';
+  if (registrados.length === 0 && medio === 'mercadopago') {
+    await medplum
+      .updateResource<Invoice>({
+        ...invoice,
+        identifier: [...(invoice.identifier ?? []), { system: SYSTEM.invoice, value: idNuevo }],
+      })
+      .catch(() => undefined);
+    return;
+  }
+  await crearAlertaRecepcion(medplum, {
+    titulo: 'Pago DUPLICADO: devolver desde MercadoPago',
+    detalle: `MercadoPago acreditó el pago ${mpPaymentId} de "${descripcion}" ($${(invoice.totalGross?.value ?? 0).toLocaleString('es-AR')}), pero esa seña YA estaba cobrada${
+      medio ? ` (${medio})` : ''
+    }. El cliente pagó dos veces: devolver este pago desde el panel de MercadoPago.`,
+    pacienteRef: invoice.subject?.reference,
+    focusRef: `Invoice/${invoice.id}`,
+    clave: `pago-duplicado-sena-${mpPaymentId}`,
+  });
 }
 
 export interface ResultadoConfirmacion {
@@ -901,6 +966,10 @@ export async function confirmarReserva(
     (await medplum.searchOne('Invoice', `identifier=${SYSTEM.invoice}|${claveSena}`)) ??
     (opts.mpPaymentId ? await medplum.searchOne('Invoice', `identifier=${SYSTEM.invoice}|${invoiceKey}`) : undefined);
   if (existente) {
+    // Espejo de autocurarInvoiceSaldado §1: un mp-{paymentId} NUEVO sobre una
+    // seña ya cobrada = pago doble real → alerta para devolver (los retries
+    // del mismo pago son mudos).
+    await registrarPagoSenaMP(medplum, existente, opts.mpPaymentId);
     const saldoExistente = await medplum.searchOne('Invoice', `identifier=${SYSTEM.invoice}|${claveSaldo}`);
     return {
       totalARS,
@@ -954,12 +1023,65 @@ export async function confirmarReserva(
 
   const pacienteRef = appt.participant?.find((p) => p.actor?.reference?.startsWith('Patient/'))?.actor?.reference;
 
-  // Contrato: cada ítem cobrado deja su ChargeItem (acá, la seña del 50%).
+  // CANDADO: el Invoice de la seña se crea PRIMERO y con create condicional
+  // (If-None-Exist por la clave del turno) — es el mismo rol que cumple el
+  // JSONPatch `test` en resolverInvoicePlan. De dos invocaciones concurrentes
+  // (MP reenvía notificaciones; webhook + mostrador a la vez) el servidor deja
+  // pasar UNA sola; la otra recibe el Invoice del ganador y no duplica ni
+  // ChargeItems ni WhatsApp. El ganador se reconoce porque el Invoice volvió
+  // con SU timestamp (`date`, precisión de ms).
   const fecha = new Date().toISOString();
   const descripcionSena = `Seña 50% · ${appt.description ?? itemCodigo}`;
-  let chargeItems: ChargeItem[] = [];
+  const invoice = await medplum.createResourceIfNoneExist<Invoice>(
+    {
+      resourceType: 'Invoice',
+      status: 'balanced',
+      date: fecha,
+      identifier: [
+        // Clave del turno SIEMPRE (permite rastrear la seña desde el Appointment,
+        // también cuando entró por MP) + la clave del pago MP si corresponde.
+        { system: SYSTEM.invoice, value: claveSena },
+        ...(opts.mpPaymentId ? [{ system: SYSTEM.invoice, value: invoiceKey }] : []),
+      ],
+      ...(pacienteRef ? { subject: { reference: pacienteRef } } : {}),
+      lineItem: [
+        {
+          chargeItemCodeableConcept: { text: descripcionSena },
+          priceComponent: [{ type: 'base' as const, amount: { value: senaARS, currency: 'ARS' } }],
+        },
+      ],
+      totalNet: { value: senaARS, currency: 'ARS' },
+      totalGross: { value: senaARS, currency: 'ARS' },
+      extension: [
+        { url: EXT.esSena, valueBoolean: true },
+        { url: EXT.tcAplicado, valueDecimal: tc },
+        ...(opts.medioPago ? [extMedioPago(opts.medioPago)] : []),
+      ],
+    },
+    `identifier=${SYSTEM.invoice}|${claveSena}`,
+  );
+  if (invoice.date !== fecha) {
+    // Perdimos la carrera: otra invocación registró la seña entre la búsqueda
+    // de arriba y este create. Ella termina el registro; acá solo el pago doble.
+    await registrarPagoSenaMP(medplum, invoice, opts.mpPaymentId);
+    const saldoExistente = await medplum.searchOne('Invoice', `identifier=${SYSTEM.invoice}|${claveSaldo}`);
+    return {
+      totalARS,
+      senaARS,
+      saldoARS,
+      invoiceId: invoice.id,
+      saldoInvoiceId: saldoExistente?.id,
+      confirmados,
+      yaConfirmado: true,
+    };
+  }
+
+  // Contrato: cada ítem cobrado deja su ChargeItem (acá, la seña del 50%).
+  // Se crea DESPUÉS de ganar el candado, así una invocación perdedora no lo
+  // duplica; si el bot muere justo acá, queda el lineItem con texto (como los
+  // Invoices viejos) y los montos siguen correctos.
   if (pacienteRef) {
-    chargeItems = await crearChargeItems(medplum, {
+    const chargeItems: ChargeItem[] = await crearChargeItems(medplum, {
       pacienteRef,
       tc,
       fecha,
@@ -972,38 +1094,16 @@ export async function confirmarReserva(
         },
       ],
     });
-  }
-
-  const invoice = await medplum.createResource<Invoice>({
-    resourceType: 'Invoice',
-    status: 'balanced',
-    date: fecha,
-    identifier: [
-      // Clave del turno SIEMPRE (permite rastrear la seña desde el Appointment,
-      // también cuando entró por MP) + la clave del pago MP si corresponde.
-      { system: SYSTEM.invoice, value: claveSena },
-      ...(opts.mpPaymentId ? [{ system: SYSTEM.invoice, value: invoiceKey }] : []),
-    ],
-    ...(pacienteRef ? { subject: { reference: pacienteRef } } : {}),
-    lineItem: chargeItems.length
-      ? chargeItems.map((ci) => ({
+    if (chargeItems.length) {
+      await medplum.updateResource<Invoice>({
+        ...invoice,
+        lineItem: chargeItems.map((ci) => ({
           chargeItemReference: { reference: `ChargeItem/${ci.id}`, display: descripcionSena },
           priceComponent: [{ type: 'base' as const, amount: { value: senaARS, currency: 'ARS' } }],
-        }))
-      : [
-          {
-            chargeItemCodeableConcept: { text: descripcionSena },
-            priceComponent: [{ type: 'base' as const, amount: { value: senaARS, currency: 'ARS' } }],
-          },
-        ],
-    totalNet: { value: senaARS, currency: 'ARS' },
-    totalGross: { value: senaARS, currency: 'ARS' },
-    extension: [
-      { url: EXT.esSena, valueBoolean: true },
-      { url: EXT.tcAplicado, valueDecimal: tc },
-      ...(opts.medioPago ? [extMedioPago(opts.medioPago)] : []),
-    ],
-  });
+        })),
+      });
+    }
+  }
 
   // El 50% restante queda como Invoice PENDIENTE (`issued`): aparece en "Pagos
   // pendientes" de Atender y en el modal del turno, y Administración ve seña y
@@ -1011,12 +1111,11 @@ export async function confirmarReserva(
   // recién al cobrarse (resolverInvoicePlan), igual que las cuotas de planes.
   let saldoInvoiceId: string | undefined;
   if (saldoARS > 0) {
-    const saldoExistente = await medplum.searchOne('Invoice', `identifier=${SYSTEM.invoice}|${claveSaldo}`);
-    if (saldoExistente) {
-      saldoInvoiceId = saldoExistente.id;
-    } else {
-      const descripcionSaldo = `Saldo 50% · ${appt.description ?? itemCodigo}`;
-      const saldoInvoice = await medplum.createResource<Invoice>({
+    const descripcionSaldo = `Saldo 50% · ${appt.description ?? itemCodigo}`;
+    // Create condicional también acá: si un Invoice de saldo quedó de una
+    // corrida anterior (o de una carrera), el servidor devuelve ese.
+    const saldoInvoice = await medplum.createResourceIfNoneExist<Invoice>(
+      {
         resourceType: 'Invoice',
         status: 'issued',
         date: fecha,
@@ -1036,9 +1135,10 @@ export async function confirmarReserva(
           { url: EXT.itemTipo, valueCode: itemTipo },
           { url: EXT.itemCodigo, valueString: itemCodigo },
         ],
-      });
-      saldoInvoiceId = saldoInvoice.id;
-    }
+      },
+      `identifier=${SYSTEM.invoice}|${claveSaldo}`,
+    );
+    saldoInvoiceId = saldoInvoice.id;
   }
 
   const saldoTexto =

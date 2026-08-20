@@ -167,22 +167,31 @@ turno se confirma solo (pending → booked) + WhatsApp.
 
 1. Crear el bot `bw-webhook-mercadopago` (UI) y `npm run deploy:bots`.
 2. Cargar el secret `MERCADOPAGO_ACCESS_TOKEN` (el mismo del link).
-3. En MercadoPago (Tus integraciones → tu app → **Webhooks**, evento **Pagos**),
-   configurar la **URL** del `$execute` del bot:
-   `https://api.medplum.com.ar/fhir/R4/Bot/<id-de-bw-webhook-mercadopago>/$execute`
-   - Como MP no envía headers de auth, se usa una **ClientApplication dedicada** y
-     se embeben las credenciales en la URL:
-     `https://<clientId>:<clientSecret>@api.medplum.com.ar/fhir/R4/Bot/<id>/$execute`
-   - (Esta parte la validamos juntos: confirmamos que MP acepte la URL con
-     credenciales. El bot, además, **verifica el pago contra la API de MP**, así
-     que no confía en el payload.)
-4. (Opcional) Setear el secret `MP_WEBHOOK_URL` con esa URL: el link de pago la
-   manda como `notification_url` por preferencia. Si no, alcanza con la config
-   global del paso 3.
+3. La URL pública NO lleva credenciales (MP rechaza URLs con `usuario:secreto@`):
+   la autenticación la inyecta **nginx** — ver el bloque `/webhooks/mercadopago`
+   de `deploy/nginx-api-proxy.conf`, que reenvía al `$execute` del bot con el
+   Authorization Basic de una ClientApplication dedicada. En MercadoPago
+   (Tus integraciones → tu app → **Webhooks**, **modo productivo**, evento
+   **Pagos**) se configura la URL limpia:
+   `https://api.medplum.com.ar/webhooks/mercadopago`
+4. Setear el Project Secret `MP_WEBHOOK_URL` con esa misma URL. Es
+   **obligatorio**: sin él no se generan links de pago (un pago que se acredite
+   sin webhook confirmaría nada y la tentativa vencería igual).
+5. (Recomendado) Copiar la **clave secreta** que muestra el panel de Webhooks y
+   cargarla como Project Secret `MERCADOPAGO_WEBHOOK_SECRET`: el bot pasa a
+   validar la firma `x-signature` de cada notificación. Sin ese secret el bot
+   no valida firma, pero igual **verifica cada pago contra la API de MP**, así
+   que nadie puede fabricar un pago aprobado.
 
 El bot toma el id del pago, hace `GET /v1/payments/{id}` con el token, y si está
 `approved` confirma el turno por su `external_reference` (= appointmentId). Es
-idempotente (los reintentos de MP no duplican la seña).
+idempotente (los reintentos de MP no duplican la seña) y **la semántica de
+reintentos está pensada para plata real**: ante fallas transitorias (falta el
+token, MP caído) el bot responde error para que MP reintente (hasta ~24 h);
+ante condiciones permanentes (pago de otro entorno, referencia desconocida,
+devolución) responde 200 y, si hace falta ojos humanos, deja una alerta en
+Avisos. El paso a paso completo del pasaje prueba→producción:
+[`puesta-en-produccion.md` §7](puesta-en-produccion.md).
 
 ## Membresías y paquetes (planes)
 
