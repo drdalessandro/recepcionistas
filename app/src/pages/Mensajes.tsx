@@ -19,14 +19,14 @@ import {
   Title,
 } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
-import { IconMessages, IconPaperclip, IconPlus, IconRefresh, IconSend } from '@tabler/icons-react';
+import { IconMessages, IconPaperclip, IconPlus, IconRefresh, IconSend, IconSparkles } from '@tabler/icons-react';
 import { ResourceInput, useMedplum, useMedplumProfile, useSubscription } from '@medplum/react';
 import { createReference, getDisplayString, getReferenceString } from '@medplum/core';
 import type { Attachment, Communication, Patient } from '@medplum/fhirtypes';
 import { EXT } from '@bw/fhir/identifiers';
 import { textoRestante, ventana24h } from '@bw/lib/auto-respuesta';
 import { VENTANA_AVISO_MINUTOS } from '@bw/config/auto-respuesta';
-import { espejarWhatsApp } from '../lib/bots';
+import { borradorRespuesta, espejarWhatsApp, mensajeError } from '../lib/bots';
 
 /**
  * Bandeja de conversaciones con los pacientes del portal (recurso Communication).
@@ -88,6 +88,11 @@ export function Mensajes(): JSX.Element {
   const [archivos, setArchivos] = useState<File[]>([]);
   const [enviando, setEnviando] = useState(false);
   const [nuevoAbierto, setNuevoAbierto] = useState(false);
+  // El borrador tal como lo sugirió el asistente. Se guarda para compararlo con
+  // lo que finalmente se manda: así sabemos qué porcentaje sale sin editar, que
+  // es el dato que habilita (o no) automatizar más adelante.
+  const [borradorSugerido, setBorradorSugerido] = useState<string>();
+  const [sugiriendo, setSugiriendo] = useState(false);
   const viewportRef = useRef<HTMLDivElement>(null);
 
   const hilo = hilos?.find((h) => h.id === hiloId);
@@ -220,6 +225,10 @@ export function Mensajes(): JSX.Element {
 
   useEffect(() => {
     setMensajes(undefined);
+    // Al cambiar de conversación no puede quedar el borrador de la anterior
+    // tipeado en el campo (se mandaría al paciente equivocado).
+    setRespuesta('');
+    setBorradorSugerido(undefined);
     if (hiloId) {
       cargarMensajes(hiloId);
     }
@@ -270,6 +279,35 @@ export function Mensajes(): JSX.Element {
     }
   };
 
+  /**
+   * Pide el borrador y lo deja en el campo de respuesta. NO envía: la
+   * recepcionista lo lee, lo corrige si hace falta y decide.
+   */
+  const sugerir = async (): Promise<void> => {
+    if (!hilo?.id) {
+      return;
+    }
+    setSugiriendo(true);
+    try {
+      const r = await borradorRespuesta(hilo.id);
+      if (r.borrador) {
+        setRespuesta(r.borrador);
+        setBorradorSugerido(r.borrador);
+      } else {
+        setBorradorSugerido(undefined);
+        notifications.show({
+          color: 'blue',
+          title: 'Mejor contestalo vos',
+          message: r.motivo ?? 'El asistente no sugirió una respuesta para este mensaje.',
+        });
+      }
+    } catch (err) {
+      notifications.show({ color: 'orange', title: 'No pude sugerir', message: mensajeError(err) });
+    } finally {
+      setSugiriendo(false);
+    }
+  };
+
   const responder = async (): Promise<void> => {
     if (!hilo || !profile || (!respuesta.trim() && archivos.length === 0)) {
       return;
@@ -298,10 +336,24 @@ export function Mensajes(): JSX.Element {
         ...(hilo.subject ? { recipient: [hilo.subject] as Communication['recipient'] } : {}),
         partOf: [{ reference: `Communication/${hilo.id}` }],
         payload: [...(texto ? [{ contentString: texto }] : []), ...adjuntos.map((a) => ({ contentAttachment: a }))],
+        // Si venía de un borrador, queda registrado si se mandó tal cual o
+        // corregido. Sin esta marca, "¿podemos automatizar esto?" se discutiría
+        // por intuición en vez de con datos.
+        ...(borradorSugerido
+          ? {
+              extension: [
+                {
+                  url: EXT.borradorUsado,
+                  valueCode: texto === borradorSugerido.trim() ? 'sin-editar' : 'editado',
+                },
+              ],
+            }
+          : {}),
       });
       setMensajes((prev) => [...(prev ?? []), msg]);
       setRespuesta('');
       setArchivos([]);
+      setBorradorSugerido(undefined);
       // Espejo a WhatsApp (texto + adjuntos): el paciente se entera aunque no
       // entre al portal. El resultado NO se traga (antes era fire-and-forget):
       // si salió, la burbuja queda marcada "por WhatsApp"; si no, se avisa —
@@ -581,6 +633,15 @@ export function Mensajes(): JSX.Element {
                       }
                     }}
                   />
+                  <Button
+                    variant="light"
+                    leftSection={<IconSparkles size={16} />}
+                    loading={sugiriendo}
+                    onClick={sugerir}
+                    title="Escribe un borrador con el contexto del paciente. Lo revisás y lo enviás vos."
+                  >
+                    Sugerir
+                  </Button>
                   <Button
                     leftSection={<IconSend size={16} />}
                     loading={enviando}

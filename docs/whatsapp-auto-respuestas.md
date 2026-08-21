@@ -93,13 +93,60 @@ Todo en `src/config/auto-respuesta.ts`, sin tocar lógica:
 Los **textos** están en `armarAutoRespuesta()`. El **horario** NO se toca acá:
 sale de `src/config/horario.ts`, que es la única fuente de verdad.
 
+## Nivel 3 — el borrador para la recepcionista
+
+> Implementado 2026-08-21. Bot `bw-borrador-respuesta` + botón **Sugerir** en
+> Mensajes.
+
+En la bandeja, el botón **Sugerir** escribe en el campo de respuesta el borrador
+de la próxima contestación. La recepcionista lo lee, lo corrige si hace falta y
+lo envía. **Nada sale sin que una persona toque Enviar** — el bot es de solo
+lectura: no escribe en FHIR ni manda ningún mensaje.
+
+### Qué ve el asistente
+
+Lo mismo que Recepción ya tiene en pantalla, reunido: nombre, próximo turno,
+plan y sesiones restantes, saldo pendiente, bloqueo R-11, y la conversación
+(los últimos 12 mensajes, marcando cuáles fueron automáticos).
+
+**No ve nada clínico**: ni screening, ni contraindicaciones, ni documentos. Del
+consentimiento viaja solo la señal binaria — lo mismo que muestra el banner de
+Atender (CLAUDE.md, principio 3).
+
+### Los límites, en el prompt y verificados por tests
+
+Los mismos dos del Nivel 2, y por el mismo motivo: **nada clínico** y **ningún
+precio inventado**. Que haya una persona revisando no los relaja — un borrador
+plausible pero incorrecto se lee rápido y se manda.
+
+Cuando el mensaje necesita a una persona sí o sí (consulta clínica, reclamo,
+tema delicado, o no se entiende qué piden), el asistente responde
+`SIN_BORRADOR: <motivo>` y la bandeja avisa **«Mejor contestalo vos»** en vez de
+sugerir cualquier cosa. Ese comportamiento está en `systemBorrador()` y los
+tests verifican que las prohibiciones sigan en el prompt.
+
+También se corta un borrador desmedido (900 caracteres): en WhatsApp, un texto
+larguísimo se manda sin leer.
+
+### La métrica que decide el paso siguiente
+
+Cada mensaje enviado desde un borrador queda marcado con `EXT.borradorUsado`:
+`sin-editar` o `editado`. Con eso, dentro de unos meses se puede responder con
+datos —no con intuición— qué intenciones podrían llegar a contestarse solas.
+
+**Mientras ese número no exista, no se automatiza nada más.**
+
+### Configuración
+
+Un solo secret en Medplum: `ANTHROPIC_API_KEY`. Sin él, el botón avisa que está
+desactivado y Recepción escribe a mano, como siempre. Modelo: `claude-opus-5`
+con `effort: low` — un borrador corto de atención al cliente no necesita más.
+
 ## Lo que sigue (no implementado)
 
-- **Nivel 3 — borrador para la recepcionista.** Un agente lee el hilo y el
-  contexto del paciente y **deja escrito un borrador**; la recepcionista lo
-  corrige y envía. Nunca sale nada sin que un humano toque Enviar. Es el paso
-  que cambia de verdad el trabajo del mostrador, y la métrica que lo habilita es
-  el porcentaje de borradores enviados sin editar.
 - **Quinta intención: cancelaciones** (política R-14, 24 h).
 - **Respuestas rápidas de un click** en la bandeja, con los datos del paciente
-  ya rellenados: el 80 % del beneficio del Nivel 3 sin una llamada a la IA.
+  ya rellenados: útil como red si la API no responde.
+- **Nivel 4 — el agente propone la acción**, no solo el texto: «quiere mover el
+  turno del jueves» → botón *[Reagendar al viernes 15:00]*. Requiere los números
+  del Nivel 3 primero.
