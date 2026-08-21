@@ -143,6 +143,12 @@ export async function handler(
         if (solicitud?.id && solicitud.id !== idPrevio) {
           break;
         }
+        // reCAPTCHA: el servidor exige un token que solo puede resolver un
+        // navegador. Reintentar es inútil — y no es un error nuestro: ese
+        // camino le corresponde al paciente desde el portal (ver abajo).
+        if (/recaptcha/i.test(fallo ?? '')) {
+          break;
+        }
       }
       link = linkDe(solicitud);
     }
@@ -154,10 +160,24 @@ export async function handler(
         (solicitud?.id
           ? 'el servidor no generó una solicitud nueva (la última ya fue usada)'
           : 'el servidor no generó ninguna solicitud para este usuario');
-      console.error(
-        `invitar-paciente: sin link para User/${userId} (email ${email}): ${causa}. ` +
-          'Probable: el User quedó fuera del proyecto (server-scoped) o hay otro User con otro email para el mismo paciente.',
-      );
+      console.error(`invitar-paciente: sin link para User/${userId} (email ${email}): ${causa}.`);
+
+      // Caso NORMAL, no una falla: el paciente ya tiene cuenta y solo necesita
+      // recuperar la contraseña. Ese camino es del portal —que pide reCAPTCHA
+      // desde el navegador, algo que un bot no puede resolver— y funciona
+      // (arreglado 2026-08-21). Decirle a Recepción qué hacer, no qué se rompió.
+      if (/recaptcha/i.test(fallo ?? '')) {
+        return {
+          ok: true,
+          canal: e.canal,
+          membershipId: membership.id,
+          mensaje:
+            'Este paciente YA tiene cuenta en el portal, así que no necesita link de activación sino ' +
+            `recuperar la contraseña: que entre a "¿Olvidaste tu contraseña?" en el portal con ${email} ` +
+            'y le llega el link por mail.',
+        };
+      }
+
       return {
         ok: true,
         canal: e.canal,

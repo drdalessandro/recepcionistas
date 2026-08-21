@@ -144,10 +144,10 @@ async function main(): Promise<void> {
         console.log(`    ${base}/setpassword/${vigente.id}/${vigente.secret}`);
         console.log('    (Sensible: entregalo por el canal del paciente, no lo pegues en otro lado.)');
       } else if (solicitudes.some((s) => s.used)) {
-        console.log('  ⚠️  Todas las solicitudes están USADAS: este paciente YA activó su cuenta.');
-        console.log('     No necesita link de activación sino recuperar la contraseña. Hoy eso depende');
-        console.log('     de "¿Olvidaste tu contraseña?" del portal (roto: ver docs/handoff-portal-reset-password.md),');
-        console.log('     o de reinvitar — que ahora reintenta generar una solicitud nueva.');
+        console.log('  ✓ Todas las solicitudes están USADAS: este paciente YA activó su cuenta.');
+        console.log('    No es un problema: no necesita link de activación sino recuperar la contraseña.');
+        console.log('    Que use "¿Olvidaste tu contraseña?" en el portal y le llega por mail.');
+        console.log('    (Reinvitar NO sirve acá: el servidor pide un reCAPTCHA que solo resuelve un navegador.)');
       } else {
         console.log('  ✗ Hay solicitudes pero ninguna usable (sin secret legible).');
       }
