@@ -22,16 +22,18 @@ export const CENTRO_MAPA = `https://maps.google.com/?q=${encodeURIComponent(CENT
 /**
  * Links a la lista de precios publicada.
  *
- * ⚠️ COMPLETAR con las URLs reales de info.biowellness.ar (terapias, paquetes,
- * membresías). Solo la de combos está confirmada; las demás las tiene Andrés en
- * la barra de favoritos. Mientras tanto se manda la home, que nunca miente.
+ * `titulo` es SOLO la etiqueta que ve el paciente en el mensaje ("· Combos:
+ * https://…"): NO se usa para reconocer lo que escribió. Duplicar una entrada
+ * con y sin acento no agrega tolerancia — manda el mismo link dos veces y se
+ * lee como un error. Las variantes de escritura del paciente las resuelve
+ * `normalizar()` en `src/lib/auto-respuesta.ts`, que saca acentos y mayúsculas
+ * antes de comparar.
  */
 export const LINKS_PRECIOS: Array<{ titulo: string; url: string }> = [
   { titulo: 'Combos', url: 'https://info.biowellness.ar/combos-r9t4.html' },
   { titulo: 'Paquetes', url: 'https://info.biowellness.ar/paquetes-k4m7.html' },
+  { titulo: 'Membresías', url: 'https://info.biowellness.ar/membresias-w8p2.html' },
   { titulo: 'Web', url: 'https://www.biowellness.ar' },
-  { titulo: 'Membresía', url: 'https://info.biowellness.ar/membresias-w8p2.html' },
-  { titulo: 'Membresia', url: 'https://info.biowellness.ar/membresias-w8p2.html' },
   { titulo: 'Todo el catálogo', url: 'https://info.biowellness.ar' },
 ];
 
