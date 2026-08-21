@@ -53,7 +53,11 @@ export async function handler(
     }
 
     const patient = await medplum.readResource('Patient', e.pacienteRef.split('/')[1]!);
-    const email = (e.email ?? patient.telecom?.find((t) => t.system === 'email')?.value)?.trim();
+    // En minúsculas SIEMPRE: Medplum guarda el email del User normalizado y
+    // `auth/resetpassword` lo busca por igualdad exacta. Un "Juan@Gmail.com"
+    // tipeado en el mostrador no encontraría al usuario y —como ese endpoint
+    // responde OK igual (ver abajo)— el fallo sería invisible.
+    const email = (e.email ?? patient.telecom?.find((t) => t.system === 'email')?.value)?.trim().toLowerCase();
     if (!validarEmail(email)) {
       return { ok: false, mensaje: 'El paciente necesita un email válido para acceder al portal.' };
     }
@@ -99,35 +103,69 @@ export async function handler(
     const baseUrl = event.secrets['PORTAL_BASE_URL']?.valueString ?? 'https://app.biowellness.ar';
 
     // UserSecurityRequest no está en el union tipado de búsqueda: vía REST directo.
-    const buscarLink = async (): Promise<string | undefined> => {
+    const buscarSolicitud = async (): Promise<UserSecurityRequest | undefined> => {
       if (!userId) {
         return undefined;
       }
       const bundle = (await medplum.get(
         `fhir/R4/UserSecurityRequest?user=User/${userId}&_sort=-_lastUpdated&_count=1`,
       )) as Bundle<UserSecurityRequest>;
-      const usr = bundle.entry?.[0]?.resource;
-      return usr?.id && usr.secret && !usr.used ? linkSetPassword(baseUrl, usr.id, usr.secret) : undefined;
+      return bundle.entry?.[0]?.resource;
     };
+    const linkDe = (usr: UserSecurityRequest | undefined): string | undefined =>
+      usr?.id && usr.secret && !usr.used ? linkSetPassword(baseUrl, usr.id, usr.secret) : undefined;
 
-    let link = await buscarLink();
+    let solicitud = await buscarSolicitud();
+    let link = linkDe(solicitud);
+    let fallo: string | undefined;
+
     if (!link) {
-      // Usuario existente (reinvitación): generar una solicitud nueva sin email nativo.
-      await medplum
-        .post('auth/resetpassword', { email, sendEmail: false, projectId })
-        .catch((err) => console.warn('invitar-paciente: auth/resetpassword falló:', (err as Error).message));
-      link = await buscarLink();
+      // Reinvitación: el `invite` de Medplum crea el link SOLO para usuarios
+      // nuevos (`if (!existingUser)`), así que acá hay que pedirlo aparte.
+      //
+      // OJO con cómo se mide el éxito: `auth/resetpassword` responde **200 aunque
+      // NO encuentre al usuario** (anti-enumeración de cuentas, OWASP). Por eso
+      // no alcanza con que no tire error — hay que verificar que aparezca una
+      // solicitud NUEVA. Antes esto se daba por hecho y el fallo era mudo.
+      //
+      // Dos intentos: con `projectId` (usuarios del proyecto, el caso normal) y
+      // sin él — Medplum filtra por "proyecto vacío" cuando no se lo pasás, que
+      // es la única forma de encontrar a un User *server-scoped* (invitaciones
+      // viejas, altas hechas por fuera de este flujo).
+      const idPrevio = solicitud?.id;
+      for (const cuerpo of [{ email, sendEmail: false, projectId }, { email, sendEmail: false }]) {
+        try {
+          await medplum.post('auth/resetpassword', cuerpo);
+        } catch (err) {
+          fallo = `auth/resetpassword respondió: ${(err as Error).message}`;
+        }
+        solicitud = await buscarSolicitud();
+        if (solicitud?.id && solicitud.id !== idPrevio) {
+          break;
+        }
+      }
+      link = linkDe(solicitud);
     }
 
     if (!link) {
-      console.error(`invitar-paciente: sin UserSecurityRequest legible para User/${userId} (¿usuario server-scoped de una invitación vieja?).`);
+      // Sin link no hay activación: decir QUÉ pasó, no un texto genérico.
+      const causa =
+        fallo ??
+        (solicitud?.id
+          ? 'el servidor no generó una solicitud nueva (la última ya fue usada)'
+          : 'el servidor no generó ninguna solicitud para este usuario');
+      console.error(
+        `invitar-paciente: sin link para User/${userId} (email ${email}): ${causa}. ` +
+          'Probable: el User quedó fuera del proyecto (server-scoped) o hay otro User con otro email para el mismo paciente.',
+      );
       return {
         ok: true,
         canal: e.canal,
         membershipId: membership.id,
         mensaje:
-          'Se creó el acceso, pero no pude generar el link de activación. ' +
-          'El paciente puede usar "¿Olvidaste tu contraseña?" en el portal, o borrá el User viejo en Medplum y reinvitá.',
+          `Se creó el acceso, pero no pude generar el link de activación: ${causa}. ` +
+          `Suele pasar cuando el paciente ya tiene una cuenta vieja (a veces con OTRO email). ` +
+          `Verificá con: npm run portal:check -- ${email}`,
       };
     }
 
