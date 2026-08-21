@@ -286,6 +286,34 @@ después):
 > Medplum para email). SES en sí se prueba aparte con la CLI de AWS
 > (`aws sesv2 send-email …`).
 
+### Requisitos para el reset de contraseña del portal
+
+`bw-reset-password` necesita **exactamente los mismos permisos** que
+`bw-invitar-paciente`, por los mismos dos motivos: lee recursos de
+administración (`ProjectMembership`, `UserSecurityRequest`) **y** manda email
+con `medplum.sendEmail()`, que Medplum gatea con `membership.admin === true`.
+
+**Es un bot nuevo, así que su `ProjectMembership` nace SIN admin.** `npm run
+deploy:bots` lo crea y deploya, pero **no** le da admin: hay que ponérselo a
+mano en Medplum, una vez. Sin eso, el circuito falla y el paciente ve
+*"No pudimos procesar el pedido"* — pasó el 2026-08-21, en la primera prueba
+end-to-end, justamente por esto.
+
+Checklist completo para encenderlo (ninguno es opcional):
+
+1. `npm run deploy:bots`.
+2. **`admin: true` en la `ProjectMembership` del bot** ← el que se olvida.
+3. Bloque `location = /webhooks/reset-password` en el nginx del API, con el id
+   del bot y el `BASIC_BASE64` (ver `deploy/nginx-api-proxy.conf`) + reload.
+4. Project Secret `RECAPTCHA_SECRET_KEY` (si falta, el bot no exige reCAPTCHA).
+5. Build del portal.
+
+**Cómo saber en qué paso falla**: el bot marca el paso y lo escribe en el log de
+la ejecución (`AuditEvent` en Medplum): `resolver-project`, `buscar-paciente`,
+`buscar-membership`, `leer-solicitud`, `crear-solicitud`, `enviar-email`. Sin
+admin, muere en `buscar-membership`. La respuesta al paciente es siempre
+genérica a propósito, así que **el log es el único lugar donde mirar**.
+
 ## Datos de demostración (autodestrucción a las 48 h)
 
 Para ver la app con datos (pacientes, turnos en varios estados, planes, un Flag de
