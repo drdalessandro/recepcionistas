@@ -21,6 +21,39 @@ cada conversación (`Ventana WhatsApp · 3 h 20 m` / `Ventana cerrada`). Antes, 
 recepcionista escribía una respuesta pasadas las 24 h y se enteraba —si se
 enteraba— por una notificación de error.
 
+### Texto libre vs plantilla: por qué importa para el formato
+
+`enviarWhatsApp` **consulta la ventana antes de mandar** y elige:
+
+| Ventana | Qué manda | Por qué |
+| --- | --- | --- |
+| Abierta | **Texto libre** | Sale tal cual se escribió: con saltos de línea y sin prefijos. |
+| Cerrada | Plantilla aprobada | Es lo único que Meta acepta. |
+
+No es un detalle cosmético. Una **variable de plantilla no admite saltos de
+línea** —Meta los borra— y la genérica aprobada además prefija `Hola: `. Cuando
+una respuesta de tres párrafos salía por plantilla estando la ventana abierta,
+al paciente le llegaba **un bloque compacto con el saludo duplicado** («Hola:
+¡Hola María Adela!…»), aunque en Recepción se viera perfecta.
+
+Dos detalles del mecanismo:
+
+- La ventana se cuenta desde el último mensaje que el paciente mandó **por
+  WhatsApp**. Un mensaje escrito desde el portal también deja una
+  `Communication` suya, pero **no** abre la ventana de Meta — por eso se filtra
+  por canal.
+- **Autocuración en las dos direcciones**: si el texto libre resulta rechazado
+  (la ventana estaba cerrada de verdad), se reintenta con plantilla; si la
+  plantilla es rechazada, se reintenta como texto libre.
+
+### Cómo escribir para un celular
+
+En la pantalla de Recepción un párrafo largo se lee bien; en un teléfono se
+convierte en un muro, y varios links seguidos en un mismo renglón se parten y no
+se distingue dónde termina cada uno. Por eso el prompt del Nivel 3 pide **un
+link por línea** y un renglón en blanco entre ideas — y le muestra la lista de
+precios **ya formateada así**, porque el modelo copia el formato que ve.
+
 ## Los dos límites que NO se cruzan
 
 1. **Nada clínico.** "¿Puedo hacer cámara si tengo un stent?" no lo contesta un

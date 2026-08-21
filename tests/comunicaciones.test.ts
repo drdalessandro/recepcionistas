@@ -1,14 +1,34 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import type { BotEvent, MedplumClient } from '@medplum/core';
 import { crearAlertaRecepcion, enviarWhatsApp, enviarEmail, notificarPortal, NOTIFICACION_SYSTEM } from '../src/bots/_shared.js';
-import { COD, SYSTEM, TIPO_AVISO } from '../src/fhir/identifiers.js';
+import { COD, EXT, SYSTEM, TIPO_AVISO } from '../src/fhir/identifiers.js';
 
 /** MedplumClient falso: captura las Communication creadas y espía sendEmail. */
-function fakeMedplum(opts: { telefono?: string; email?: string; existente?: Record<string, unknown> } = {}) {
+function fakeMedplum(
+  opts: {
+    telefono?: string;
+    email?: string;
+    existente?: Record<string, unknown>;
+    /** Último WhatsApp entrante del paciente (ISO): abre la ventana de 24 h. */
+    ultimoEntranteISO?: string;
+  } = {},
+) {
   const creadas: Record<string, unknown>[] = [];
   const sendEmail = vi.fn(async () => ({}) as unknown);
   const searchOne = vi.fn(async () => opts.existente);
+  const searchResources = vi.fn(async () =>
+    opts.ultimoEntranteISO
+      ? [
+          {
+            resourceType: 'Communication',
+            sent: opts.ultimoEntranteISO,
+            extension: [{ url: EXT.canal, valueCode: 'whatsapp' }],
+          },
+        ]
+      : [],
+  );
   const medplum = {
+    searchResources,
     readResource: async () => ({
       resourceType: 'Patient',
       telecom: [
@@ -23,13 +43,24 @@ function fakeMedplum(opts: { telefono?: string; email?: string; existente?: Reco
     sendEmail,
     searchOne,
   } as unknown as MedplumClient;
-  return { medplum, creadas, sendEmail, searchOne };
+  return { medplum, creadas, sendEmail, searchOne, searchResources };
+}
+
+/** Los parámetros del POST a Twilio de la llamada `n`. */
+function cuerpoTwilio(fetchMock: { mock: { calls: unknown[][] } }, n = 0): URLSearchParams {
+  const init = fetchMock.mock.calls[n]?.[1] as { body: URLSearchParams };
+  return init.body;
 }
 
 const secretsTwilio = {
   TWILIO_ACCOUNT_SID: { name: 'TWILIO_ACCOUNT_SID', valueString: 'AC123' },
   TWILIO_AUTH_TOKEN: { name: 'TWILIO_AUTH_TOKEN', valueString: 'tok' },
   TWILIO_WHATSAPP_FROM: { name: 'TWILIO_WHATSAPP_FROM', valueString: 'whatsapp:+5491100000000' },
+} as unknown as BotEvent['secrets'];
+
+/** La plantilla genérica aprobada por Meta: "Hola: {{1}} …". */
+const secretsPlantilla = {
+  TWILIO_CONTENT_SID_GENERICO: { name: 'TWILIO_CONTENT_SID_GENERICO', valueString: 'HXgenerico' },
 } as unknown as BotEvent['secrets'];
 
 const sinSecretos = {} as unknown as BotEvent['secrets'];
@@ -77,6 +108,100 @@ describe('enviarWhatsApp · solo envía con secretos + teléfono', () => {
 
     expect(fetchMock).not.toHaveBeenCalled();
     expect(comm.status).toBe('preparation');
+  });
+
+  it('DENTRO de la ventana de 24 h manda texto libre, no la plantilla', async () => {
+    // La plantilla genérica es "Hola: {{1}} …" y Meta borra los saltos de línea
+    // de las variables: un mensaje de varios párrafos llegaba aplastado y con el
+    // saludo duplicado. Dentro de la ventana, el texto libre sale tal cual.
+    const fetchMock = vi.fn(async (..._a: unknown[]) => ({ ok: true }) as Response);
+    vi.stubGlobal('fetch', fetchMock);
+    const { medplum } = fakeMedplum({
+      telefono: '+5491150000000',
+      ultimoEntranteISO: new Date(Date.now() - 60 * 60_000).toISOString(), // hace 1 h
+    });
+
+    await enviarWhatsApp(medplum, { ...secretsTwilio, ...secretsPlantilla }, {
+      template: 'mensaje-recepcion',
+      body: 'Primer párrafo.\n\nSegundo párrafo.',
+      pacienteRef: 'Patient/p1',
+    });
+
+    const body = cuerpoTwilio(fetchMock);
+    expect(body.get('ContentSid')).toBeNull();
+    expect(body.get('Body')).toBe('Primer párrafo.\n\nSegundo párrafo.');
+  });
+
+  it('FUERA de la ventana usa la plantilla aprobada (es lo único que Meta acepta)', async () => {
+    const fetchMock = vi.fn(async (..._a: unknown[]) => ({ ok: true }) as Response);
+    vi.stubGlobal('fetch', fetchMock);
+    const { medplum } = fakeMedplum({
+      telefono: '+5491150000000',
+      ultimoEntranteISO: new Date(Date.now() - 30 * 60 * 60_000).toISOString(), // hace 30 h
+    });
+
+    await enviarWhatsApp(medplum, { ...secretsTwilio, ...secretsPlantilla }, {
+      template: 'mensaje-recepcion',
+      body: 'hola',
+      pacienteRef: 'Patient/p1',
+    });
+
+    expect(cuerpoTwilio(fetchMock).get('ContentSid')).toBe('HXgenerico');
+  });
+
+  it('Un mensaje del PORTAL no abre la ventana de WhatsApp', async () => {
+    // Escribir desde el portal deja una Communication con sender = Patient, pero
+    // Meta no se entera: la ventana sigue cerrada y el texto libre fallaría.
+    const fetchMock = vi.fn(async (..._a: unknown[]) => ({ ok: true }) as Response);
+    vi.stubGlobal('fetch', fetchMock);
+    const { medplum } = fakeMedplum({ telefono: '+5491150000000' }); // sin canal whatsapp
+
+    await enviarWhatsApp(medplum, { ...secretsTwilio, ...secretsPlantilla }, {
+      template: 'mensaje-recepcion',
+      body: 'hola',
+      pacienteRef: 'Patient/p1',
+    });
+
+    expect(cuerpoTwilio(fetchMock).get('ContentSid')).toBe('HXgenerico');
+  });
+
+  it('Si el texto libre es rechazado, reintenta con la plantilla', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({ ok: false, status: 400, text: async () => 'fuera de ventana' } as unknown as Response)
+      .mockResolvedValueOnce({ ok: true } as Response);
+    vi.stubGlobal('fetch', fetchMock);
+    const { medplum } = fakeMedplum({
+      telefono: '+5491150000000',
+      ultimoEntranteISO: new Date(Date.now() - 60 * 60_000).toISOString(),
+    });
+
+    const comm = await enviarWhatsApp(medplum, { ...secretsTwilio, ...secretsPlantilla }, {
+      template: 'mensaje-recepcion',
+      body: 'hola',
+      pacienteRef: 'Patient/p1',
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(cuerpoTwilio(fetchMock, 0).get('Body')).toBe('hola'); // 1º texto libre
+    expect(cuerpoTwilio(fetchMock, 1).get('ContentSid')).toBe('HXgenerico'); // 2º plantilla
+    expect(comm.status).toBe('completed');
+  });
+
+  it('`sinPlantilla` fuerza texto libre sin consultar la ventana (auto-respuestas)', async () => {
+    const fetchMock = vi.fn(async (..._a: unknown[]) => ({ ok: true }) as Response);
+    vi.stubGlobal('fetch', fetchMock);
+    const { medplum, searchResources } = fakeMedplum({ telefono: '+5491150000000' });
+
+    await enviarWhatsApp(medplum, { ...secretsTwilio, ...secretsPlantilla }, {
+      template: 'auto-respuesta',
+      body: 'hola',
+      pacienteRef: 'Patient/p1',
+      sinPlantilla: true,
+    });
+
+    expect(searchResources).not.toHaveBeenCalled();
+    expect(cuerpoTwilio(fetchMock).get('Body')).toBe('hola');
   });
 
   it('Adjunta identifier (dedup) y about cuando se pasan', async () => {
