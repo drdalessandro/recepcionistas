@@ -288,8 +288,11 @@ verifica que aparezca una solicitud NUEVA en vez de confiar en la respuesta.
 
 1. **Hay una solicitud vigente** → el link se puede generar; reinvitá.
 2. **Todas las solicitudes están usadas** → el paciente **ya activó** su cuenta:
-   no necesita activación sino *recuperar la contraseña*
-   (ver [`handoff-portal-reset-password.md`](handoff-portal-reset-password.md)).
+   no necesita activación sino *recuperar la contraseña* desde el portal
+   («¿Olvidaste tu contraseña?»). **Reinvitar no sirve para esto**: desde que el
+   servidor tiene reCAPTCHA configurado, `auth/resetpassword` exige un token que
+   solo puede producir un navegador, y el bot llama de servidor a servidor.
+   Ver [`handoff-portal-reset-password.md`](handoff-portal-reset-password.md) §5.
 3. **No hay ninguna solicitud** → el `User` quedó fuera del proyecto
    (*server-scoped*, típico de altas viejas): `auth/resetpassword` no lo
    encuentra nunca. Se resuelve borrando ese User en Medplum y reinvitando.

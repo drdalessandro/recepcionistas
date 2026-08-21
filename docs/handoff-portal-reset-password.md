@@ -1,11 +1,16 @@
-# «¿Olvidaste tu contraseña?»: el circuito completo y el fix del portal
+# «¿Olvidaste tu contraseña?»: el circuito completo
 
-> **Estado: BUG confirmado en el portal (2026-08-20).** La página de reset de
-> `app.biowellness.ar` crashea con **`Can't find variable: grecaptcha`** antes de
-> llamar al servidor: el paciente que olvidó su contraseña hoy no tiene camino
-> de autoservicio. Este documento explica el circuito entero (portal + servidor
-> Medplum + email), las dos opciones de fix del lado del portal, y qué hay que
-> revisar del lado del servidor para que el link del email apunte bien.
+> **Estado: RESUELTO (2026-08-21).** El autoservicio funciona: el paciente que
+> olvidó su contraseña entra a «¿Olvidaste tu contraseña?», recibe el mail y
+> crea una nueva. Se arregló por la **opción A** (configurar reCAPTCHA de
+> verdad), en el proyecto conjunto portal + recepcionistas.
+>
+> Queda un detalle **no bloqueante**: el mail sale como `hola@medplum.com.ar`
+> en vez de `Biowellness <info@biowellness.ar>` — es el `supportEmail` del
+> servidor (§1).
+>
+> El documento se conserva porque describe el circuito completo y porque el fix
+> tuvo una **consecuencia para Recepción** que conviene no olvidar (§5).
 >
 > Repos: portal del paciente (`app.biowellness.ar`) ↔ `recepcionistas`
 > (`recepcion.medplum.com.ar`). Interlocutor: Alejandro (MedTech).
@@ -41,51 +46,54 @@ típicamente porque el *site key* no está configurado en el build del portal
 `recaptchaSiteKey` en el código). Resultado: `ReferenceError` **antes** de que
 el request salga; el servidor nunca se entera.
 
-### Opción A — configurar reCAPTCHA de verdad
+### Cómo se resolvió: opción A — configurar reCAPTCHA de verdad
 
-1. Crear claves reCAPTCHA **v3** en Google para el dominio `app.biowellness.ar`.
-2. *Site key* → variable de build del portal (donde el código la espera) y
-   rebuild.
-3. *Secret key* → config del servidor Medplum (`recaptchaSecretKey`) +
-   `pm2 restart`, para que el server valide el token que ahora sí va a llegar.
+1. Claves reCAPTCHA **v3** en Google para el dominio `app.biowellness.ar`.
+2. *Site key* → variable de build del portal, y rebuild.
+3. *Secret key* → config del servidor Medplum (`recaptchaSecretKey`).
 
-Más pasos, pero deja protección anti-abuso en un endpoint público que manda
-emails.
+Deja protección anti-abuso en un endpoint público que manda emails. (La opción
+descartada era sacar reCAPTCHA de la página y compensar con `limit_req` en
+nginx; se eligió A, que es la más sólida.)
 
-### Opción B — sacar reCAPTCHA de la página de reset
+## 3. El email
 
-Self-hosted, el server **solo exige** `recaptchaToken` si tiene
-`recaptchaSecretKey` configurado. Si no lo tiene (verificarlo en el config de
-la EC2), el portal puede llamar `POST auth/resetpassword` con `{ email }` a
-secas: quitar `initRecaptcha`/`getRecaptcha` de la página y listo.
+SES + `medplum.sendEmail()` funcionan (verificado 2026-08-20 con
+`npm run email:test`). Pendiente **no bloqueante**: el mail de reset sale con
+el remitente por defecto del servidor. Cambiar `supportEmail` a
+`info@biowellness.ar` en la EC2 + `pm2 restart` (§1).
 
-Mitigación recomendada si se elige B: rate-limit en el nginx del server para
-`/auth/resetpassword` (misma receta `limit_req` que cualquier endpoint público).
-
-**Recomendación: B ahora** (destraba el autoservicio con un cambio de una
-página y cero dependencias), **A después** si el endpoint empieza a recibir
-abuso.
-
-## 3. Qué NO está roto (para no arreglar de más)
-
-- **La reinvitación desde Recepción.** `bw-invitar-paciente` no pasa por esta
-  página ni por reCAPTCHA: llama `auth/resetpassword` con `sendEmail:false`,
-  lee el `UserSecurityRequest` y arma el link él mismo sobre `PORTAL_BASE_URL`,
-  entregándolo por WhatsApp/email/QR. **Hoy es el único camino que funciona**
-  para un paciente sin contraseña: Atender → reinvitar. Sirve de workaround
-  mientras el portal no se arregle — y es la vara para probar el fix (los dos
-  caminos tienen que dejar al paciente en la misma pantalla de `setpassword`).
-- **El email en sí.** SES + `medplum.sendEmail()` funcionan (verificado
-  2026-08-20 con `npm run email:test`). Lo único pendiente del lado email es el
-  remitente por defecto (`supportEmail` → `info@biowellness.ar`, arriba).
-
-## 4. Prueba de aceptación del circuito (después del fix)
+## 4. Prueba de aceptación del circuito
 
 1. En el portal, «¿Olvidaste tu contraseña?» con el email de un paciente de
-   prueba → **sin errores en pantalla**.
-2. Llega el email: remitente `info@biowellness.ar` (si ya se cambió
-   `supportEmail`), y el link apunta a `https://app.biowellness.ar/setpassword/…`.
-3. El link abre el portal, deja crear la contraseña nueva y el login siguiente
-   funciona.
-4. Control cruzado: reinvitar al mismo paciente desde Recepción (Atender) sigue
-   funcionando igual que antes.
+   prueba → sin errores en pantalla. ✔
+2. Llega el email y el link apunta a `https://app.biowellness.ar/setpassword/…`. ✔
+   (Remitente: `hola@medplum.com.ar` hasta que se cambie `supportEmail`.)
+3. El link abre el portal, deja crear la contraseña nueva y el login funciona. ✔
+
+## 5. Consecuencia para Recepción: reinvitar ya no repone contraseñas
+
+Con `recaptchaSecretKey` configurado, **`auth/resetpassword` exige un token de
+reCAPTCHA a todo el mundo** — y un token de reCAPTCHA solo lo puede producir un
+navegador. `bw-invitar-paciente` llama a ese endpoint de servidor a servidor,
+así que ahora recibe `Recaptcha token is required` y **no puede generar un link
+para un paciente que ya tiene cuenta**. Es un efecto colateral esperable del
+fix, no una regresión a arreglar.
+
+Reparto de tareas resultante, que conviene respetar:
+
+| Situación | Camino |
+| --- | --- |
+| Paciente **nuevo** (nunca activó) | Recepción → Atender → Invitar al portal. El `invite` de Medplum crea el link y el bot lo entrega por WhatsApp/email/QR. |
+| Paciente que **ya activó** y perdió la clave | El paciente, desde el portal → «¿Olvidaste tu contraseña?». |
+
+El bot detecta el error de reCAPTCHA y le dice eso mismo a Recepción, en vez de
+mostrar una falla. `npm run portal:check -- <email>` distingue los dos casos.
+
+> Si alguna vez se quisiera que reinvitar **también** repusiera contraseñas,
+> haría falta que el bot cree el `UserSecurityRequest` por su cuenta (es project
+> admin, así que puede) en lugar de pasar por `auth/resetpassword`. Es viable
+> —`setpassword` solo compara el `secret` en texto plano y no valida
+> vencimiento— pero significa escribir a mano un recurso interno de seguridad de
+> Medplum, sin contrato estable entre versiones. **No se hizo**: hoy el portal
+> cubre ese caso y no vale la pena el riesgo.
