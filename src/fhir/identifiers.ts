@@ -120,6 +120,13 @@ export const EXT = {
    * Mientras esté vigente no sale nada automático por ese chat.
    */
   silencioAuto: `${BASE}/StructureDefinition/silencio-automatico`,
+  /**
+   * El mensaje salió de un borrador sugerido: `sin-editar` (se mandó tal cual)
+   * o `editado` (la recepcionista lo cambió). Es la métrica que decide si algún
+   * día alguna intención puede contestarse sola — sin este dato, esa discusión
+   * se daría por intuición.
+   */
+  borradorUsado: `${BASE}/StructureDefinition/borrador-usado`,
   // Onboarding / invitación al portal
   /** Canal elegido para invitar al paciente al portal (whatsapp / email / qr). */
   canalInvitacion: `${BASE}/StructureDefinition/canal-invitacion`,

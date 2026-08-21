@@ -357,6 +357,24 @@ export async function espejarWhatsApp(pacienteRef: string, body: string, mensaje
   return enviarWhatsApp({ pacienteRef, template: 'mensaje-recepcion', body, mensajeId });
 }
 
+export interface ResultadoBorradorBot {
+  /** Texto sugerido para responder. Ausente si conviene que lo escriba una persona. */
+  borrador?: string;
+  /** Por qué no hay borrador (falta de contexto, tema clínico, API caída…). */
+  motivo?: string;
+}
+
+/**
+ * Pide el borrador de la próxima respuesta del hilo (bw-borrador-respuesta).
+ *
+ * Solo SUGIERE: el texto cae en el campo de respuesta y la recepcionista decide
+ * si lo manda, lo corrige o lo descarta. Nada sale sin que toque Enviar.
+ */
+export async function borradorRespuesta(hiloId: string): Promise<ResultadoBorradorBot> {
+  const id = await botIdPorNombre('bw-borrador-respuesta');
+  return (await medplum.executeBot(id, { hiloId })) as ResultadoBorradorBot;
+}
+
 export interface EstadoConsentimientoBot {
   ok: boolean;
   estado: EstadoConsentimiento;
