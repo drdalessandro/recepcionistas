@@ -150,6 +150,13 @@ export async function enviarWhatsApp(
      * descarga en el momento, así que puede ser una URL firmada con expiración.
      */
     mediaUrls?: string[];
+    /**
+     * Manda SIEMPRE texto libre, sin plantilla. Para respuestas automáticas a un
+     * mensaje entrante: por definición caen dentro de la ventana de 24 h de Meta
+     * —el paciente acaba de escribir— así que la plantilla no hace falta, y el
+     * texto va tal cual se redactó en vez de envuelto en la genérica.
+     */
+    sinPlantilla?: boolean;
   },
 ): Promise<Communication> {
   let to = params.to;
@@ -170,8 +177,8 @@ export async function enviarWhatsApp(
     // Producción (fuera de la ventana de 24 h): plantilla aprobada por Meta.
     // Prioridad: Content SID específico de esta plantilla → genérico ({{1}} =
     // texto completo) → texto libre (sandbox / dentro de la ventana de 24 h).
-    const sidEspecifico = secrets[nombreSecretContentSid(params.template)]?.valueString;
-    const sidGenerico = secrets[SECRET_CONTENT_SID_GENERICO]?.valueString;
+    const sidEspecifico = params.sinPlantilla ? undefined : secrets[nombreSecretContentSid(params.template)]?.valueString;
+    const sidGenerico = params.sinPlantilla ? undefined : secrets[SECRET_CONTENT_SID_GENERICO]?.valueString;
     const contentSid = sidEspecifico ?? sidGenerico;
     const vars = sidEspecifico && params.variables?.length ? params.variables : [params.body];
 

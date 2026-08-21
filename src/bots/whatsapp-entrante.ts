@@ -15,15 +15,27 @@
  *     `whatsapp-desconocido`) con teléfono y texto en `input`: aparece en la
  *     vista **Avisos**, desde donde se le responde por WhatsApp o se le crea
  *     la ficha. El contacto no se pierde ni queda invisible.
+ *  5. **Respuesta automática** (`src/lib/auto-respuesta.ts`): acuse de recibo
+ *     con el horario real, o una respuesta concreta si la intención es clara
+ *     (comprobante de pago, turno, precios, horario/ubicación). Sale como texto
+ *     libre: contestar un entrante siempre cae dentro de la ventana de 24 h de
+ *     Meta, así que no hace falta plantilla aprobada.
  *
  * Idempotente por MessageSid (Twilio reintenta). Nunca lanza: si algo falla,
- * responde ok:false y Twilio reintenta después.
+ * responde ok:false y Twilio reintenta después. La auto-respuesta NUNCA rompe
+ * el flujo: si falla, el mensaje ya quedó guardado, que es lo que importa.
  */
 import type { BotEvent, MedplumClient } from '@medplum/core';
-import type { Attachment, Communication, Patient } from '@medplum/fhirtypes';
-import { EXT, SYSTEM, TIPO_AVISO } from '../fhir/identifiers.js';
+import type { Attachment, Communication, Patient, Task } from '@medplum/fhirtypes';
+import { COD, EXT, SYSTEM, TIPO_AVISO } from '../fhir/identifiers.js';
 import { extensionDeMime, mediosTwilio, validarFirmaTwilio, variantesTelefono } from '../lib/whatsapp.js';
-import { crearAlertaRecepcion } from './_shared.js';
+import {
+  armarAutoRespuesta,
+  type DecisionAutoRespuesta,
+  type Intencion,
+} from '../lib/auto-respuesta.js';
+import { MINUTOS_ENTRE_AUTO_RESPUESTAS } from '../config/auto-respuesta.js';
+import { crearAlertaRecepcion, enviarWhatsApp, fechaTurnoNotif } from './_shared.js';
 
 interface EntradaTwilio {
   MessageSid?: string;
@@ -40,6 +52,8 @@ export interface ResultadoWhatsAppEntrante {
   hiloId?: string;
   mensajeId?: string;
   adjuntos?: number;
+  /** Intención que se contestó automáticamente (ausente = no se contestó). */
+  autoRespuesta?: Intencion;
 }
 
 /**
@@ -158,6 +172,9 @@ export async function handler(medplum: MedplumClient, event: BotEvent): Promise<
       // crearle la ficha de un click (sin volver a la consola de Twilio).
       // Idempotente por MessageSid: si Twilio reintenta, no duplica el aviso.
       const telefono = (e.From ?? '').replace(/^whatsapp:/i, '').trim();
+      // Antes de crear el aviso nuevo: ¿ya le contestamos hace poco? Sin hilo
+      // donde dejar la marca, el rastro son los avisos previos del mismo número.
+      const yaRespondido = await respondimosRecientemente(medplum, telefono);
       await crearAlertaRecepcion(medplum, {
         titulo: 'WhatsApp de número desconocido',
         clave: `wa-desconocido-${e.MessageSid}`,
@@ -167,6 +184,9 @@ export async function handler(medplum: MedplumClient, event: BotEvent): Promise<
         }. El número no coincide con ninguna ficha.`,
         datos: { telefono, texto: texto.slice(0, 1000), perfil: e.ProfileName },
       });
+      if (!yaRespondido) {
+        await autoResponder(medplum, event.secrets, { texto, conAdjunto, telefono });
+      }
       return respuestaTwiml({ ok: true, motivo: 'número desconocido: alerta a Recepción creada' });
     }
     const pacienteRef = `Patient/${paciente.id}`;
@@ -212,8 +232,201 @@ export async function handler(medplum: MedplumClient, event: BotEvent): Promise<
       extension: [{ url: EXT.canal, valueCode: 'whatsapp' }],
     });
 
-    return respuestaTwiml({ ok: true, pacienteRef, hiloId: topic.id, mensajeId: mensaje.id, adjuntos: adjuntos.length });
+    // Respuesta automática: lo último, y a prueba de fallas. El mensaje del
+    // paciente ya está guardado — que la contestación falle no puede hacer que
+    // Twilio reintente y lo duplique.
+    const intencion = await autoResponder(medplum, event.secrets, {
+      texto,
+      conAdjunto,
+      telefono: (e.From ?? '').replace(/^whatsapp:/i, '').trim(),
+      paciente,
+      topic,
+    }).catch((err) => {
+      console.log(`whatsapp-entrante: auto-respuesta falló: ${err instanceof Error ? err.message : err}`);
+      return undefined;
+    });
+
+    return respuestaTwiml({
+      ok: true,
+      pacienteRef,
+      hiloId: topic.id,
+      mensajeId: mensaje.id,
+      adjuntos: adjuntos.length,
+      ...(intencion ? { autoRespuesta: intencion } : {}),
+    });
   } catch (err) {
     return respuestaTwiml({ ok: false, motivo: err instanceof Error ? err.message : 'whatsapp-entrante falló' });
+  }
+}
+
+/**
+ * ¿Ya le contestamos automáticamente a este número desconocido hace poco?
+ *
+ * Un desconocido no tiene hilo donde dejar la marca, así que el rastro son los
+ * avisos previos del mismo teléfono. Sin esto, cinco mensajes seguidos de
+ * alguien que está probando el número se llevan cinco respuestas iguales.
+ */
+async function respondimosRecientemente(medplum: MedplumClient, telefono: string): Promise<boolean> {
+  const corte = Date.now() - MINUTOS_ENTRE_AUTO_RESPUESTAS * 60_000;
+  const previos = await medplum
+    .searchResources('Task', `code=${COD.avisoRecepcion}&_sort=-authored-on&_count=30`)
+    .catch(() => [] as Task[]);
+  return previos.some(
+    (t) =>
+      t.input?.some((i) => i.type?.text === 'tipo' && i.valueString === TIPO_AVISO.whatsappDesconocido) &&
+      t.input?.some((i) => i.type?.text === 'telefono' && i.valueString === telefono) &&
+      Boolean(t.authoredOn) &&
+      new Date(t.authoredOn as string).getTime() > corte,
+  );
+}
+
+/** Próximo turno del paciente, en palabras, para que el acuse no sea genérico. */
+async function proximoTurno(medplum: MedplumClient, pacienteRef: string): Promise<string | undefined> {
+  const appt = await medplum
+    .searchOne(
+      'Appointment',
+      `patient=${pacienteRef}&status=booked,arrived&date=ge${new Date().toISOString()}&_sort=date&_count=1`,
+    )
+    .catch(() => undefined);
+  if (!appt?.start) {
+    return undefined;
+  }
+  return `el ${fechaTurnoNotif(appt.start)}${appt.description ? ` · ${appt.description}` : ''}`;
+}
+
+/**
+ * Contesta el mensaje entrante si corresponde, y deja el trabajo que haga falta
+ * en la bandeja de Recepción.
+ *
+ * Lo que se manda sale como **texto libre** (`sinPlantilla`): responder a un
+ * entrante siempre cae dentro de la ventana de 24 h de Meta. La respuesta queda
+ * en el hilo marcada con `EXT.autoRespuesta`, que cumple tres funciones: la
+ * bandeja la muestra como automática, el propio bot sabe qué contestó la última
+ * vez (para no repetirse) y los reportes no confunden bot con atención humana.
+ *
+ * Devuelve la intención contestada, o undefined si decidió callarse.
+ */
+async function autoResponder(
+  medplum: MedplumClient,
+  secrets: BotEvent['secrets'],
+  opts: {
+    texto: string;
+    conAdjunto: boolean;
+    telefono: string;
+    paciente?: Patient;
+    topic?: Communication;
+  },
+): Promise<Intencion | undefined> {
+  const pacienteRef = opts.paciente?.id ? `Patient/${opts.paciente.id}` : undefined;
+
+  // Qué contestamos la última vez en este hilo, y si el paciente pidió silencio.
+  let ultima: { intencion: Intencion; cuandoISO: string } | undefined;
+  if (opts.topic?.id) {
+    const previos = await medplum
+      .searchResources('Communication', `part-of=Communication/${opts.topic.id}&_sort=-sent&_count=20`)
+      .catch(() => [] as Communication[]);
+    for (const c of previos) {
+      const marca = c.extension?.find((x) => x.url === EXT.autoRespuesta)?.valueCode;
+      if (marca && c.sent) {
+        ultima = { intencion: marca as Intencion, cuandoISO: c.sent };
+        break;
+      }
+    }
+  }
+
+  const decision = armarAutoRespuesta({
+    ahora: new Date(),
+    texto: opts.texto,
+    conAdjunto: opts.conAdjunto,
+    nombre: opts.paciente?.name?.[0]?.given?.[0],
+    esConocido: Boolean(pacienteRef),
+    ...(pacienteRef ? { proximoTurno: await proximoTurno(medplum, pacienteRef) } : {}),
+    ...(ultima ? { ultima } : {}),
+    ...(opts.topic?.extension?.find((x) => x.url === EXT.silencioAuto)?.valueDateTime
+      ? { silencioDesdeISO: opts.topic.extension.find((x) => x.url === EXT.silencioAuto)?.valueDateTime }
+      : {}),
+  });
+  if (!decision) {
+    return undefined;
+  }
+
+  await enviarWhatsApp(medplum, secrets, {
+    template: 'auto-respuesta',
+    sinPlantilla: true,
+    body: decision.texto,
+    ...(pacienteRef ? { pacienteRef } : { to: opts.telefono }),
+  });
+
+  // La respuesta también va al hilo, para que Recepción vea la conversación
+  // completa (incluido lo que contestó el sistema en su nombre).
+  if (pacienteRef && opts.topic?.id) {
+    await medplum
+      .createResource<Communication>({
+        resourceType: 'Communication',
+        status: 'completed',
+        sent: new Date().toISOString(),
+        subject: { reference: pacienteRef },
+        recipient: [{ reference: pacienteRef }],
+        partOf: [{ reference: `Communication/${opts.topic.id}` }],
+        payload: [{ contentString: decision.texto }],
+        extension: [
+          { url: EXT.canal, valueCode: 'whatsapp' },
+          { url: EXT.autoRespuesta, valueCode: decision.intencion },
+        ],
+      })
+      .catch(() => undefined);
+  }
+
+  await aplicarExtras(medplum, decision, { ...opts, pacienteRef });
+  return decision.intencion;
+}
+
+/** Lo que la decisión pide ADEMÁS de contestar: silencio, aviso, solicitud. */
+async function aplicarExtras(
+  medplum: MedplumClient,
+  decision: DecisionAutoRespuesta,
+  ctx: { texto: string; telefono: string; paciente?: Patient; topic?: Communication; pacienteRef?: string },
+): Promise<void> {
+  if (decision.activarSilencio && ctx.topic?.id) {
+    await medplum
+      .updateResource<Communication>({
+        ...ctx.topic,
+        extension: [
+          ...(ctx.topic.extension ?? []).filter((x) => x.url !== EXT.silencioAuto),
+          { url: EXT.silencioAuto, valueDateTime: new Date().toISOString() },
+        ],
+      })
+      .catch(() => undefined);
+  }
+
+  if (decision.aviso) {
+    await crearAlertaRecepcion(medplum, {
+      titulo: decision.aviso.titulo,
+      detalle: decision.aviso.detalle,
+      ...(ctx.pacienteRef ? { pacienteRef: ctx.pacienteRef } : {}),
+      ...(ctx.topic?.id ? { focusRef: `Communication/${ctx.topic.id}` } : {}),
+      datos: { telefono: ctx.telefono, texto: ctx.texto.slice(0, 1000) },
+    }).catch(() => undefined);
+  }
+
+  // Va a la bandeja de Solicitudes, donde Recepción ya resuelve los pedidos de
+  // turno con los horarios libres: no se inventa una cola nueva para WhatsApp.
+  if (decision.crearSolicitudTurno && ctx.pacienteRef) {
+    await medplum
+      .createResource<Task>({
+        resourceType: 'Task',
+        status: 'requested',
+        intent: 'proposal',
+        authoredOn: new Date().toISOString(),
+        code: { coding: [{ system: SYSTEM.taskTipo, code: COD.solicitudTurno }], text: 'Solicitud de turno' },
+        requester: { reference: ctx.pacienteRef },
+        for: { reference: ctx.pacienteRef },
+        description: `Pidió turno por WhatsApp: "${ctx.texto.slice(0, 200)}"`,
+        input: [
+          { type: { text: 'terapia' }, valueString: 'A definir (pedido por WhatsApp)' },
+          { type: { text: 'preferencia-texto' }, valueString: ctx.texto.slice(0, 300) },
+        ],
+      })
+      .catch(() => undefined);
   }
 }

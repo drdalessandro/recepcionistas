@@ -24,6 +24,8 @@ import { ResourceInput, useMedplum, useMedplumProfile, useSubscription } from '@
 import { createReference, getDisplayString, getReferenceString } from '@medplum/core';
 import type { Attachment, Communication, Patient } from '@medplum/fhirtypes';
 import { EXT } from '@bw/fhir/identifiers';
+import { textoRestante, ventana24h } from '@bw/lib/auto-respuesta';
+import { VENTANA_AVISO_MINUTOS } from '@bw/config/auto-respuesta';
 import { espejarWhatsApp } from '../lib/bots';
 
 /**
@@ -89,6 +91,14 @@ export function Mensajes(): JSX.Element {
   const viewportRef = useRef<HTMLDivElement>(null);
 
   const hilo = hilos?.find((h) => h.id === hiloId);
+  // Ventana de 24 h de Meta: desde el último mensaje DEL PACIENTE se puede
+  // escribir libre; después solo salen plantillas aprobadas. Sin esto a la
+  // vista, la recepcionista escribe una respuesta que WhatsApp rechaza y se
+  // entera —si se entera— por una notificación de error.
+  const ultimoEntrante = [...(mensajes ?? [])]
+    .reverse()
+    .find((m) => m.sender?.reference?.startsWith('Patient/'))?.sent;
+  const ventana = ventana24h(ultimoEntrante, new Date());
   const totalSinLeer = hilos?.reduce((acc, t) => acc + (resumen.get(t.id ?? '')?.sinLeer ?? 0), 0) ?? 0;
   // Orden estilo WhatsApp: por último mensaje (los hilos sin hijos caen al final por lastUpdated).
   const hilosOrdenados = [...(hilos ?? [])].sort((a, b) => {
@@ -425,7 +435,21 @@ export function Mensajes(): JSX.Element {
             <>
               <Group justify="space-between" p="sm" style={{ borderBottom: '1px solid var(--mantine-color-default-border)' }}>
                 <div style={{ minWidth: 0 }}>
-                  <Text fw={700}>{nombreDe(hilo)}</Text>
+                  <Group gap="xs">
+                    <Text fw={700}>{nombreDe(hilo)}</Text>
+                    <Badge
+                      size="sm"
+                      variant="light"
+                      color={!ventana.abierta ? 'gray' : ventana.restanteMin <= VENTANA_AVISO_MINUTOS ? 'orange' : 'teal'}
+                      title={
+                        ventana.abierta
+                          ? 'WhatsApp permite texto libre durante 24 h desde el último mensaje del paciente.'
+                          : 'Pasaron más de 24 h desde el último mensaje del paciente: WhatsApp solo acepta plantillas aprobadas.'
+                      }
+                    >
+                      {ventana.abierta ? `Ventana WhatsApp · ${textoRestante(ventana.restanteMin)}` : 'Ventana cerrada'}
+                    </Badge>
+                  </Group>
                   <Text size="xs" c="dimmed" truncate>
                     {asunto(hilo)}
                   </Text>
@@ -451,6 +475,10 @@ export function Mensajes(): JSX.Element {
                     {mensajes.map((m) => {
                       const delPaciente = m.sender?.reference?.startsWith('Patient/');
                       const viaWhatsApp = m.extension?.some((x) => x.url === EXT.canal && x.valueCode === 'whatsapp');
+                      // Lo que contestó el sistema en nombre de Recepción se
+                      // muestra como tal: nadie tiene que preguntarse si eso lo
+                      // escribió una compañera.
+                      const automatico = m.extension?.some((x) => x.url === EXT.autoRespuesta);
                       const cuerpo = texto(m);
                       return (
                         <Paper
@@ -485,6 +513,7 @@ export function Mensajes(): JSX.Element {
                             ),
                           )}
                           <Text size="xs" c="dimmed" ta="right">
+                            {automatico ? '🤖 Automática · ' : ''}
                             {viaWhatsApp ? '📱 WhatsApp · ' : ''}
                             {m.sent ? fmtHora.format(new Date(m.sent)) : ''}
                           </Text>
@@ -496,6 +525,12 @@ export function Mensajes(): JSX.Element {
               </ScrollArea>
 
               <Box style={{ borderTop: '1px solid var(--mantine-color-default-border)' }}>
+                {!ventana.abierta && (
+                  <Text size="xs" c="dimmed" px="sm" pt="xs">
+                    ⚠️ Pasaron más de 24 h desde el último mensaje del paciente: WhatsApp ya no acepta texto libre.
+                    Lo que escribas queda en el chat y le llega si entra al portal, pero puede no salir por WhatsApp.
+                  </Text>
+                )}
                 {archivos.length > 0 && (
                   <Group gap={6} px="sm" pt="xs">
                     {archivos.map((f, i) => (

@@ -108,6 +108,18 @@ export const EXT = {
   // Communication
   canal: `${BASE}/StructureDefinition/canal`,
   templateUsado: `${BASE}/StructureDefinition/template-usado`,
+  /**
+   * Marca que el mensaje lo escribió el sistema, no una persona (valueCode =
+   * la intención de `src/lib/auto-respuesta.ts`). Sirve para tres cosas: que la
+   * bandeja lo muestre como automático, que el bot sepa qué contestó la última
+   * vez y no se repita, y que los reportes no confundan bot con atención humana.
+   */
+  autoRespuesta: `${BASE}/StructureDefinition/auto-respuesta`,
+  /**
+   * En el HILO (topic): desde cuándo el paciente pidió hablar con una persona.
+   * Mientras esté vigente no sale nada automático por ese chat.
+   */
+  silencioAuto: `${BASE}/StructureDefinition/silencio-automatico`,
   // Onboarding / invitación al portal
   /** Canal elegido para invitar al paciente al portal (whatsapp / email / qr). */
   canalInvitacion: `${BASE}/StructureDefinition/canal-invitacion`,
