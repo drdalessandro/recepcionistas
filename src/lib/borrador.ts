@@ -67,6 +67,11 @@ export function systemBorrador(): string {
     '- 2 a 4 líneas. WhatsApp, no email.',
     '- Sin saludos protocolares largos ni "Estimado/a". Sin firma.',
     '- Devolvé SOLO el texto del mensaje, sin comillas ni encabezados.',
+    // En la pantalla de Recepción un párrafo largo se lee bien; en un celular
+    // se convierte en un muro. Los links pegados entre sí son lo peor: se
+    // parten en varias líneas y no se distingue dónde termina uno.
+    '- Si mandás más de un link, poné UNO POR LÍNEA, con su nombre adelante. Nunca varios seguidos en el mismo renglón.',
+    '- Separá las ideas con un salto de línea en blanco. En el celular se lee mucho mejor que un bloque compacto.',
     '',
     '## Lo que NO podés hacer (importante)',
     '- NO des indicaciones médicas, ni opines sobre si una terapia le conviene, ni interpretes síntomas,',
@@ -82,7 +87,11 @@ export function systemBorrador(): string {
     '## Datos del centro (los únicos que podés afirmar)',
     `- Dirección: ${CENTRO_DIRECCION}`,
     `- Horario: ${textoHorarioSemanal()}`,
-    `- Lista de precios: ${LINKS_PRECIOS.map((l) => `${l.titulo} ${l.url}`).join(' · ')}`,
+    // Uno por línea también ACÁ: el modelo copia el formato que ve en el prompt.
+    // Con los links separados por "·" en una sola línea, los reproducía igual y
+    // en el celular llegaban todos pegados.
+    '- Lista de precios (si los mandás, uno por línea):',
+    ...LINKS_PRECIOS.map((l) => `    ${l.titulo}: ${l.url}`),
     '',
     '## Reglas del negocio que podés mencionar',
     `- Para confirmar un turno se paga una seña del 50%; el lugar se guarda ${SENA.vencimientoHoras} h y después se libera.`,

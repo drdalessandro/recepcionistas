@@ -46,6 +46,7 @@ import { lineaComercialDeItem } from '../lib/cobros.js';
 import { cicloMes, motivoNoDisponible, parseClavePlan, saldoPlan } from '../lib/planes.js';
 import type { ReservaRecurso } from '../lib/reglas-turno.js';
 import { isoArgentina } from '../lib/sena.js';
+import { ventana24h } from '../lib/auto-respuesta.js';
 import { SECRET_CONTENT_SID_GENERICO, aE164Argentino, contentVariables, nombreSecretContentSid } from '../lib/whatsapp.js';
 
 type Secrets = BotEvent['secrets'];
@@ -128,6 +129,33 @@ export async function leerTcVigente(medplum: MedplumClient): Promise<number> {
  * envía pero igual deja la Communication (estado 'preparation'). Los secretos de
  * Twilio se leen de event.secrets (Project Secrets de Medplum).
  */
+/**
+ * ¿Se le puede escribir texto libre a este paciente? (ventana de 24 h de Meta).
+ *
+ * Cuenta desde el último mensaje que el paciente mandó **por WhatsApp**. El
+ * filtro por canal importa: un mensaje escrito desde el portal también deja una
+ * Communication con `sender = Patient`, pero NO abre la ventana de WhatsApp —
+ * darlo por bueno haría fallar el envío.
+ *
+ * Sin paciente (envíos a un número suelto) se asume cerrada: es lo conservador.
+ */
+async function ventanaWhatsAppAbierta(medplum: MedplumClient, pacienteRef: string | undefined): Promise<boolean> {
+  if (!pacienteRef) {
+    return false;
+  }
+  try {
+    const recientes = await medplum.searchResources('Communication', `sender=${pacienteRef}&_sort=-sent&_count=5`);
+    const ultimoWhatsApp = recientes.find((c) =>
+      c.extension?.some((x) => x.url === EXT.canal && x.valueCode === 'whatsapp'),
+    );
+    return ventana24h(ultimoWhatsApp?.sent, new Date()).abierta;
+  } catch {
+    // Si no se puede averiguar, se asume cerrada: la plantilla llega siempre,
+    // el texto libre no. Nunca dejar de enviar por no poder consultar esto.
+    return false;
+  }
+}
+
 export async function enviarWhatsApp(
   medplum: MedplumClient,
   secrets: Secrets,
@@ -174,42 +202,56 @@ export async function enviarWhatsApp(
 
   let status: Communication['status'] = 'preparation';
   if (to && sid && token && from) {
-    // Producción (fuera de la ventana de 24 h): plantilla aprobada por Meta.
-    // Prioridad: Content SID específico de esta plantilla → genérico ({{1}} =
-    // texto completo) → texto libre (sandbox / dentro de la ventana de 24 h).
-    const sidEspecifico = params.sinPlantilla ? undefined : secrets[nombreSecretContentSid(params.template)]?.valueString;
-    const sidGenerico = params.sinPlantilla ? undefined : secrets[SECRET_CONTENT_SID_GENERICO]?.valueString;
-    const contentSid = sidEspecifico ?? sidGenerico;
+    // ¿Está abierta la ventana de 24 h de Meta? Si el paciente escribió hace
+    // poco, el texto libre está permitido — y es MUCHO mejor que la plantilla:
+    // una variable de plantilla no admite saltos de línea (Meta los borra) y la
+    // genérica encima prefija "Hola: ", así que un mensaje de tres párrafos
+    // llegaba aplastado en un bloque y con el saludo duplicado.
+    const enVentana = params.sinPlantilla || (await ventanaWhatsAppAbierta(medplum, params.pacienteRef));
+
+    // Plantillas disponibles: la específica de este mensaje o la genérica
+    // ({{1}} = texto completo). Se resuelven SIEMPRE, aunque estemos en ventana:
+    // sirven de respaldo si el texto libre resulta rechazado.
+    const sidEspecifico = secrets[nombreSecretContentSid(params.template)]?.valueString;
+    const sidGenerico = secrets[SECRET_CONTENT_SID_GENERICO]?.valueString;
+    const sidDisponible = sidEspecifico ?? sidGenerico;
+    // Dentro de la ventana va texto libre; fuera, la plantilla es la única opción.
+    const contentSid = enVentana ? undefined : sidDisponible;
     const vars = sidEspecifico && params.variables?.length ? params.variables : [params.body];
 
     const auth = Buffer.from(`${sid}:${token}`).toString('base64');
     // El destino de la ficha puede estar en cualquier formato ("11 6931-5830"):
     // Twilio exige E.164. Sin normalizar, el envío falla en silencio.
     const destino = aE164Argentino(to) ?? to;
-    const enviar = async (porPlantilla: boolean): Promise<Response> =>
+    const enviar = async (conSid: string | undefined): Promise<Response> =>
       fetch(`https://api.twilio.com/2010-04-01/Accounts/${sid}/Messages.json`, {
         method: 'POST',
         headers: { Authorization: `Basic ${auth}`, 'Content-Type': 'application/x-www-form-urlencoded' },
         body: new URLSearchParams({
           From: from.startsWith('whatsapp:') ? from : `whatsapp:${from}`,
           To: `whatsapp:${destino}`,
-          ...(porPlantilla && contentSid
-            ? { ContentSid: contentSid, ContentVariables: contentVariables(vars) }
+          ...(conSid
+            ? { ContentSid: conSid, ContentVariables: contentVariables(vars) }
             : { Body: params.body }),
         }),
       });
 
     // Texto principal (solo si hay cuerpo: un mensaje puede ser solo adjuntos).
     if (params.body) {
-      let resp = await enviar(Boolean(contentSid));
-      if (!resp.ok && contentSid) {
-        // Autocuración: si la plantilla falla (rechazada por Meta, sin ejemplos,
-        // variables que no matchean…), se reintenta como texto libre — que llega
-        // dentro de la ventana de 24 h. El motivo queda en el log (CloudWatch).
+      let resp = await enviar(contentSid);
+      // Autocuración en las DOS direcciones, porque las dos pueden fallar:
+      //  - la plantilla, si Meta la rechaza (sin ejemplos, variables que no
+      //    matchean) → se reintenta como texto libre;
+      //  - el texto libre, si la ventana estaba cerrada de verdad (p. ej. el
+      //    último mensaje del paciente entró por el portal y no por WhatsApp)
+      //    → se reintenta con la plantilla, que es lo que Meta sí acepta.
+      const respaldo = contentSid ? undefined : sidDisponible;
+      if (!resp.ok && (contentSid || respaldo)) {
         console.log(
-          `enviarWhatsApp: plantilla ${contentSid} rechazada (${resp.status}): ${(await resp.text().catch(() => '')).slice(0, 300)} — reintento como texto libre`,
+          `enviarWhatsApp: ${contentSid ? `plantilla ${contentSid}` : 'texto libre'} rechazado (${resp.status}): ` +
+            `${(await resp.text().catch(() => '')).slice(0, 300)} — reintento ${contentSid ? 'como texto libre' : 'con plantilla'}`,
         );
-        resp = await enviar(false);
+        resp = await enviar(respaldo);
       }
       status = resp.ok ? 'completed' : 'entered-in-error';
       if (!resp.ok) {
