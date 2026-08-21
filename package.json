@@ -24,6 +24,7 @@
     "bots:check": "tsx src/seed/diagnostico-bots.ts",
     "deploy:bots": "tsx src/seed/deploy-bots.ts",
     "email:test": "tsx src/seed/diagnostico-email.ts",
+    "portal:check": "tsx src/seed/diagnostico-portal.ts",
     "mp:test": "tsx src/seed/diagnostico-mercadopago.ts",
     "mp:ordenes": "tsx src/seed/mp-ordenes.ts",
     "whatsapp:test": "tsx src/seed/diagnostico-whatsapp.ts",

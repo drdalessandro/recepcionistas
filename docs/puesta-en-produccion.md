@@ -274,6 +274,29 @@ npm run agenda:check                # ¿existe el Schedule de cada sala? ¿cuán
 | `npm run whatsapp:plantilla` | Estado de aprobación de las plantillas de Meta. |
 | `npm run email:test -- alguien@dominio` | Aísla Medplum→SES mostrando el error crudo. |
 | `npm run mp:test` | Webhook de MercadoPago + preferencia de prueba de ARS 100. |
+| `npm run portal:check -- alguien@dominio` | Por qué un paciente no recibe el link de activación del portal. |
+
+### Cuando la invitación al portal dice «no pude generar el link»
+
+Casi siempre es un paciente **que ya tenía cuenta**. El `invite` de Medplum crea
+el link de activación **solo para usuarios nuevos**, y el pedido de respaldo
+(`auth/resetpassword`) responde **200 aunque no encuentre al usuario**
+(anti-enumeración de cuentas): "OK" ahí no significa "lo hice". Por eso el bot
+verifica que aparezca una solicitud NUEVA en vez de confiar en la respuesta.
+
+`npm run portal:check -- <email>` distingue los tres casos:
+
+1. **Hay una solicitud vigente** → el link se puede generar; reinvitá.
+2. **Todas las solicitudes están usadas** → el paciente **ya activó** su cuenta:
+   no necesita activación sino *recuperar la contraseña*
+   (ver [`handoff-portal-reset-password.md`](handoff-portal-reset-password.md)).
+3. **No hay ninguna solicitud** → el `User` quedó fuera del proyecto
+   (*server-scoped*, típico de altas viejas): `auth/resetpassword` no lo
+   encuentra nunca. Se resuelve borrando ese User en Medplum y reinvitando.
+
+El diagnóstico también avisa si la ficha tiene **más de un email**: puede haber
+una cuenta de login por cada uno, y el bot usa el primero si no se le indica
+cuál. Conviene dejar en la ficha solo el email con el que el paciente entra.
 
 > `npm run whatsapp:crear-plantillas` **no es diagnóstico**: crea plantillas
 > reales en Twilio y las manda a aprobación de Meta. No usarlo para explorar.
