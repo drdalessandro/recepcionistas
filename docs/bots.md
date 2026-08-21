@@ -9,9 +9,9 @@
 > `bw-enviar-whatsapp`, envenenado alguna vez desde el editor web): **borrar el
 > recurso Bot en Medplum y re-correr `npm run deploy:bots`** — lo recrea limpio
 > con otro id (la app resuelve por nombre, no pasa nada)… **EXCEPTO**
-> `bw-whatsapp-entrante` y `bw-webhook-mercadopago`: sus ids están en los
-> bloques `/webhooks/*` de nginx — si se recrean, actualizar el id ahí y
-> recargar nginx. En el editor web: mirar sí, Save/Deploy jamás.
+> `bw-whatsapp-entrante`, `bw-webhook-mercadopago` y `bw-reset-password`: sus
+> ids están en los bloques `/webhooks/*` de nginx — si se recrean, actualizar
+> el id ahí y recargar nginx. En el editor web: mirar sí, Save/Deploy jamás.
 
 
 Los Bots concentran la inteligencia: el front solo orquesta. Son funciones
