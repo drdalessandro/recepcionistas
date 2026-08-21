@@ -90,7 +90,21 @@ async function main(): Promise<void> {
       continue;
     }
     for (const m of memberships) {
+      // El email de CADA cuenta es el dato clave cuando hay más de una: dice
+      // cuál usa el paciente y cuál sobra. `project` vacío = User server-scoped,
+      // que es el caso que `auth/resetpassword` no encuentra nunca.
+      const uid = m.user?.reference?.split('/')[1];
+      const user = uid ? await medplum.readResource('User', uid).catch(() => undefined) : undefined;
+      const detalle = user
+        ? `${user.email ?? '(sin email)'}${user.project ? '' : '  ⚠️ FUERA DEL PROYECTO (server-scoped)'}`
+        : '(no pude leer el User: hace falta admin del proyecto)';
       console.log(`  · ProjectMembership/${m.id} → ${m.user?.reference ?? '(sin user)'}`);
+      console.log(`      ${detalle}`);
+    }
+    if (memberships.length > 1) {
+      console.log(`  ⚠️  ${memberships.length} CUENTAS DE LOGIN para la misma ficha. Todas ven los mismos datos`);
+      console.log('     del paciente. Dejar solo la que el paciente usa y borrar el resto (Medplum → admin),');
+      console.log('     junto con el email que sobra en la ficha.');
     }
 
     // 4) Las solicitudes de contraseña de cada usuario: el link vive acá.
