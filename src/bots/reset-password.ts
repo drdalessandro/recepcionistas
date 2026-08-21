@@ -85,19 +85,32 @@ export async function handler(
     }
   }
 
+  // Se va marcando en qué paso estamos: si algo tira, el log dice cuál (ver el catch).
+  let paso = 'resolver-project';
   try {
     const projectId = await resolverProjectId(medplum);
     const baseUrl = event.secrets['PORTAL_BASE_URL']?.valueString ?? 'https://app.biowellness.ar';
 
-    // ¿Existe el usuario? Se busca el User por email DENTRO del proyecto.
-    // Si no existe, RESPUESTA_GENERICA y nada más: no revelar es el contrato.
-    // (User no está en el union de recursos tipados: vía REST directo, igual
-    // que UserSecurityRequest en bw-invitar-paciente.)
-    const usuarios = (await medplum.get(`fhir/R4/User?email=${encodeURIComponent(email)}&_count=1`)) as {
-      entry?: Array<{ resource?: { id?: string } }>;
-    };
-    const userId = usuarios.entry?.[0]?.resource?.id;
+    // ¿Quién es el User de este email? NO se busca `User` directo: es un recurso
+    // SERVER-SCOPED y `fhir/R4/User?email=` falla aunque el bot sea admin del
+    // proyecto (verificado en producción el 2026-08-21: tiraba y caía en el
+    // catch, devolviendo "no pudimos procesar" para todo el mundo). El camino
+    // bueno es el que ya usa bw-invitar-paciente: el `user` sale del
+    // ProjectMembership, que sí es del proyecto.
+    //
+    // Efecto lateral correcto: solo resetea quien tiene acceso al PORTAL. El
+    // staff usa la consola, que tiene su propio reset.
+    paso = 'buscar-paciente';
+    const paciente = await medplum.searchOne('Patient', `email=${encodeURIComponent(email)}`);
+    if (!paciente?.id) {
+      console.info('reset-password: sin Patient para ese email (respuesta genérica).');
+      return RESPUESTA_GENERICA;
+    }
+    paso = 'buscar-membership';
+    const membership = await medplum.searchOne('ProjectMembership', `profile=Patient/${paciente.id}`);
+    const userId = membership?.user?.reference?.split('/')[1];
     if (!userId) {
+      console.info(`reset-password: Patient/${paciente.id} sin ProjectMembership (nunca se lo invitó al portal).`);
       return RESPUESTA_GENERICA;
     }
 
@@ -111,10 +124,12 @@ export async function handler(
 
     // Anti-ráfaga: un pedido sin usar de hace < 2 min se REUSA (mismo link),
     // así el doble click no llena el inbox ni invalida el email anterior.
+    paso = 'leer-solicitud';
     let usr = await buscarVigente();
     const esReciente =
       usr?.meta?.lastUpdated && Date.now() - new Date(usr.meta.lastUpdated).getTime() < DOS_MINUTOS_MS;
     if (!usr || !esReciente) {
+      paso = 'crear-solicitud';
       await medplum
         .post('auth/resetpassword', { email, sendEmail: false, projectId })
         .catch((err) => console.warn('reset-password: auth/resetpassword falló:', (err as Error).message));
@@ -127,6 +142,7 @@ export async function handler(
       return RESPUESTA_GENERICA;
     }
 
+    paso = 'enviar-email';
     const m = mensajeReset(linkSetPassword(baseUrl, usr.id, usr.secret));
     await enviarEmail(medplum, {
       asunto: m.asunto,
@@ -137,9 +153,12 @@ export async function handler(
     });
     return RESPUESTA_GENERICA;
   } catch (err) {
-    // Falla interna: se loguea de verdad y para afuera va un error honesto pero
-    // genérico (sin filtrar si la cuenta existe).
-    console.error('reset-password: error interno:', (err as Error).message);
+    // Falla interna. Para afuera va un error genérico (sin filtrar si la cuenta
+    // existe); adentro se loguea el PASO además del mensaje, porque un catch que
+    // solo dice "error interno" obliga a adivinar — que es exactamente lo que
+    // pasó el 2026-08-21 con la búsqueda de `User`. El paso se lee en el
+    // AuditEvent de la ejecución del bot, en Medplum.
+    console.error(`reset-password: error interno en el paso "${paso}":`, (err as Error).message);
     return { ok: false, mensaje: 'No pudimos procesar el pedido. Probá de nuevo en unos minutos.' };
   }
 }
