@@ -28,6 +28,12 @@ export const CENTRO_MAPA = `https://maps.google.com/?q=${encodeURIComponent(CENT
  */
 export const LINKS_PRECIOS: Array<{ titulo: string; url: string }> = [
   { titulo: 'Combos', url: 'https://info.biowellness.ar/combos-r9t4.html' },
+  { titulo: 'Paquetes', url: 'https://info.biowellness.ar/paquetes-k4m7.html' },
+  { titulo: 'Terapias', url: 'https://info.biowellness.ar/#terapias' },
+  { titulo: 'Web', url: 'https://www.biowellness.ar' },
+  { titulo: 'Membresía', url: 'https://info.biowellness.ar/membresias-w8p2.html' },
+  { titulo: 'Membresia', url: 'https://info.biowellness.ar/membresias-w8p2.html' },
+  { titulo: 'Servicios', url: 'https://info.biowellness.ar/#servicios' },
   { titulo: 'Todo el catálogo', url: 'https://info.biowellness.ar' },
 ];
 
