@@ -50,12 +50,17 @@ export const CANCELACION = {
  * a propósito (R-18: la comisión es gasto del P&L de Administración), la
  * diferencia no aparece en ningún tablero — solo en la liquidación.
  *
- * Se fija en 1 para que el comportamiento sea explícito y no dependa de una
- * pantalla del panel de MP que nadie mira. Subirlo es cambiar este número.
+ * **Hasta 3 cuotas** (Andrés, 2026-08-22). Ojo con cómo lo expresa MercadoPago:
+ * `installments` es un **máximo, no una lista**, así que con 3 el cliente ve
+ * las opciones de 1, 2 y 3 — no hay forma de ofrecer "1 y 3" salteando el 2.
+ *
+ * El resto de los medios queda ABIERTO a propósito: no se manda
+ * `excluded_payment_types` ni `excluded_payment_methods`, así que sirven
+ * tarjeta, dinero en cuenta, transferencia y efectivo como siempre.
  */
 export const MERCADOPAGO = {
-  /** Cuotas máximas ofrecidas en los links de pago (1 = sin cuotas). */
-  maxCuotas: 1,
+  /** Cuotas MÁXIMAS ofrecidas en los links de pago (1 = sin cuotas). */
+  maxCuotas: 3,
 } as const;
 
 /**

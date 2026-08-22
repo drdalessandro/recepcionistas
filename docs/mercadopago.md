@@ -18,7 +18,15 @@ paso de credenciales de [`puesta-en-produccion.md`](puesta-en-produccion.md) §7
 ## Cuotas: decisión comercial, ahora explícita
 
 `crearPreferenciaMP` manda `payment_methods.installments` desde
-`MERCADOPAGO.maxCuotas` (`src/config/reglas.ts`), fijado en **1**.
+`MERCADOPAGO.maxCuotas` (`src/config/reglas.ts`), fijado en **3**
+(Andrés, 2026-08-22).
+
+> `installments` es un **máximo, no una lista**: con 3, el cliente ve las
+> opciones de 1, 2 y 3. MercadoPago no permite ofrecer "1 y 3" salteando el 2.
+
+El **resto de los medios queda abierto** a propósito: no se mandan
+`excluded_payment_types` ni `excluded_payment_methods`, así que siguen sirviendo
+tarjeta, dinero en cuenta, transferencia y efectivo.
 
 Hasta 2026-08-22 no se mandaba nada: cada link aceptaba **el máximo de cuotas
 que la cuenta ofreciera por default**. Quién paga ese financiamiento depende de
