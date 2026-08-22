@@ -116,6 +116,7 @@ Pantallas del esqueleto:
 - [`docs/reglas-negocio.md`](docs/reglas-negocio.md) — reglas R-01..R-18
 - [`docs/modelo-datos-fhir.md`](docs/modelo-datos-fhir.md) — recursos y extensiones FHIR
 - [`docs/decisiones-pendientes.md`](docs/decisiones-pendientes.md) — decisiones abiertas
+- [`docs/pasarelas-de-pago.md`](docs/pasarelas-de-pago.md) — evaluación de Clover frente a MercadoPago: probabilidad de uso, matriz y camino rápido
 - [`CLAUDE.md`](CLAUDE.md) — convenciones y guía para el desarrollo
 
 ---
