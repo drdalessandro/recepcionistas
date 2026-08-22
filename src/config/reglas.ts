@@ -40,6 +40,30 @@ export const CANCELACION = {
 } as const;
 
 /**
+ * MercadoPago — condiciones de los links de pago.
+ *
+ * ⚠️ **`maxCuotas` es una decisión comercial, no técnica.** Hasta 2026-08-22 no
+ * se mandaba nada: cada link aceptaba el máximo de cuotas que la cuenta ofrezca
+ * por default. Quién paga ese financiamiento depende de cómo esté configurada
+ * la cuenta de MercadoPago (si tiene "cuotas sin interés", lo absorbe
+ * Biowellness; si no, lo paga el cliente). Como el sistema guarda montos BRUTOS
+ * a propósito (R-18: la comisión es gasto del P&L de Administración), la
+ * diferencia no aparece en ningún tablero — solo en la liquidación.
+ *
+ * **Hasta 3 cuotas** (Andrés, 2026-08-22). Ojo con cómo lo expresa MercadoPago:
+ * `installments` es un **máximo, no una lista**, así que con 3 el cliente ve
+ * las opciones de 1, 2 y 3 — no hay forma de ofrecer "1 y 3" salteando el 2.
+ *
+ * El resto de los medios queda ABIERTO a propósito: no se manda
+ * `excluded_payment_types` ni `excluded_payment_methods`, así que sirven
+ * tarjeta, dinero en cuenta, transferencia y efectivo como siempre.
+ */
+export const MERCADOPAGO = {
+  /** Cuotas MÁXIMAS ofrecidas en los links de pago (1 = sin cuotas). */
+  maxCuotas: 3,
+} as const;
+
+/**
  * Mover un turno desde el portal (autogestión del paciente).
  *
  * El tope existe para que mover no se convierta en una reserva indefinida: sin
