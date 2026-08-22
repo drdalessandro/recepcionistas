@@ -16,6 +16,7 @@
  */
 
 import { ErrorDeConfiguracion } from '../dominio/rechazos.js';
+import { MINUTOS_POR_DIA } from '../dominio/tiempo.js';
 import type {
   Combo,
   Membresia,
@@ -43,6 +44,11 @@ export interface InformeDeConfiguracion {
   readonly faltantes: readonly string[];
   /** Combos cuya duración derivada no coincide con la publicada. */
   readonly discrepanciasDeDuracion: readonly string[];
+  /**
+   * Cosas que funcionan pero por poco margen, y que conviene mirar antes de
+   * tocar un número. No impiden arrancar.
+   */
+  readonly avisos: readonly string[];
 }
 
 const ES_ENTERO_NO_NEGATIVO = (n: unknown): n is number =>
@@ -57,6 +63,7 @@ export function auditarConfig(config: ConfigMotor): InformeDeConfiguracion {
   const noRatificado: NotaNoRatificada[] = [];
   const faltantes: string[] = [];
   const discrepanciasDeDuracion: string[] = [];
+  const avisos: string[] = [];
 
   validarOperacion(config, problemas);
   const tiposDeclarados = validarRecursos(config, problemas, noRatificado);
@@ -65,8 +72,57 @@ export function auditarConfig(config: ConfigMotor): InformeDeConfiguracion {
   validarMembresias(config, problemas);
   validarListasDePrecios(config, problemas, faltantes, noRatificado);
   validarDuracionesPublicadas(config, serviciosPorCodigo, discrepanciasDeDuracion);
+  medirMargenDelDesfasaje(config, avisos);
 
-  return { problemas, noRatificado, faltantes, discrepanciasDeDuracion };
+  return { problemas, noRatificado, faltantes, discrepanciasDeDuracion, avisos };
+}
+
+/**
+ * Mide con cuánto margen cierra el desfasaje entre turnos consecutivos de un
+ * recurso que toma prestado un pool.
+ *
+ * Es el número que hace posible R-07 y **no está escrito en ninguna parte**:
+ * emerge de que la ventana de tumbona de Recovery Pro (28 al 48, más los 7 de
+ * turnaround de la tumbona) termina antes de que arranque la del gabinete
+ * siguiente (58). Son tres minutos. Como el turnaround de la tumbona todavía no
+ * está ratificado, conviene que el margen se vea al arrancar en vez de que
+ * alguien lo descubra el día que dos gabinetes dejen de convivir.
+ */
+function medirMargenDelDesfasaje(config: ConfigMotor, avisos: string[]): void {
+  for (const recurso of config.recursos) {
+    const tiempos = recurso.tiempos;
+    if (!tiempos?.etapas) continue;
+
+    for (const etapa of tiempos.etapas) {
+      if (etapa.ocupa === 'propio') continue;
+
+      const tipoPool: TipoRecurso = etapa.ocupa.pool;
+      const pool = config.recursos.find((r) => r.tipo === tipoPool);
+      const turnaroundPool = pool?.tiempos?.turnaroundMin;
+      if (turnaroundPool === undefined) continue;
+
+      // El turno siguiente del mismo recurso arranca una grilla más tarde y pide
+      // el pool en la misma posición relativa.
+      const sueltaEn = etapa.hastaMin + turnaroundPool;
+      const vuelveAPedirEn = etapa.desdeMin + tiempos.grillaInicioMin;
+      const margen = vuelveAPedirEn - sueltaEn;
+
+      if (margen < 0) {
+        avisos.push(
+          `"${recurso.nombre}": dos turnos consecutivos se pisan en el pool "${pool?.nombre}". ` +
+            `Uno lo suelta en el minuto ${sueltaEn} y el siguiente lo pide en el ${vuelveAPedirEn}. ` +
+            `El desfasaje entre unidades deja de cerrar y la capacidad efectiva se corta a la mitad.`,
+        );
+      } else if (margen <= 5) {
+        avisos.push(
+          `"${recurso.nombre}": el desfasaje entre turnos consecutivos cierra por ${margen} minuto(s) ` +
+            `en el pool "${pool?.nombre}" (lo suelta en el minuto ${sueltaEn}, el siguiente lo pide ` +
+            `en el ${vuelveAPedirEn}). Subir el turnaround de "${pool?.nombre}" más de ${margen} ` +
+            `minuto(s) rompe la convivencia entre unidades.`,
+        );
+      }
+    }
+  }
 }
 
 // ── Operación ───────────────────────────────────────────────────────────────
@@ -89,6 +145,15 @@ function validarOperacion(config: ConfigMotor, problemas: string[]): void {
       problemas.push(
         `Horario del día ${dia.dia}: la apertura (${dia.aperturaMin}) no es anterior al cierre (${dia.cierreMin}).`,
       );
+    }
+    if (dia.aperturaMin < 0 || dia.cierreMin > MINUTOS_POR_DIA) {
+      problemas.push(
+        `Horario del día ${dia.dia}: [${dia.aperturaMin}, ${dia.cierreMin}] cae fuera del día ` +
+          `(0 a ${MINUTOS_POR_DIA} minutos).`,
+      );
+    }
+    if (!Number.isInteger(dia.dia) || dia.dia < 0 || dia.dia > 6) {
+      problemas.push(`El horario declara un día de semana inválido: ${dia.dia}.`);
     }
   }
 
@@ -176,7 +241,13 @@ function validarRecursos(
       continue;
     }
 
-    validarTiempos(recurso.tipo, recurso.tiempos, config.recursos, problemas);
+    validarTiempos(
+      recurso.tipo,
+      recurso.tiempos,
+      config.recursos,
+      config.granularidadAgendaMin,
+      problemas,
+    );
     recolectarNoRatificados(recurso, noRatificado);
   }
 
@@ -205,6 +276,14 @@ function validarUnidades(
     if (!Number.isInteger(unidad.capacidad) || unidad.capacidad < 1) {
       problemas.push(`La unidad "${unidad.id}" tiene capacidad inválida (${unidad.capacidad}).`);
     }
+    if (unidad.capacidad > 1 && typeof unidad.compartible !== 'boolean') {
+      problemas.push(
+        `La unidad "${unidad.id}" tiene capacidad ${unidad.capacidad} y no declara "compartible". ` +
+          `Hay que decir si admite reservas distintas a la vez: la multiplaza sí (R-06), la ` +
+          `biplaza no (R-04 le cobra la cámara entera al que va solo). No hay default posible: ` +
+          `equivocarse en cualquiera de las dos direcciones rompe un producto.`,
+      );
+    }
     if (recurso.tipo === 'tumbona-red-light' && !unidad.ubicacion) {
       problemas.push(
         `La tumbona "${unidad.id}" no declara ubicación. Sin ubicación no se puede ` +
@@ -218,6 +297,7 @@ function validarTiempos(
   tipo: TipoRecurso,
   t: TiemposRecurso,
   recursos: readonly Recurso[],
+  granularidadAgendaMin: number,
   problemas: string[],
 ): void {
   const campos: readonly (readonly [string, unknown])[] = [
@@ -247,6 +327,15 @@ function validarTiempos(
     problemas.push(`Recurso "${tipo}": la grilla de inicio debe ser positiva.`);
     return;
   }
+  // Sólo tiene sentido comparar contra una granularidad válida; si no lo es, ya
+  // hay un problema reportado por su cuenta y este chequeo sólo agregaría ruido.
+  if (granularidadAgendaMin > 0 && t.grillaInicioMin % granularidadAgendaMin !== 0) {
+    problemas.push(
+      `Recurso "${tipo}": arranca cada ${t.grillaInicioMin} min, que no es múltiplo de la ` +
+        `granularidad de la agenda (${granularidadAgendaMin} min). Sus horarios de inicio nunca ` +
+        `se le ofrecerían a nadie.`,
+    );
+  }
 
   // ── El invariante ──
   const ocupado = t.setupMin + t.terapiaMin + t.turnaroundMin;
@@ -255,6 +344,17 @@ function validarTiempos(
       `Recurso "${tipo}": setup (${t.setupMin}) + terapia (${t.terapiaMin}) + turnaround ` +
         `(${t.turnaroundMin}) = ${ocupado} min, que supera el slot de ${t.slotMin} min. ` +
         `Un recurso que no cierra genera atraso acumulativo a lo largo del día, no un atraso puntual.`,
+    );
+  }
+
+  // El bloqueo efectivo también tiene que entrar en el slot: con un ancla que
+  // corre la salida del cliente, la limpieza termina más tarde que la suma
+  // nominal y el recurso podría pasarse de su propia grilla.
+  const bloqueo = bloqueoRecursoMin(t);
+  if (bloqueo > t.slotMin) {
+    problemas.push(
+      `Recurso "${tipo}": queda bloqueado ${bloqueo} min (ancla y turnaround incluidos), ` +
+        `más que su slot de ${t.slotMin} min.`,
     );
   }
 
@@ -270,12 +370,11 @@ function validarTiempos(
             `antes de terminar.`,
         );
       }
-      if (t.anclaSalidaMin > bloqueoRecursoMin(t)) {
-        problemas.push(
-          `Recurso "${tipo}": el ancla de salida (${t.anclaSalidaMin}) cae después de que el recurso ` +
-            `se libera (${bloqueoRecursoMin(t)}). El cliente saldría de un recurso ya reasignado.`,
-        );
-      }
+      // No hace falta chequear que el ancla caiga antes de la liberación: el
+      // bloqueo se calcula justamente como el ancla más el turnaround, así que
+      // no puede quedar antes. Lo que sí puede pasar —un ancla tan tardía que la
+      // limpieza se pase del slot— lo levanta la verificación de bloqueo contra
+      // slot, unas líneas más abajo.
     }
   }
 
@@ -316,10 +415,29 @@ function validarEtapas(
     }
     if (etapa.ocupa !== 'propio') {
       const pool = etapa.ocupa.pool;
-      if (!recursos.some((r) => r.tipo === pool)) {
+      const recursoPool = recursos.find((r) => r.tipo === pool);
+      if (!recursoPool) {
         problemas.push(
           `Recurso "${tipo}", etapa "${etapa.nombre}": toma del pool "${pool}", que no existe.`,
         );
+      } else if (!recursoPool.tiempos) {
+        problemas.push(
+          `Recurso "${tipo}", etapa "${etapa.nombre}": toma del pool "${pool}", que no tiene ` +
+            `tiempos definidos. Sin tiempos no se sabe cuánto queda bloqueada la unidad prestada.`,
+        );
+      } else {
+        // La etapa dura lo que dura la terapia del recurso prestado. Si alguien
+        // cambia uno y no el otro, los 20 minutos de luz roja de Recovery Pro
+        // pasan a ser un número copiado a mano, que es justo lo que el modelo
+        // no admite.
+        const duracionEtapa = etapa.hastaMin - etapa.desdeMin;
+        if (duracionEtapa !== recursoPool.tiempos.terapiaMin) {
+          problemas.push(
+            `Recurso "${tipo}", etapa "${etapa.nombre}": dura ${duracionEtapa} min pero la terapia ` +
+              `de "${pool}" son ${recursoPool.tiempos.terapiaMin} min. Los dos números describen lo ` +
+              `mismo y se separaron.`,
+          );
+        }
       }
     }
   }
@@ -447,6 +565,30 @@ function validarListasDePrecios(
   faltantes: string[],
   noRatificado: NotaNoRatificada[],
 ): void {
+  // Las notas globales van primero: son del catálogo comercial, no de una
+  // versión de lista, y perderlas porque no haya listas cargadas sería
+  // justamente esconder lo que este informe existe para mostrar.
+  noRatificado.push({
+    ambito: 'membresias.estructura-y-precios',
+    motivo:
+      '[PROPUESTA NO RATIFICADA] La estructura de membresías (tiers, modalidades, formatos y ' +
+      'precios) está en revisión. Los valores cargados son la propuesta sobre la mesa, no una ' +
+      'lista acordada.',
+  });
+  noRatificado.push({
+    ambito: 'pausa.redondeoSesiones',
+    motivo:
+      'Con 15 días sobre 30 la proporción da exacta (8 → 4), pero un bloque de 20 días da 2,67 ' +
+      'sesiones y nadie decidió hacia qué lado redondear.',
+  });
+  noRatificado.push({
+    ambito: 'franjaClinica.bloqueaFlujoNormal',
+    motivo:
+      `Está en ${config.franjaClinica.bloqueaFlujoNormal}: el enunciado sólo dice que las reservas ` +
+      'clínicas se bloquean fuera de la franja, no que las de bienestar se bloqueen dentro. ' +
+      'Falta decisión de producto.',
+  });
+
   if (config.listasPrecios.length === 0) {
     problemas.push('No hay ninguna versión de lista de precios cargada.');
     return;
@@ -467,26 +609,6 @@ function validarListasDePrecios(
     }
     validarPreciosDeLista(config, lista, problemas, faltantes);
   }
-
-  noRatificado.push({
-    ambito: 'membresias.estructura-y-precios',
-    motivo:
-      '[PROPUESTA NO RATIFICADA] La estructura de membresías (tiers, modalidades, formatos y ' +
-      'precios) está en revisión. Los valores cargados son la propuesta sobre la mesa, no una ' +
-      'lista acordada.',
-  });
-  noRatificado.push({
-    ambito: 'pausa.redondeoSesiones',
-    motivo:
-      'Con 15 días sobre 30 la proporción da exacta (8 → 4), pero un bloque de 20 días da 2,67 ' +
-      'sesiones y nadie decidió hacia qué lado redondear.',
-  });
-  noRatificado.push({
-    ambito: 'franjaClinica.bloqueaFlujoNormal',
-    motivo:
-      'Está en false: el enunciado sólo dice que las reservas clínicas se bloquean fuera de la ' +
-      'franja, no que las de bienestar se bloqueen dentro. Falta decisión de producto.',
-  });
 }
 
 function validarPreciosDeLista(
@@ -549,6 +671,12 @@ function validarPreciosDeLista(
         `La lista "${lista.version}", servicio "${precio.servicio}": no declara ningún precio.`,
       );
     }
+    if (precio.precioPorPersonaUsd !== undefined && !(precio.precioPorPersonaUsd > 0)) {
+      problemas.push(
+        `La lista "${lista.version}", servicio "${precio.servicio}": el precio por persona debe ` +
+          `ser positivo (se recibió ${precio.precioPorPersonaUsd}).`,
+      );
+    }
     for (const [ocupantes, valor] of tabulados) {
       if (!(valor > 0)) {
         problemas.push(
@@ -566,6 +694,12 @@ function validarPreciosDeLista(
  * Contrasta la duración **derivada** de cada combo contra la publicada en el
  * Manual. No es un error: es una discrepancia entre el modelo y el catálogo
  * comercial, y quién tiene razón es una decisión de producto.
+ *
+ * Se prueba en cada arranque posible dentro de la hora, no sólo en punto: como
+ * la grilla se aplica sobre el reloj de pared, un combo que arranca a y media
+ * puede durar distinto que el mismo combo en hora en punto si alguno de sus
+ * recursos abre cada 60 minutos. Con la configuración actual no pasa, y ese es
+ * justamente el hecho que conviene tener vigilado.
  */
 function validarDuracionesPublicadas(
   config: ConfigMotor,
@@ -594,16 +728,30 @@ function validarDuracionesPublicadas(
       }
       if (!completo) continue;
 
-      const derivada = duracionCadenaMin(derivarCadena(tramos));
-      if (derivada !== combo.duracionPublicadaMin) {
+      for (const minutoInicial of minutosDeArranquePosibles(config)) {
+        const derivada = duracionCadenaMin(derivarCadena(tramos, minutoInicial));
+        if (derivada === combo.duracionPublicadaMin) continue;
+
+        const aLaHora = `${String(Math.floor(minutoInicial / 60)).padStart(2, '0')}:${String(
+          minutoInicial % 60,
+        ).padStart(2, '0')}`;
         discrepancias.push(
-          `Combo "${combo.codigo}" (${variante.join(' → ')}): el Manual publica ` +
-            `${combo.duracionPublicadaMin} min y el modelo deriva ${derivada} min. ` +
+          `Combo "${combo.codigo}" (${variante.join(' → ')}) arrancando ${aLaHora}: el Manual ` +
+            `publica ${combo.duracionPublicadaMin} min y el modelo deriva ${derivada} min. ` +
             `O el catálogo o los tiempos del recurso están desactualizados.`,
         );
       }
     }
   }
+}
+
+/** Los inicios posibles dentro de una hora, según la granularidad de la agenda. */
+function minutosDeArranquePosibles(config: ConfigMotor): number[] {
+  const paso = config.granularidadAgendaMin;
+  if (paso <= 0 || paso > 60) return [0];
+  const minutos: number[] = [];
+  for (let m = 0; m < 60; m += paso) minutos.push(m);
+  return minutos;
 }
 
 /** Todas las combinaciones de servicios alternativos de un combo. */

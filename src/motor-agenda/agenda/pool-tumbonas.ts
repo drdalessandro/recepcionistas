@@ -89,7 +89,7 @@ export function asignarTumbonas(pedido: PedidoDeTumbonas): Resultado<UnidadRecur
           regla: 'R-07',
           detalle: {
             solicitadas: cantidad,
-            librasEnSala: elegibles.length,
+            libresEnSala: elegibles.length,
             standaloneLibres,
             ventana,
           },

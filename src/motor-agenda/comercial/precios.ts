@@ -58,7 +58,22 @@ export function resolverLista(
   cliente: Cliente,
   ahora: Date,
 ): Resultado<ListaAplicable> {
-  if (fmVigente(cliente) && cliente.fmVersionListaPrecios) {
+  if (fmVigente(cliente)) {
+    if (!cliente.fmVersionListaPrecios) {
+      // Todo fundador congela una lista el día que se inscribe. Uno sin versión
+      // registrada es un dato roto, no un cliente común: cotizarlo contra la
+      // lista de hoy le cobraría de más y nadie se enteraría.
+      return rechazar(
+        rechazo(
+          'VERSION_LISTA_DESCONOCIDA',
+          `El cliente es Founding Member pero no tiene registrada la versión de lista que ` +
+            `congeló al inscribirse. No se cotiza contra la lista vigente: sería cobrarle de más. ` +
+            `Hay que cargarle la versión de su fecha de inscripción.`,
+          { regla: 'R-09', detalle: { cliente: cliente.id } },
+        ),
+      );
+    }
+
     const congelada = motor.listaPorVersion.get(cliente.fmVersionListaPrecios);
     if (!congelada) {
       return rechazar(
@@ -106,6 +121,18 @@ export interface PedidoDeCotizacionDeServicio {
  */
 export function cotizarServicio(pedido: PedidoDeCotizacionDeServicio): Resultado<Cotizacion> {
   const { motor, servicio, ocupantes, cliente, ahora } = pedido;
+
+  if (!Number.isInteger(ocupantes) || ocupantes < 1) {
+    // Sin esta guarda, cero ocupantes cotizan USD 0 y un número negativo cotiza
+    // en negativo: una cotización que se ve válida y que nadie mira dos veces.
+    return rechazar(
+      rechazo(
+        'OCUPANTES_INVALIDOS',
+        `No se puede cotizar para ${ocupantes} ocupante(s): tiene que ser un entero de 1 en adelante.`,
+        { detalle: { servicio, ocupantes } },
+      ),
+    );
+  }
 
   if (!motor.servicioPorCodigo.has(servicio)) {
     return rechazar(rechazo('SERVICIO_DESCONOCIDO', `No existe el servicio "${servicio}".`));

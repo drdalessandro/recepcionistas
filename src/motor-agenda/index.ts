@@ -76,6 +76,7 @@ export {
   contarUnidadesLibres,
   estaDisponible,
   evaluarDisponibilidad,
+  plazasLibres,
   unidadesDisponibles,
 } from './agenda/ocupacion.js';
 export {
@@ -124,6 +125,7 @@ export {
   aplicarPausa,
   diasDePausa,
   diasPausadosEnAnio,
+  estaPausadaEn,
   evaluarCancelacion,
   finDeCiclo,
   puedeConsumirSesion,

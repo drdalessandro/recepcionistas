@@ -20,6 +20,7 @@ import {
   configSanIsidro,
   LISTA_2026_08,
   minutosEntre,
+  puedeConsumirSesion,
   type Cliente,
   type VersionListaPrecios,
 } from '../../src/motor-agenda/index.js';
@@ -152,14 +153,17 @@ describe('Caso 2 — Gabinete 1 a las 10:00 y Gabinete 2 a las 10:30, ambos con 
     const luz = (plan: typeof primero) =>
       plan.ok ? plan.valor.ocupaciones.filter((o) => o.tipoRecurso === 'tumbona-red-light') : [];
 
+    // El cliente usa la tumbona del minuto 28 al 48, y después la tumbona sigue
+    // bloqueada su propio turnaround: estar prestada a Recovery Pro no la exime
+    // de la limpieza. Aun así, las dos ventanas no se tocan.
     const luzPrimero = luz(primero);
     const luzSegundo = luz(segundo);
     expect(luzPrimero).toHaveLength(2);
     expect(luzSegundo).toHaveLength(2);
     expect(luzPrimero[0]?.inicio).toEqual(lunes(10, 28));
-    expect(luzPrimero[0]?.fin).toEqual(lunes(10, 48));
+    expect(luzPrimero[0]?.fin).toEqual(lunes(10, 55));
     expect(luzSegundo[0]?.inicio).toEqual(lunes(10, 58));
-    expect(luzSegundo[0]?.fin).toEqual(lunes(11, 18));
+    expect(luzSegundo[0]?.fin).toEqual(lunes(11, 25));
   });
 
   it('sin el desfasaje sí colisionan: dos gabinetes con dos personas a la misma hora no entran', () => {
@@ -700,8 +704,35 @@ describe('Caso 11 — Una pausa de 15 días baja las sesiones de 8 a 4 y corre l
     expect(resultado.ok).toBe(true);
     if (!resultado.ok) return;
     expect(resultado.valor.sesionesAsignadas).toBe(4);
-    expect(resultado.valor.estado).toBe('pausada');
     expect(minutosEntre(titularidad.finCiclo, resultado.valor.finCiclo) / (60 * 24)).toBe(15);
+  });
+
+  it('la pausa se agenda, no arranca al declararla: el mes de preaviso sigue siendo del socio', () => {
+    // Se declara con 30 días de anticipación. Si el estado se diera vuelta al
+    // declararla, quien avisa en diciembre que pausa en enero perdería diciembre.
+    const resultado = aplicarPausa(
+      titularidadActiva({ finCiclo: instanteLocal(2027, 1, 31, 23, 59, RELOJ) }),
+      {
+        inicio: instanteLocal(2027, 1, 10, 0, 0, RELOJ),
+        fin: instanteLocal(2027, 1, 25, 0, 0, RELOJ),
+        declaradaEn: instanteLocal(2026, 12, 1, 0, 0, RELOJ),
+      },
+      motor.config.pausa,
+      RELOJ,
+    );
+
+    expect(resultado.ok).toBe(true);
+    if (!resultado.ok) return;
+    const pausada = resultado.valor;
+
+    expect(pausada.estado).toBe('activa');
+    expect(pausada.pausas).toHaveLength(1);
+
+    // En diciembre reserva con normalidad; el 15 de enero, no.
+    expect(puedeConsumirSesion(pausada, instanteLocal(2026, 12, 15, 10, 0, RELOJ)).puede).toBe(true);
+    expect(puedeConsumirSesion(pausada, instanteLocal(2027, 1, 15, 10, 0, RELOJ)).puede).toBe(false);
+    // Y cuando la pausa termina, vuelve a poder.
+    expect(puedeConsumirSesion(pausada, instanteLocal(2027, 1, 28, 10, 0, RELOJ)).puede).toBe(true);
   });
 
   it('un bloque de 10 días no llega al mínimo de 15', () => {

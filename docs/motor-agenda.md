@@ -35,8 +35,8 @@ nadie se lo diga:
 | Combo | Cadena derivada | Duración | Manual v9 |
 |---|---|---|---|
 | BIO ENERGY | IHHT 0–30 (sale :25) → tumbona 30–60 | 60 | 60 |
-| BIO OXYGEN | HBOT 0–58 (sale :55) → IHHT 60–90 | 90 | 90 |
-| BIO RECOVERY | HBOT 0–58 (sale :55) → Recovery Pro 60–120 | 120 | 120 |
+| BIO OXYGEN | HBOT 0–60 (sale :55) → IHHT 60–90 | 90 | 90 |
+| BIO RECOVERY | HBOT 0–60 (sale :55) → Recovery Pro 60–120 | 120 | 120 |
 | BIO LONGEVITY | HBOT (sale :55) → IHHT 60–90 (sale :85) → Recovery Pro 90–150 | 150 | 150 |
 | BIO COMPRESS | Compresión 0–30 (sale :27) → tumbona 30–60 | 60 | 60 |
 
@@ -59,7 +59,15 @@ parámetros de agenda. (Nota clínica que el modelo aprovecha: el descenso ya se
 hace respirando aire, no oxígeno, así que no hace falta ningún intervalo de
 lavado entre HBOT e IHHT.)
 
+Cuando hay ancla, el turnaround cuelga de ella: la limpieza arranca cuando el
+cliente sale, no cuando terminaban nominalmente los minutos de terapia. Por eso
+la cámara se libera en el minuto 60 (55 + 5) y no en el 58 — si no, quedaría
+publicada como libre dos minutos mientras todavía se está higienizando.
+
 **Recovery Pro.** No hace falta declararla: se deriva de la secuencia interna.
+Ahí el turnaround no cuelga del ancla, porque los 12 minutos ya incluyen tiempo
+del cliente (la ducha es la etapa 48–56) y sumarlos otra vez los contaría dos
+veces.
 
 ## Recovery Pro y el desfasaje que nadie escribió
 
@@ -75,15 +83,19 @@ La secuencia interna de Recovery Pro es protocolo, no sugerencia:
 | 48–56 | Ducha y vestuario | gabinete |
 | 56–60 | Salida | — |
 
-La tumbona se libera en el minuto 48, mientras el cliente todavía se está
-duchando. Y el cliente sale a los 56, que es de dónde sale el ancla.
+El cliente suelta la tumbona en el minuto 48, mientras todavía se está duchando.
+Y sale a los 56, que es de dónde sale el ancla.
+
+La tumbona, eso sí, queda bloqueada hasta el 55: estar prestada a Recovery Pro no
+la exime de su propio turnaround. Los tiempos son atributos del recurso, y eso
+vale también cuando el recurso está trabajando para otro.
 
 R-07 pedía que el desfasaje de 30 minutos entre gabinetes **emergiera** en vez de
 estar escrito a mano. Emerge: el gabinete 1 a las 10:00 pide dos tumbonas de sala
-para 10:28–10:48; el gabinete 2 a las 10:00 pediría otras dos para la misma
+para 10:28–10:55; el gabinete 2 a las 10:00 pediría otras dos para la misma
 ventana, y el sub-pool de la sala tiene dos. El pedido se cae solo. A las 10:30,
-en cambio, pide 10:58–11:18 y no se tocan. Buscar la constante «30» en el código
-es inútil: no está.
+en cambio, pide 10:58–11:25 y no se tocan —por tres minutos—. Buscar la constante
+«30» en el código es inútil: no está.
 
 Y si la ducha se hiciera antes de la luz roja, las ventanas se solaparían y el
 desfasaje dejaría de cerrar. Por eso las etapas se validan contiguas.
@@ -116,6 +128,27 @@ a recepción qué pasó, en vez de un «no hay lugar» pelado.
 IHHT.»** Tampoco está declarado. Los tramos de cámara ofrecen las tres
 alternativas en orden y el expansor se queda con la primera que cierra: con dos
 ocupantes, la monoplaza no los admite y sale biplaza.
+
+## Cómo se reparten las unidades
+
+Dos pasadas, y el orden es una decisión de producto, no una optimización.
+
+Primero busca **una sola unidad donde entre el grupo entero**. Partir a tres
+personas entre dos cámaras cuando hay una libre donde entran las tres es peor
+producto, aunque las cuentas cierren.
+
+Si ninguna los aloja a todos, reparte pidiéndole a cada unidad **las plazas que
+de verdad le quedan**. La versión ingenua —pedir `min(faltantes, capacidad)`—
+descarta una unidad a medio llenar aunque tenga lugar, y termina rechazando
+grupos que sí entran: con una multiplaza con dos plazas libres y otra vacía, un
+grupo de ocho se caía.
+
+Y compartir una unidad exige dos cosas a la vez: **ventana idéntica** —una cámara
+se presuriza como una sola sesión, así que sumarse a la tanda de 10:00 se puede y
+empezar una propia a las 10:30 no— y que la unidad **admita convivencia**. Tener
+lugar no alcanza: la biplaza no acepta desconocidos porque R-04 le cobra la
+cámara entera al que va solo, y el gabinete de Recovery Pro tampoco, por la misma
+razón por la que nunca recibe la tumbona del área común.
 
 ## Los rechazos son datos
 
@@ -161,6 +194,10 @@ del puesto IHHT: depende de un protocolo de higiene de máscara y clip de dedo q
 todavía no existe como documento escrito, y el margen es exactamente cero
 (3 + 22 + 5 = 30 = el slot). Si el protocolo real pide un minuto más, la grilla
 de media hora deja de cerrar.
+
+El informe trae además `avisos`: cosas que funcionan **por poco margen**. Hoy hay
+uno solo y conviene tenerlo a la vista — el desfasaje de R-07 cierra por tres
+minutos, y esos tres minutos dependen de un turnaround de tumbona que nadie midió.
 
 **Faltantes**: no existen. La camilla de masajes, el consultorio, la sala TB y
 los puestos IV no tienen tiempos medidos; inventarlos sería peor que no tenerlos.

@@ -47,16 +47,30 @@ export function anclaDerivadaDeEtapas(
 }
 
 /**
- * Minutos que el recurso queda bloqueado: `setup + terapia + turnaround`.
+ * Minutos que el recurso queda bloqueado.
  *
- * Si la secuencia interna se extiende más allá (Recovery Pro llega justo a 60),
- * manda la secuencia: el recurso no puede liberarse antes de que termine su
- * propia coreografía.
+ * Es el máximo de tres cotas, porque las tres describen algo real:
+ *
+ *  - `setup + terapia + turnaround`, el caso normal.
+ *  - El fin de la secuencia interna: el recurso no puede liberarse antes de que
+ *    termine su propia coreografía (Recovery Pro llega justo a 60).
+ *  - **El ancla más el turnaround.** Cuando un ancla explícita corre la salida
+ *    del cliente más allá del fin nominal de la terapia, la limpieza arranca
+ *    cuando el cliente sale, no antes. Sin esta cota, la cámara hiperbárica
+ *    quedaría publicada como libre entre el minuto 58 y el 60 mientras todavía
+ *    se está higienizando.
+ *
+ * El ancla derivada de las etapas no entra en la tercera cota a propósito: ahí
+ * el turnaround ya incluye tiempo del cliente (los 12 minutos de Recovery Pro
+ * cubren la ducha, que es la etapa 48–56), así que sumarlo otra vez lo contaría
+ * dos veces.
  */
 export function bloqueoRecursoMin(tiempos: TiemposRecurso): number {
   const porTiempos = tiempos.setupMin + tiempos.terapiaMin + tiempos.turnaroundMin;
   const finEtapas = tiempos.etapas?.reduce((max, e) => Math.max(max, e.hastaMin), 0) ?? 0;
-  return Math.max(porTiempos, finEtapas);
+  const porAncla =
+    tiempos.anclaSalidaMin !== undefined ? tiempos.anclaSalidaMin + tiempos.turnaroundMin : 0;
+  return Math.max(porTiempos, finEtapas, porAncla);
 }
 
 /** Sub-ocupaciones de otros pools que dispara la secuencia interna del recurso. */
@@ -117,15 +131,23 @@ export interface TramoAEncadenar {
  *   BIO LONGEVITY HBOT (sale 55) → IHHT 60-90 (sale 85) → RP 90-150   = 150
  *   BIO COMPRESS  Compresión 0-30 (sale a los 27) → tumbona 30-60     = 60
  */
-export function derivarCadena(tramos: readonly TramoAEncadenar[]): TramoDerivado[] {
+export function derivarCadena(
+  tramos: readonly TramoAEncadenar[],
+  minutoInicialDelDia = 0,
+): TramoDerivado[] {
   const derivados: TramoDerivado[] = [];
   let salidaAnterior: number | undefined;
 
   for (const tramo of tramos) {
+    // La grilla se aplica sobre el reloj de pared, no sobre el inicio del
+    // producto. Con todos los recursos en grilla de 30 da lo mismo, pero un
+    // recurso que abre en hora en punto tiene que abrir en hora en punto aunque
+    // el combo haya arrancado a y media.
     const offsetMin =
       salidaAnterior === undefined
         ? 0
-        : alinearAGrilla(salidaAnterior, tramo.tiempos.grillaInicioMin);
+        : alinearAGrilla(minutoInicialDelDia + salidaAnterior, tramo.tiempos.grillaInicioMin) -
+          minutoInicialDelDia;
 
     const salida = offsetMin + salidaClienteMin(tramo.tiempos);
 

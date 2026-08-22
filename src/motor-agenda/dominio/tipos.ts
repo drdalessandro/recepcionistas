@@ -130,6 +130,22 @@ export interface UnidadRecurso {
   readonly nombre: string;
   /** Cuántas personas entran a la vez (multiplaza 6, gabinete 2, puesto 1). */
   readonly capacidad: number;
+  /**
+   * ¿Pueden convivir **reservas distintas** en la unidad al mismo tiempo?
+   *
+   * Tener lugar no alcanza. La multiplaza sí se comparte: R-06 dice que un
+   * cliente puede sumarse a una sesión ya reservada hasta el inicio, sin piso de
+   * sesión. La biplaza no: R-04 le cobra el precio de monoplaza al que va solo,
+   * o sea que está pagando la cámara entera, y meterle un desconocido después
+   * obligaría a recotizarle el turno. El gabinete de Recovery Pro tampoco: es
+   * privado, que es la misma razón por la que nunca recibe la tumbona del área
+   * común.
+   *
+   * Obligatorio en toda unidad con capacidad mayor a 1 — el validador no deja
+   * arrancar sin él, porque el default silencioso en cualquiera de las dos
+   * direcciones rompe un producto.
+   */
+  readonly compartible?: boolean;
   readonly planta: Planta;
   /** Sólo en tumbonas: define la direccionalidad del pool. */
   readonly ubicacion?: UbicacionTumbona;

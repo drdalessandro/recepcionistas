@@ -97,7 +97,27 @@ mismos minutos de sauna y cold plunge, y dos tumbonas en paralelo del 28 al 48.
 Si con dos personas el cold plunge se hace por turnos, la secuencia se estira y
 el desfasaje de 30 deja de cerrar. **Confirmar que las etapas son simultáneas.**
 
-### C-8 · Sábados sin franja clínica
+### C-8 · El turnaround de la tumbona decide si el desfasaje cierra 🔴
+
+Esto no estaba a la vista hasta que el modelo se armó, y es el hallazgo más
+incómodo del módulo.
+
+Recovery Pro suelta la tumbona en el minuto 48, pero la tumbona sigue bloqueada
+su propio turnaround: hasta el 55. El gabinete siguiente la pide en el minuto 58.
+**El desfasaje de 30 minutos de R-07 cierra por tres minutos**, y ese margen sale
+de un turnaround de 7 minutos que está marcado `[PROPUESTA]` y nadie midió.
+
+Si el turnaround real de la tumbona resulta ser 10 o más, dos gabinetes dejan de
+convivir y la capacidad de Recovery Pro se corta a la mitad —sin que nadie lo
+note, porque el sistema simplemente empieza a rechazar el segundo turno—.
+
+El validador lo reporta al arrancar, en `informe.avisos`, con el margen exacto.
+Pero el aviso no reemplaza a la medición.
+
+**Se necesita:** cronometrar cuánto lleva dejar una tumbona lista para el
+siguiente.
+
+### C-9 · Sábados sin franja clínica
 
 La franja clínica es de lunes a viernes. Como toda IV y toda TB son clínicas sin
 excepción, **el sábado no se puede hacer ninguna de las dos**. Es una consecuencia
@@ -243,7 +263,27 @@ Crónica contrate HEALTHSPAN.
 Confirmar que el ruteo es orientativo para la conversación de venta y no una
 restricción del sistema.
 
-### P-13 · La convivencia con lo que ya está en producción
+### P-13 · ¿La biplaza admite que se le sume un desconocido?
+
+Tener lugar y admitir convivencia son dos cosas distintas, y el modelo ahora las
+separa: cada unidad con capacidad para más de uno declara si acepta **reservas
+distintas** a la vez.
+
+Cómo quedó declarado, y por qué:
+
+- **Multiplaza: sí.** R-06 lo dice con todas las letras — no hay corte de
+  incorporación, un cliente puede sumarse hasta el inicio.
+- **Biplaza: no.** R-04 le cobra el precio de monoplaza al que va solo, o sea que
+  está pagando la cámara entera. Sumarle a alguien después obligaría a
+  recotizarle el turno hacia abajo.
+- **Gabinete Recovery Pro: no.** Es privado, que es la misma razón por la que
+  nunca recibe la tumbona del área común.
+
+Las dos últimas son deducciones, no reglas escritas. Si la intención comercial es
+otra, es una línea de configuración — pero conviene decidirlo, porque hasta que
+esto se separó el sistema metía dos desconocidos en la misma cámara.
+
+### P-14 · La convivencia con lo que ya está en producción
 
 El módulo es aditivo y no toca nada. Pero revisa reglas que el repo ya tiene
 implementadas de otra manera: R-06, R-07, R-09, la franja clínica (que hoy no
