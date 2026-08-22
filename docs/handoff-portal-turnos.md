@@ -1,5 +1,44 @@
 # Cancelar y mover un turno desde el Portal — respuesta de recepcionistas
 
+> ## 🔴 Consultas médicas rechazadas (22-ago): arreglado, y la causa era otra
+>
+> El handoff de urgencia suponía que `disponibilidadDePaciente` **devolvía una
+> grilla vacía** para las consultas. No es así: hay un recurso `R_CONSULTORIO`,
+> y para `CONSULTA_MED_*` la función devuelve días. Reproducido en test.
+>
+> **La causa real es la ventana de reserva (R-13).** Esa grilla solo llega hasta
+> donde llega la ventana del perfil: **48 h para un paciente público**. Los
+> médicos publican su agenda con semanas de anticipación, así que un turno del
+> 25-ago consultado el 22-ago cae fuera — con el Slot perfectamente `free`.
+> Eso explica lo mismo que la hipótesis original (que las rechazara todas, con
+> Slots libres, justo tras el deploy), pero el arreglo es distinto.
+>
+> Aplicarle R-13 a una consulta además es **al revés de lo que se quiere**: la
+> consulta es la puerta de entrada, y el paciente nuevo —el que más necesita
+> entrar— es justo el que tiene la ventana más corta.
+>
+> **El arreglo** es el que sugirieron: cada servicio se valida contra su propia
+> fuente de verdad (`chequearHorarioDisponible`). Consultas → la **agenda
+> publicada del profesional** (`Schedule SCH_<código>` + sus `Slot` libres);
+> terapias → la grilla de salas, con R-13 como siempre. Se compara por
+> **instante**, nunca como texto.
+>
+> No hizo falta usar el `slotId`: alcanza con el `practitionerCodigo` del
+> servicio, que ya viaja en el catálogo. El contrato del portal no cambia.
+>
+> **También estaba en `bw-mover-turno`** (mío, de la misma tanda): mover una
+> consulta habría fallado igual. Arreglado en el mismo lugar.
+>
+> Sobre la bomba de tiempo de los dos formatos de `start`: **era real y casi la
+> piso**. Al armar las alternativas usé por reflejo el `isoArgentina` de
+> `sena.ts`, que lleva milisegundos porque lo exige MercadoPago — el portal no
+> habría reconocido esos horarios como los mismos. Ahora existe
+> `isoHorarioPortal` con ese único propósito y el nombre lo dice; un test fija
+> el formato.
+
+---
+
+
 > **Estado: LISTO del lado de recepcionistas (2026-08-21).** Los dos bots, la
 > entrada en la AccessPolicy y la extensión de movimientos están implementados y
 > testeados. **Falta el deploy** (`npm run deploy:bots` + `npm run seed`), sin el

@@ -313,8 +313,19 @@ export function horarioOfrecido(dias: readonly DiaDisponible[], inicio: Date): b
   return dias.some((d) => d.horarios.some((h) => h.inicio === buscado));
 }
 
-/** ISO con offset fijo de Argentina (mismo formato que generarSlots). */
-function isoArgentina(d: Date): string {
+/**
+ * ISO con offset fijo de Argentina, **sin milisegundos**: es el formato exacto
+ * de los horarios que consume el portal (`bw-disponibilidad` → los chips).
+ *
+ * Se exporta para que TODO lo que devuelva horarios al portal use este mismo
+ * formato. Ojo con `isoArgentina` de `lib/sena.ts`, que es parecido pero lleva
+ * milisegundos (lo exige MercadoPago): mezclarlos hace que dos horarios iguales
+ * no se reconozcan como el mismo y el portal deje de tachar el que corresponde.
+ */
+export function isoHorarioPortal(d: Date): string {
   const local = new Date(d.getTime() - 3 * 60 * 60 * 1000);
   return `${local.toISOString().slice(0, 19)}-03:00`;
 }
+
+/** Alias interno histórico. */
+const isoArgentina = isoHorarioPortal;
