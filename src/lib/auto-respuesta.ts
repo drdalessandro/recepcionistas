@@ -296,10 +296,10 @@ export function armarAutoRespuesta(ctx: ContextoAutoRespuesta): DecisionAutoResp
   // De quién depende la respuesta humana y cuándo llega. Es la frase que baja
   // la ansiedad: el paciente sabe que hay alguien del otro lado y cuándo.
   const cuandoTeResponden = abierto
-    ? 'En un rato te responde alguien del equipo.'
+    ? 'Enseguida te contacta alguien del equipo.'
     : apertura
-      ? `Ahora estamos cerrados: abrimos ${apertura} y te respondemos.`
-      : 'Te responde alguien del equipo apenas abramos.';
+      ? `Ahora estamos cerrados: abrimos ${apertura} y te respondemos. Por favor, dejanos tu nombre y apellido para contactarte`
+      : 'Te responde alguien del equipo apenas reabramos.';
 
   switch (intencion) {
     case 'humano':
