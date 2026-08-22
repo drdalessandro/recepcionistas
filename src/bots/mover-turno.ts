@@ -21,18 +21,24 @@
  *     puede mover a un horario que igual no podría haber reservado de cero —
  *     molesto pero coherente. Si NO revalidamos, se cuela en la ventana de otro.
  *
- * Sale gratis: `disponibilidadDePaciente` ya calcula los horarios con su perfil
- * (R-13), la capacidad (R-07), el horario del centro y las solicitudes de
- * otros. Mover a un horario que esa función no ofrece se rechaza.
+ * Sale gratis: la grilla de terapias ya calcula con su perfil (R-13), la
+ * capacidad (R-07), el horario del centro y las solicitudes de otros.
+ *
+ * **Salvo las consultas médicas**, que no pasan por esa grilla: su
+ * disponibilidad es la agenda publicada del profesional, que se publica con
+ * semanas de anticipación. Aplicarles R-13 las rechazaría todas — y sería al
+ * revés de lo que se quiere, porque la consulta es la puerta de entrada y el
+ * paciente nuevo es el que tiene la ventana más corta. De eso se ocupa
+ * `chequearHorarioDisponible`.
  */
 import type { BotEvent, MedplumClient } from '@medplum/core';
 import type { Appointment, Slot } from '@medplum/fhirtypes';
 import { getServicio } from '../config/catalogo.js';
 import { MOVIMIENTOS } from '../config/reglas.js';
 import { EXT } from '../fhir/identifiers.js';
-import { horarioOfrecido, type DiaDisponible } from '../lib/disponibilidad.js';
+import type { DiaDisponible } from '../lib/disponibilidad.js';
 import {
-  disponibilidadDePaciente,
+  chequearHorarioDisponible,
   esTurnoDelPaciente,
   motivoNoAccionable,
   scheduleIdDeRecurso,
@@ -115,16 +121,18 @@ export async function handler(
     return { ok: false, mensaje: 'Elegí un horario futuro.' };
   }
 
-  // Revalidación (ver el encabezado): la MISMA disponibilidad que pinta la
-  // grilla del portal. Si el horario no está entre los ofrecidos, se devuelven
-  // alternativas frescas en vez de un error.
-  const { disp } = await disponibilidadDePaciente(medplum, e.pacienteRef, servicio);
-  if (!horarioOfrecido(disp.dias, inicio)) {
+  // Revalidación (ver el encabezado). `chequearHorarioDisponible` pregunta a la
+  // fuente que corresponde: la grilla de salas para las terapias —que ya aplica
+  // la ventana R-13— y la agenda publicada del médico para las consultas. Una
+  // consulta NO se valida contra la grilla de terapias: el médico publica su
+  // agenda con semanas de anticipación y R-13 la rechazaría entera.
+  const chequeo = await chequearHorarioDisponible(medplum, e.pacienteRef, servicio, inicio);
+  if (!chequeo.ok) {
     return {
       ok: false,
       motivo: 'horario-ocupado',
       mensaje: 'Ese horario ya no está disponible. Elegí otro de los que quedan libres.',
-      alternativas: disp.dias,
+      ...(chequeo.alternativas ? { alternativas: chequeo.alternativas } : {}),
     };
   }
 

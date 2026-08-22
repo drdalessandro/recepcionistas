@@ -16,9 +16,9 @@ import type { BotEvent, MedplumClient } from '@medplum/core';
 import type { Task, TaskInput } from '@medplum/fhirtypes';
 import { getServicio } from '../config/catalogo.js';
 import { COD, SYSTEM } from '../fhir/identifiers.js';
-import { horarioOfrecido, type DiaDisponible } from '../lib/disponibilidad.js';
+import type { DiaDisponible } from '../lib/disponibilidad.js';
 import { mensajeWhatsAppRecepcion, resumenSolicitud, validarSolicitud, type SolicitudTurno } from '../lib/solicitudes.js';
-import { disponibilidadDePaciente, enviarWhatsApp } from './_shared.js';
+import { chequearHorarioDisponible, enviarWhatsApp } from './_shared.js';
 
 export interface ResultadoSolicitud {
   ok: boolean;
@@ -40,10 +40,16 @@ export async function handler(medplum: MedplumClient, event: BotEvent<SolicitudT
   }
 
   // Defensa en profundidad (feedback de recepción 2026-08-12): si la solicitud
-  // trae horario exacto y un código de SERVICIO resoluble, se verifica contra
-  // la MISMA disponibilidad que pinta los chips del portal (ocupación R-07,
-  // ventana R-13, horario del centro, solicitudes pendientes de otros). Un
-  // horario tomado se rechaza acá aunque el portal lo haya mostrado libre.
+  // trae horario exacto y un código de SERVICIO resoluble, se verifica que el
+  // horario siga estando. Un horario tomado se rechaza acá aunque el portal lo
+  // haya mostrado libre.
+  //
+  // El chequeo pregunta a la fuente que corresponde según el servicio
+  // (`chequearHorarioDisponible`): la grilla de salas para las terapias, la
+  // agenda publicada del profesional para las consultas. Validar una consulta
+  // contra la grilla de terapias las rechazaba TODAS — le aplicaba la ventana
+  // R-13 a un turno que el médico publicó con semanas de anticipación.
+  //
   // Best-effort: si el chequeo falla o el código es una categoría ("HBOT"),
   // la solicitud pasa como siempre — la última palabra la tiene Recepción.
   if (e.preferenciaInicio && e.terapiaCodigo) {
@@ -55,13 +61,18 @@ export async function handler(medplum: MedplumClient, event: BotEvent<SolicitudT
     }
     if (servicio) {
       try {
-        const { disp } = await disponibilidadDePaciente(medplum, e.pacienteRef, servicio);
-        if (!horarioOfrecido(disp.dias, new Date(e.preferenciaInicio))) {
+        const chequeo = await chequearHorarioDisponible(
+          medplum,
+          e.pacienteRef,
+          servicio,
+          new Date(e.preferenciaInicio),
+        );
+        if (!chequeo.ok) {
           return {
             ok: false,
             motivo: 'horario-ocupado',
             mensaje: 'Ese horario acaba de ocuparse o ya no está disponible. Elegí otro de los horarios libres.',
-            alternativas: disp.dias,
+            ...(chequeo.alternativas ? { alternativas: chequeo.alternativas } : {}),
           };
         }
       } catch {

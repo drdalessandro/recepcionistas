@@ -31,8 +31,12 @@ import { indiceSolicitudAResolver } from '../lib/solicitudes.js';
 import { esPlanBW, estadoDeCoverage, planCodigoDeCoverage } from '../fhir/coverage.js';
 import {
   calcularDisponibilidad,
+  horarioOfrecido,
+  isoHorarioPortal,
   perfilDeReserva,
+  type DiaDisponible,
   type Disponibilidad,
+  type HorarioDisponible,
   type SolicitudPendiente,
 } from '../lib/disponibilidad.js';
 import type { PerfilReserva } from '../config/reglas.js';
@@ -805,6 +809,101 @@ export async function crearAlertaRecepcion(
     ...(opts.pacienteRef ? { for: { reference: opts.pacienteRef } } : {}),
     ...(opts.focusRef ? { focus: { reference: opts.focusRef } } : {}),
   });
+}
+
+export interface ChequeoHorario {
+  ok: boolean;
+  /** Grilla fresca para repintar cuando el horario no está. */
+  alternativas?: DiaDisponible[];
+}
+
+/**
+ * ¿El horario pedido está realmente disponible para este paciente?
+ *
+ * Hay DOS fuentes de verdad distintas y confundirlas rompió producción:
+ *
+ * - **Terapias** → `disponibilidadDePaciente`: una grilla calculada sobre las
+ *   salas, el horario del centro, la capacidad (R-07) y la **ventana del perfil
+ *   (R-13)**, que para el público llega a 48 h.
+ * - **Consultas médicas** → la **agenda publicada del profesional**
+ *   (`Schedule SCH_<codigo>` + sus `Slot`). El médico decide cuándo atiende, y
+ *   publica con semanas de anticipación.
+ *
+ * Validar una consulta contra la grilla de terapias rechazaba TODAS: un turno
+ * del 25 de agosto queda fuera de la ventana de 48 h de un paciente público,
+ * aunque el Slot del médico esté libre y el portal se lo esté mostrando.
+ * Aplicarle R-13 a una consulta además es al revés de lo que se quiere: la
+ * consulta es la PUERTA DE ENTRADA — el paciente nuevo es justamente el que
+ * tiene la ventana más corta.
+ *
+ * Para la consulta la prueba es directa y no ambigua: un `Slot` `free` en la
+ * agenda de ese profesional, comparado **como instante** (nunca como texto:
+ * en el servidor conviven `-03:00` y `Z` con milisegundos).
+ */
+export async function chequearHorarioDisponible(
+  medplum: MedplumClient,
+  pacienteRef: string,
+  servicio: Servicio,
+  inicio: Date,
+): Promise<ChequeoHorario> {
+  if (servicio.practitionerCodigo) {
+    return chequearAgendaMedico(medplum, servicio.practitionerCodigo, inicio);
+  }
+  const { disp } = await disponibilidadDePaciente(medplum, pacienteRef, servicio);
+  return horarioOfrecido(disp.dias, inicio) ? { ok: true } : { ok: false, alternativas: disp.dias };
+}
+
+/** Slots libres de la agenda de un médico, y si el pedido está entre ellos. */
+async function chequearAgendaMedico(
+  medplum: MedplumClient,
+  practitionerCodigo: string,
+  inicio: Date,
+): Promise<ChequeoHorario> {
+  const sch = await medplum
+    .searchOne('Schedule', `identifier=${SYSTEM.recursoCodigo}|SCH_${practitionerCodigo}`)
+    .catch(() => undefined);
+  if (!sch?.id) {
+    // Sin agenda publicada no hay nada que contradecir: que decida Recepción,
+    // como con cualquier código que este chequeo no sabe resolver.
+    return { ok: true };
+  }
+  const libres = await medplum
+    .searchResources('Slot', `schedule=Schedule/${sch.id}&status=free&_count=200`)
+    .catch(() => [] as Slot[]);
+
+  // Comparación por INSTANTE. Como texto fallaría en silencio en cuanto se
+  // crucen los dos formatos de `start` que hay en el servidor.
+  const pedido = inicio.getTime();
+  if (libres.some((s) => s.start && new Date(s.start).getTime() === pedido)) {
+    return { ok: true };
+  }
+  return { ok: false, alternativas: agruparPorDia(libres) };
+}
+
+/** Slots sueltos → la forma `DiaDisponible` que ya sabe pintar el portal. */
+function agruparPorDia(slots: Slot[]): DiaDisponible[] {
+  const porDia = new Map<string, HorarioDisponible[]>();
+  const ahora = Date.now();
+  for (const s of slots) {
+    if (!s.start || new Date(s.start).getTime() <= ahora) {
+      continue;
+    }
+    const inicio = new Date(s.start);
+    const fin = s.end ? new Date(s.end) : new Date(inicio.getTime() + 60 * 60_000);
+    // isoHorarioPortal, NO el isoArgentina de sena.ts: ese lleva milisegundos
+    // y el portal no reconocería el horario como el mismo.
+    const fecha = isoHorarioPortal(inicio).slice(0, 10);
+    porDia.set(fecha, [
+      ...(porDia.get(fecha) ?? []),
+      { inicio: isoHorarioPortal(inicio), fin: isoHorarioPortal(fin) },
+    ]);
+  }
+  return [...porDia.entries()]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([fecha, horarios]) => ({
+      fecha,
+      horarios: horarios.sort((x, y) => x.inicio.localeCompare(y.inicio)),
+    }));
 }
 
 /**
