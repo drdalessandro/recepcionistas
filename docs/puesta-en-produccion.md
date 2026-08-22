@@ -306,6 +306,9 @@ cuál. Conviene dejar en la ficha solo el email con el que el paciente entra.
 
 ## 7. MercadoPago: pasaje de prueba a producción
 
+> Estado real de la integración —qué funciona, qué está codeado pero inerte y
+> qué falta— en [`mercadopago.md`](mercadopago.md).
+
 Los cobros tienen **dos juegos de credenciales** (Access Token) en
 [developers de MercadoPago](https://www.mercadopago.com.ar/developers): el de
 **prueba** (cuenta/usuario de prueba, dinero ficticio) y el **productivo** (los

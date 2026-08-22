@@ -39,7 +39,7 @@ import {
   type HorarioDisponible,
   type SolicitudPendiente,
 } from '../lib/disponibilidad.js';
-import type { PerfilReserva } from '../config/reglas.js';
+import { MERCADOPAGO, type PerfilReserva } from '../config/reglas.js';
 import type { IntensidadMembresia, Servicio } from '../domain/types.js';
 import { resolverTC } from '../config/tipo-cambio.js';
 import { CATEGORIA_COMERCIAL, getServicio, nombreServicioRecepcion } from '../config/catalogo.js';
@@ -1123,6 +1123,11 @@ export async function crearPreferenciaMP(
       ...(opts.appointmentId ? { metadata: { appointmentId: opts.appointmentId } } : {}),
       // Lo que ve el cliente en el resumen de su tarjeta.
       statement_descriptor: 'BIOWELLNESS',
+      // Cuotas EXPLÍCITAS. Sin esto cada link aceptaba el máximo que la cuenta
+      // ofreciera por default, y el costo del financiamiento no se ve en ningún
+      // tablero (R-18: se guardan montos brutos) — aparece recién en la
+      // liquidación. Es una decisión comercial: vive en config/reglas.ts.
+      payment_methods: { installments: MERCADOPAGO.maxCuotas },
       ...(opts.soloAprobacionInmediata ? { binary_mode: true } : {}),
       back_urls: { success: appUrl, pending: appUrl, failure: appUrl },
       auto_return: 'approved',

@@ -75,7 +75,39 @@ export async function handler(
       continue;
     }
 
-    // Reset de sesiones del ciclo + actualizar ciclo facturado.
+    const planCodigo = planCodigoDeCoverage(c);
+    const pacienteRef = c.beneficiary?.reference;
+
+    // ORDEN CRÍTICO: primero la DEUDA, después la marca de "ya facturado".
+    //
+    // Al revés (como estaba hasta 2026-08-22) hay una ventana fatal: si el
+    // proceso muere entre marcar el ciclo y emitir el Invoice, el socio queda
+    // como facturado sin que exista la factura. `debeRenovarMembresia` filtra
+    // por ese campo, y el cobro solo corre los días 1-5, así que ESE MES NO SE
+    // COBRA NUNCA y nadie se entera.
+    //
+    // En este orden la ventana es inofensiva: si muere después de emitir el
+    // Invoice, la próxima corrida vuelve a entrar, `emitirInvoicePlan` es
+    // idempotente por ciclo (no duplica) y recién ahí se marca el ciclo.
+    let cobro: Awaited<ReturnType<typeof emitirInvoicePlan>> | undefined;
+    if (planCodigo) {
+      const m = getMembresia(planCodigo);
+      const { totalARS } = calcularCobro([{ tipo: 'membresia', codigo: planCodigo }], { tc });
+      const descripcion = `Membresía ${m.tier} ${m.intensidad} ${m.variante} · ${ciclo}`;
+      cobro = await emitirInvoicePlan(medplum, {
+        coverageId: c.id,
+        pacienteRef,
+        tipo: 'membresia',
+        planCodigo,
+        descripcion,
+        totalARS,
+        tc,
+        ciclo,
+        status: 'issued',
+      });
+    }
+
+    // Reset de sesiones del ciclo + marcar el ciclo como facturado.
     const extension = (c.extension ?? []).map((x) =>
       x.url === EXT.sesionesUsadas
         ? { url: EXT.sesionesUsadas, valueInteger: 0 }
@@ -88,32 +120,28 @@ export async function handler(
     }
     await medplum.updateResource<Coverage>({ ...c, extension });
 
-    // Cobro mensual vía MercadoPago (R-11). Idempotente por ciclo.
-    const planCodigo = planCodigoDeCoverage(c);
-    const pacienteRef = c.beneficiary?.reference;
-    if (planCodigo) {
+    // Cobro mensual vía MercadoPago (R-11).
+    if (planCodigo && cobro) {
       const m = getMembresia(planCodigo);
       const { totalARS } = calcularCobro([{ tipo: 'membresia', codigo: planCodigo }], { tc });
       const descripcion = `Membresía ${m.tier} ${m.intensidad} ${m.variante} · ${ciclo}`;
-
-      // Invoice `issued` (pendiente). Se resuelve acá (tarjeta guardada) o por webhook.
-      const cobro = await emitirInvoicePlan(medplum, {
-        coverageId: c.id,
-        pacienteRef,
-        tipo: 'membresia',
-        planCodigo,
-        descripcion,
-        totalARS,
-        tc,
-        ciclo,
-        status: 'issued',
-      });
       if (cobro.yaExistia) {
+        // El Invoice de este ciclo ya estaba: lo emitió una corrida anterior
+        // (que quizá murió antes de marcar el ciclo). No se vuelve a cobrar.
         omitidas++;
         continue;
       }
 
       const mpToken = event.secrets['MERCADOPAGO_ACCESS_TOKEN']?.valueString;
+      // ⚠️ HOY ESTE CAMINO NUNCA SE ACTIVA: ningún flujo del sistema ESCRIBE
+      // `mp-customer-id` / `mp-card-id`. No existe la captura de tarjeta, así
+      // que todas las cuotas salen por link de pago.
+      //
+      // Se deja el código porque está probado y es el destino, pero que quede
+      // dicho: el débito automático es un REQUISITO PENDIENTE, no algo que ya
+      // tengamos. Falta tokenizar la tarjeta del socio (MP Bricks en el front
+      // con la public key) y guardar el customer + card en el Coverage.
+      // Ver docs/mercadopago.md § Débito automático.
       const customerId = c.extension?.find((x) => x.url === EXT.mpCustomerId)?.valueString;
       const cardId = c.extension?.find((x) => x.url === EXT.mpCardId)?.valueString;
 
