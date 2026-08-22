@@ -25,6 +25,12 @@ Bloque 0). Backend **Medplum (FHIR R4)**, todo en **TypeScript**.
   AccessPolicies.
 - `src/bots` — Medplum Bots: envoltura fina sobre `src/lib` + integraciones.
 - `src/seed` — builders FHIR + runner idempotente del seed.
+- `src/motor-agenda` — **motor de agenda** (lógica pura, autocontenido): decide si
+  una reserva es posible, qué recursos bloquea y en qué orden. Los tiempos son
+  atributos del recurso y los offsets de un combo se derivan, no se declaran.
+  Todavía **no lo usa ningún bot**: convive con `src/lib/reglas-turno.ts` porque
+  revisa reglas que el repo ya implementa de otra manera. Ver
+  [`docs/motor-agenda.md`](docs/motor-agenda.md).
 - `tests` — casos AC del Anexo A + integridad del catálogo.
 
 > Regla práctica: **la lógica de negocio nueva va en `src/lib` como función pura
