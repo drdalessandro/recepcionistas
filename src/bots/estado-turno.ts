@@ -8,9 +8,7 @@
  */
 import type { BotEvent, MedplumClient } from '@medplum/core';
 import type { Appointment, Encounter } from '@medplum/fhirtypes';
-import { EXT, SYSTEM } from '../fhir/identifiers.js';
-import { evaluarCancelacion } from '../lib/reglas-turno.js';
-import { avisarListaDeEspera, devolverSesionDePlan } from './_shared.js';
+import { cancelarTurnoYLiberar, cerrarEncounterDeTurno } from './_shared.js';
 
 export type EstadoTurno = 'arrived' | 'checked-in' | 'fulfilled' | 'cancelled';
 
@@ -34,66 +32,25 @@ export async function handler(medplum: MedplumClient, event: BotEvent<EntradaEst
   const { appointmentId, estado } = event.input;
 
   const appt = await medplum.readResource('Appointment', appointmentId);
-  const estadoPrevio = appt.status;
-  appt.status = estado;
-  // La excepción de R-14 se registra EN el turno: quién la declaró y cuándo, en
-  // el mismo lugar que la decisión que habilita.
-  if (estado === 'cancelled' && event.input.fuerzaMayorMedica) {
-    appt.extension = [
-      ...(appt.extension ?? []).filter(
-        (x) => x.url !== EXT.cancelacionFuerzaMayor && x.url !== EXT.cancelacionDeclaradaPor,
-      ),
-      { url: EXT.cancelacionFuerzaMayor, valueBoolean: true },
-      ...(event.input.declaradaPorRef
-        ? [{ url: EXT.cancelacionDeclaradaPor, valueString: event.input.declaradaPorRef }]
-        : []),
-    ];
-  }
-  const actualizado = await medplum.updateResource(appt);
-
   const pacienteRef = appt.participant?.find((p) => p.actor?.reference?.startsWith('Patient/'))?.actor?.reference;
+
+  // Cancelar es un flujo entero (R-14, saldo, lista de espera, salas) y entra
+  // también por el portal: vive UNA sola vez en `cancelarTurnoYLiberar`.
+  if (estado === 'cancelled') {
+    const r = await cancelarTurnoYLiberar(medplum, appt, {
+      ...(event.input.fuerzaMayorMedica !== undefined ? { fuerzaMayorMedica: event.input.fuerzaMayorMedica } : {}),
+      ...(event.input.declaradaPorRef ? { declaradaPorRef: event.input.declaradaPorRef } : {}),
+    });
+    return r.appointment;
+  }
+
+  const actualizado = await medplum.updateResource<Appointment>({ ...appt, status: estado });
 
   // Encounter de la visita.
   if (estado === 'arrived' || estado === 'checked-in') {
     await asegurarEncounter(medplum, appointmentId, pacienteRef);
-  } else if (estado === 'fulfilled' || estado === 'cancelled') {
-    await cerrarEncounter(medplum, appointmentId, estado === 'fulfilled' ? 'finished' : 'cancelled');
-  }
-
-  // Turno cancelado: el saldo pendiente (50% restante) no se debe más.
-  // (La seña YA COBRADA no se toca: su devolución es plata y se decide a mano.)
-  if (estado === 'cancelled') {
-    const saldo = await medplum.searchOne('Invoice', `identifier=${SYSTEM.invoice}|saldo-${appointmentId}`);
-    if (saldo?.status === 'issued') {
-      await medplum.updateResource({ ...saldo, status: 'cancelled' });
-    }
-
-    // R-14 · devolver la sesión al plan si canceló a tiempo.
-    //
-    // La regla estaba escrita y testeada desde siempre, pero NO la llamaba
-    // nadie: quien cancelaba con la anticipación que pide la regla perdía igual
-    // la sesión que había pagado. El error iba siempre en contra del paciente.
-    //
-    // Solo si el turno se pagó con un plan (`cobertura-usada`) y solo si venía
-    // de un estado vivo: cancelar dos veces no devuelve dos sesiones.
-    const coberturaRef = appt.extension?.find((x) => x.url === EXT.coberturaUsada)?.valueString;
-    const yaEstabaCancelado = estadoPrevio === 'cancelled' || estadoPrevio === 'noshow' || estadoPrevio === 'entered-in-error';
-    if (coberturaRef && !yaEstabaCancelado && appt.start) {
-      const r = evaluarCancelacion(new Date(), new Date(appt.start), {
-        fuerzaMayorMedica: event.input.fuerzaMayorMedica ?? false,
-      });
-      if (r.devuelveSaldo) {
-        await devolverSesionDePlan(medplum, coberturaRef.split('/')[1] as string);
-      }
-    }
-
-    // El lugar que se libera es de alguien más. Si hay gente en la lista de
-    // espera a la que le sirve ESTE horario, Recepción se entera; hasta hoy el
-    // hueco desaparecía en silencio (y el portal ya prometía "te avisamos
-    // apenas se libere alguno" sin nada detrás).
-    if (!yaEstabaCancelado) {
-      await avisarListaDeEspera(medplum, appt);
-    }
+  } else if (estado === 'fulfilled') {
+    await cerrarEncounterDeTurno(medplum, appointmentId, 'finished');
   }
 
   // Liberar la(s) sala(s) al terminar.
@@ -130,18 +87,4 @@ async function asegurarEncounter(
     ...(pacienteRef ? { subject: { reference: pacienteRef } } : {}),
   };
   await medplum.createResource(encounter);
-}
-
-async function cerrarEncounter(
-  medplum: MedplumClient,
-  appointmentId: string,
-  status: 'finished' | 'cancelled',
-): Promise<void> {
-  const enc = await medplum.searchOne('Encounter', `appointment=Appointment/${appointmentId}`);
-  if (!enc) {
-    return;
-  }
-  enc.status = status;
-  enc.period = { ...(enc.period ?? {}), end: new Date().toISOString() };
-  await medplum.updateResource(enc);
 }

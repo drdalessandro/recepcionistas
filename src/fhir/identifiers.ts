@@ -165,6 +165,12 @@ export const EXT = {
   /** R-14 · quién declaró la fuerza mayor (valueString con la referencia). */
   cancelacionDeclaradaPor: `${BASE}/StructureDefinition/cancelacion-declarada-por`,
   /**
+   * Cuántas veces se movió ESTE turno desde el portal (valueInteger).
+   * Sin la extensión el turno cuenta como 0 movimientos. Contrato con el portal,
+   * que muestra cuántos le quedan al paciente (docs/handoff-portal-turnos.md).
+   */
+  movimientos: `${BASE}/StructureDefinition/movimientos`,
+  /**
    * Lista de espera · días de la semana que le sirven, CSV con la convención de
    * `Date.getDay()` ("2,4" = martes y jueves). Vacío/ausente = cualquier día.
    * FHIR R4 modela la ventana (`requestedPeriod`) pero no la preferencia dentro

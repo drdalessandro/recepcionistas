@@ -40,6 +40,18 @@ export const CANCELACION = {
 } as const;
 
 /**
+ * Mover un turno desde el portal (autogestión del paciente).
+ *
+ * El tope existe para que mover no se convierta en una reserva indefinida: sin
+ * él, un lugar puede quedar "guardado" y correrse semana a semana sin liberarse
+ * nunca para otro.
+ */
+export const MOVIMIENTOS = {
+  /** Cuántas veces puede mover el paciente UN MISMO turno. */
+  max: 3,
+} as const;
+
+/**
  * Seña autoservicio (R-19): la reserva tentativa nace con un link de pago y un
  * vencimiento; si la seña no se acredita a tiempo, el lugar se libera solo.
  */

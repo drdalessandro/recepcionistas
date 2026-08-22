@@ -242,8 +242,15 @@ export const POLICY_PACIENTE_PORTAL: AccessPolicy = {
     // Bots que el paciente puede ejecutar — y NINGÚN otro:
     //  - bw-solicitar-turno: crea el Task de solicitud y avisa a Recepción.
     //  - bw-disponibilidad: SOLO LECTURA, horarios reservables para él (R-13).
+    //  - bw-cancelar-turno / bw-mover-turno: autogestión de SUS turnos. Los dos
+    //    verifican que el turno sea del paciente antes de tocar nada: esta
+    //    policy acota lo que LEE, no lo que le pasa a un bot.
     // (Cambio acá => avisar al portal para actualizar su espejo.)
-    { resourceType: 'Bot', readonly: true, criteria: 'Bot?name=bw-solicitar-turno,bw-disponibilidad' },
+    {
+      resourceType: 'Bot',
+      readonly: true,
+      criteria: 'Bot?name=bw-solicitar-turno,bw-disponibilidad,bw-cancelar-turno,bw-mover-turno',
+    },
   ],
 };
 
