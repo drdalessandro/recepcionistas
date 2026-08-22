@@ -39,4 +39,6 @@ export const BOTS: DefBot[] = [
   { name: 'bw-fusionar-paciente', source: 'src/bots/fusionar-paciente.ts', dist: 'dist/bots/fusionar-paciente.js', description: 'Fusiona un duplicado en la ficha canónica (login, datos, recursos). Requiere admin.' },
   { name: 'bw-whatsapp-entrante', source: 'src/bots/whatsapp-entrante.ts', dist: 'dist/bots/whatsapp-entrante.js', description: 'Webhook de Twilio: WhatsApp del paciente → su hilo en Mensajes (por teléfono; desconocidos → alerta).' },
   { name: 'bw-borrador-respuesta', source: 'src/bots/borrador-respuesta.ts', dist: 'dist/bots/borrador-respuesta.js', description: 'Solo lectura: redacta el BORRADOR de la respuesta de Recepción en Mensajes (la envía una persona, nunca el bot). Requiere ANTHROPIC_API_KEY.' },
+  { name: 'bw-cancelar-turno', source: 'src/bots/cancelar-turno.ts', dist: 'dist/bots/cancelar-turno.js', description: 'Portal: el paciente cancela SU turno. Aplica R-14 (devuelve la sesión si avisó a tiempo), libera la sala y avisa a la lista de espera.' },
+  { name: 'bw-mover-turno', source: 'src/bots/mover-turno.ts', dist: 'dist/bots/mover-turno.js', description: 'Portal: el paciente mueve SU turno en una sola operación (toma el lugar nuevo antes de soltar el viejo). Revalida la ventana R-13 y topea en 3 movimientos.' },
 ];

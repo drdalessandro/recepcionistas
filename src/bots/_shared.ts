@@ -3,7 +3,7 @@
  */
 import type { BotEvent, MedplumClient } from '@medplum/core';
 import { getDisplayString } from '@medplum/core';
-import type { Appointment, ChargeItem, Communication, Coverage, Flag, Invoice, Task, TaskInput } from '@medplum/fhirtypes';
+import type { Appointment, ChargeItem, Communication, Coverage, Encounter, Flag, Invoice, Slot, Task, TaskInput } from '@medplum/fhirtypes';
 import { COD,
   COD_CONSENTIMIENTO,
   COD_LOINC_CONSENTIMIENTO,
@@ -44,7 +44,7 @@ import { getPaquete } from '../config/paquetes.js';
 import { calcularSenaARS, type ItemCobro, type LineaCobro, type TipoItemCobro } from '../lib/pricing.js';
 import { lineaComercialDeItem } from '../lib/cobros.js';
 import { cicloMes, motivoNoDisponible, parseClavePlan, saldoPlan } from '../lib/planes.js';
-import type { ReservaRecurso } from '../lib/reglas-turno.js';
+import { evaluarCancelacion, type ReservaRecurso } from '../lib/reglas-turno.js';
 import { isoArgentina } from '../lib/sena.js';
 import { ventana24h } from '../lib/auto-respuesta.js';
 import { SECRET_CONTENT_SID_GENERICO, aE164Argentino, contentVariables, nombreSecretContentSid } from '../lib/whatsapp.js';
@@ -804,6 +804,160 @@ export async function crearAlertaRecepcion(
     ...(opts.clave ? { identifier: [{ system: SYSTEM.task, value: opts.clave }] } : {}),
     ...(opts.pacienteRef ? { for: { reference: opts.pacienteRef } } : {}),
     ...(opts.focusRef ? { focus: { reference: opts.focusRef } } : {}),
+  });
+}
+
+/**
+ * ¿Este turno es de este paciente?
+ *
+ * El portal manda el `appointmentId` que quiera: sin este chequeo, un paciente
+ * podría cancelar o mover el turno de otro con solo cambiar un id. La
+ * AccessPolicy limita lo que LEE, no lo que le pasa a un bot.
+ */
+export function esTurnoDelPaciente(appt: Appointment, pacienteRef: string): boolean {
+  return (appt.participant ?? []).some((p) => p.actor?.reference === pacienteRef);
+}
+
+/** Estados sobre los que el paciente todavía puede actuar desde el portal. */
+const ESTADOS_ACCIONABLES = new Set(['proposed', 'pending', 'booked', 'waitlist']);
+
+/**
+ * Si el turno NO se puede tocar, devuelve el motivo en castellano; si se puede,
+ * `undefined`. El portal ya oculta los botones en estos casos, pero el bot no
+ * puede confiar en eso: es la última línea antes de escribir en la agenda.
+ */
+export function motivoNoAccionable(appt: Appointment, ahora = new Date()): string | undefined {
+  if (!ESTADOS_ACCIONABLES.has(appt.status ?? '')) {
+    return appt.status === 'cancelled'
+      ? 'Ese turno ya estaba cancelado.'
+      : 'Ese turno ya no se puede modificar desde la app. Escribinos y lo vemos.';
+  }
+  if (appt.start && new Date(appt.start).getTime() <= ahora.getTime()) {
+    return 'Ese turno ya pasó. Si necesitás otro, pedilo desde la app.';
+  }
+  return undefined;
+}
+
+export interface ResultadoCancelacionTurno {
+  appointment: Appointment;
+  /** true si la sesión volvió al plan (R-14, o fuerza mayor declarada). */
+  sesionDevuelta: boolean;
+  /** Horas de anticipación con las que se canceló (para el mensaje). */
+  horasAnticipacion?: number;
+  /** El turno ya venía cancelado: no se hizo nada (idempotente). */
+  yaEstabaCancelado: boolean;
+}
+
+/**
+ * Cancela un turno y deja todo consistente: Encounter cerrado, saldo pendiente
+ * anulado, sesión devuelta al plan si R-14 lo permite, lista de espera avisada
+ * y sala(s) liberada(s).
+ *
+ * Vive acá y no en el bot porque **la cancelación entra por dos puertas**: el
+ * mostrador (`bw-estado-turno`) y el portal (`bw-cancelar-turno`). Con dos
+ * implementaciones, R-14 se aplicaría distinto según dónde apretaron el botón —
+ * y la que se desactualice va a ser siempre en contra de alguien.
+ *
+ * Idempotente: cancelar dos veces no devuelve dos sesiones ni avisa dos veces.
+ */
+export async function cancelarTurnoYLiberar(
+  medplum: MedplumClient,
+  appt: Appointment,
+  opts: {
+    fuerzaMayorMedica?: boolean;
+    /** Quién declaró la fuerza mayor (recepcionista o el propio paciente). */
+    declaradaPorRef?: string;
+    /** Texto libre del motivo: va al `cancelationReason` nativo de FHIR. */
+    motivo?: string;
+    ahora?: Date;
+  } = {},
+): Promise<ResultadoCancelacionTurno> {
+  const ahora = opts.ahora ?? new Date();
+  const appointmentId = appt.id as string;
+  const estadoPrevio = appt.status;
+  const yaEstabaCancelado =
+    estadoPrevio === 'cancelled' || estadoPrevio === 'noshow' || estadoPrevio === 'entered-in-error';
+
+  const actualizado = await medplum.updateResource<Appointment>({
+    ...appt,
+    status: 'cancelled',
+    // Motivo en el campo NATIVO de FHIR: cualquier sistema que lea este
+    // Appointment lo encuentra donde el estándar dice que está.
+    ...(opts.motivo?.trim() ? { cancelationReason: { text: opts.motivo.trim().slice(0, 500) } } : {}),
+    // La excepción de R-14 se registra EN el turno: quién la declaró y cuándo,
+    // en el mismo lugar que la decisión que habilita.
+    ...(opts.fuerzaMayorMedica
+      ? {
+          extension: [
+            ...(appt.extension ?? []).filter(
+              (x) => x.url !== EXT.cancelacionFuerzaMayor && x.url !== EXT.cancelacionDeclaradaPor,
+            ),
+            { url: EXT.cancelacionFuerzaMayor, valueBoolean: true },
+            ...(opts.declaradaPorRef ? [{ url: EXT.cancelacionDeclaradaPor, valueString: opts.declaradaPorRef }] : []),
+          ],
+        }
+      : {}),
+  });
+
+  await cerrarEncounterDeTurno(medplum, appointmentId, 'cancelled');
+
+  // El saldo pendiente (50% restante) no se debe más. La seña YA COBRADA no se
+  // toca: su devolución es plata y se decide a mano.
+  const saldo = await medplum.searchOne('Invoice', `identifier=${SYSTEM.invoice}|saldo-${appointmentId}`);
+  if (saldo?.status === 'issued') {
+    await medplum.updateResource({ ...saldo, status: 'cancelled' });
+  }
+
+  // R-14 · devolver la sesión al plan si canceló a tiempo. Solo si el turno se
+  // pagó con un plan y solo si venía de un estado vivo.
+  let sesionDevuelta = false;
+  let horasAnticipacion: number | undefined;
+  const coberturaRef = appt.extension?.find((x) => x.url === EXT.coberturaUsada)?.valueString;
+  if (appt.start) {
+    const r = evaluarCancelacion(ahora, new Date(appt.start), {
+      fuerzaMayorMedica: opts.fuerzaMayorMedica ?? false,
+    });
+    horasAnticipacion = r.horasRestantes;
+    if (coberturaRef && !yaEstabaCancelado && r.devuelveSaldo) {
+      await devolverSesionDePlan(medplum, coberturaRef.split('/')[1] as string);
+      sesionDevuelta = true;
+    }
+  }
+
+  // El lugar que se libera es de alguien más: si hay gente en la lista de espera
+  // a la que le sirve ESTE horario, Recepción se entera.
+  if (!yaEstabaCancelado) {
+    await avisarListaDeEspera(medplum, appt);
+  }
+
+  for (const s of appt.slot ?? []) {
+    const id = s.reference?.split('/')[1];
+    if (!id) {
+      continue;
+    }
+    const slot = await medplum.readResource('Slot', id).catch(() => undefined);
+    if (slot) {
+      await medplum.updateResource<Slot>({ ...slot, status: 'free' });
+    }
+  }
+
+  return { appointment: actualizado, sesionDevuelta, horasAnticipacion, yaEstabaCancelado };
+}
+
+/** Cierra el Encounter de un turno (si existe). Compartido por los dos caminos. */
+export async function cerrarEncounterDeTurno(
+  medplum: MedplumClient,
+  appointmentId: string,
+  status: 'finished' | 'cancelled',
+): Promise<void> {
+  const enc = await medplum.searchOne('Encounter', `appointment=Appointment/${appointmentId}`);
+  if (!enc) {
+    return;
+  }
+  await medplum.updateResource<Encounter>({
+    ...enc,
+    status,
+    period: { ...(enc.period ?? {}), end: new Date().toISOString() },
   });
 }
 
