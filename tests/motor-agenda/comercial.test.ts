@@ -298,12 +298,11 @@ describe('Un servicio sin precio cargado devuelve PRECIO_NO_DEFINIDO, nunca 0 ni
     expect(codigosDeRechazo(cotizacion)).toEqual(['SERVICIO_DESCONOCIDO']);
   });
 
-  // ── BUG: cotizar 0 ocupantes devuelve una cotización válida de USD 0 ────────
-  // `expandir` rechaza con OCUPANTES_INVALIDOS cualquier cantidad menor a 1,
-  // pero `cotizarServicio` es API pública y no valida nada: multiplica el precio
-  // por persona por la cantidad pedida. Con 0 devuelve ok con totalUsd 0, que es
-  // exactamente el "número inventado" que el módulo promete no producir.
-  it.fails('BUG · cotizar con 0 ocupantes debería rechazar por OCUPANTES_INVALIDOS y hoy devuelve USD 0', () => {
+  // `cotizarServicio` es API pública y valida los ocupantes por su cuenta: sin
+  // esa guarda, cero ocupantes cotizaban USD 0 y un número negativo cotizaba en
+  // negativo — el "número inventado" que el módulo promete no producir, con la
+  // agravante de que se ve como una cotización válida.
+  it('cotizar con 0 ocupantes rechaza por OCUPANTES_INVALIDOS', () => {
     const cotizacion = cotizarServicio({
       motor: MOTOR,
       servicio: 'HBOT_MULTIPLAZA',
@@ -315,7 +314,7 @@ describe('Un servicio sin precio cargado devuelve PRECIO_NO_DEFINIDO, nunca 0 ni
     expect(codigosDeRechazo(cotizacion)).toContain('OCUPANTES_INVALIDOS');
   });
 
-  it.fails('BUG · cotizar con ocupantes negativos debería rechazar y hoy devuelve un total negativo', () => {
+  it('cotizar con ocupantes negativos rechaza en vez de devolver un total negativo', () => {
     const cotizacion = cotizarServicio({
       motor: MOTOR,
       servicio: 'HBOT_MULTIPLAZA',

@@ -384,7 +384,7 @@ describe('(e) TUMBONA_STANDALONE_PROHIBIDA se emite sólo si había una standalo
   // `librasEnSala` en vez de `libresEnSala`
   // (src/motor-agenda/agenda/pool-tumbonas.ts:92). El detalle es contrato de
   // cara al app de recepción, así que la clave importa.
-  it.fails('el detalle debería nombrar `libresEnSala` (hoy dice `librasEnSala`)', () => {
+  it('el detalle nombra `libresEnSala`', () => {
     const resultado = pedirTumbonas({
       consumidor: 'recovery-pro',
       cantidad: 1,

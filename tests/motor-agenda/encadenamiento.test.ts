@@ -709,12 +709,10 @@ describe('Selección forzada de un servicio para un tramo', () => {
     expect(plan.valor.tramos.map((t) => t.servicio)).toEqual(['IHHT', 'RED_LIGHT']);
   });
 
-  // BUG (reportado, no corregido): una selección que apunta a un número de tramo
-  // que el combo no tiene se ignora en silencio. Recepción pide «BIO OXYGEN en la
-  // multiplaza» equivocándose de tramo y el motor reserva la monoplaza sin decir
-  // nada. El código de rechazo SELECCION_DE_TRAMO_INVALIDA existe en
-  // `dominio/rechazos.ts` y no lo emite nadie: era exactamente para esto.
-  it.fails('una selección para un tramo que no existe debería rechazarse, no ignorarse', () => {
+  // Una selección que apunta a un número de tramo que el combo no tiene se
+  // ignoraba en silencio: recepción pedía «BIO OXYGEN en la multiplaza»
+  // equivocándose de tramo y el motor reservaba la monoplaza sin decir nada.
+  it('una selección para un tramo que no existe se rechaza, no se ignora', () => {
     const plan = expandir({
       motor,
       producto: { tipo: 'combo', codigo: 'BIO_OXYGEN' },
@@ -726,9 +724,7 @@ describe('Selección forzada de un servicio para un tramo', () => {
     expect(codigosDeRechazo(plan)).toContain('SELECCION_DE_TRAMO_INVALIDA');
   });
 
-  it('hoy esa selección fuera de rango se ignora y el combo se reserva igual', () => {
-    // Contracara del test anterior: deja registrado el comportamiento actual para
-    // que el día que se corrija se vea qué cambia.
+  it('el rechazo dice cuántos tramos tiene el combo, para que se corrija el número', () => {
     const plan = expandir({
       motor,
       producto: { tipo: 'combo', codigo: 'BIO_OXYGEN' },
@@ -737,9 +733,13 @@ describe('Selección forzada de un servicio para un tramo', () => {
       agenda: AGENDA_VACIA,
       seleccion: { 5: 'HBOT_MULTIPLAZA' },
     });
-    expect(plan.ok).toBe(true);
-    if (!plan.ok) return;
-    expect(plan.valor.tramos[0]?.servicio).toBe('HBOT_MONOPLAZA');
+    expect(plan.ok).toBe(false);
+    if (plan.ok) return;
+    expect(plan.rechazos[0]?.detalle).toMatchObject({
+      producto: 'BIO_OXYGEN',
+      fueraDeRango: [5],
+      tramos: 2,
+    });
   });
 });
 

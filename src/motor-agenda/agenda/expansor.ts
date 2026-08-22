@@ -79,6 +79,23 @@ export function expandir(pedido: PedidoDeExpansion): Resultado<CadenaExpandida> 
   const tramosDelCatalogo = resolverTramosDelCatalogo(pedido);
   if (!tramosDelCatalogo.ok) return tramosDelCatalogo;
 
+  // Una selección que apunta a un tramo inexistente se ignoraría en silencio, y
+  // recepción se quedaría creyendo que reservó la cámara que pidió.
+  const ordenes = new Set(tramosDelCatalogo.valor.map((t) => t.orden));
+  const fueraDeRango = Object.keys(pedido.seleccion ?? {})
+    .map(Number)
+    .filter((orden) => !ordenes.has(orden));
+  if (fueraDeRango.length > 0) {
+    return rechazar(
+      rechazo(
+        'SELECCION_DE_TRAMO_INVALIDA',
+        `Se pidió elegir el servicio del tramo ${fueraDeRango.join(', ')}, pero "${producto.codigo}" ` +
+          `tiene ${ordenes.size} tramo(s).`,
+        { detalle: { producto: producto.codigo, fueraDeRango, tramos: ordenes.size } },
+      ),
+    );
+  }
+
   const variantes = enumerarVariantes(tramosDelCatalogo.valor, pedido.seleccion);
   if (variantes.length === 0) {
     return rechazar(
@@ -398,17 +415,33 @@ function asignarUnidades(pedido: PedidoDeUnidades): Resultado<UnidadAsignada[]> 
     return aceptar(asignadas.valor.map((unidad) => ({ unidad, plazas: 1 })));
   }
 
+  // Primera pasada: una sola unidad que aloje al grupo entero. Partir un grupo
+  // entre dos cámaras cuando hay una donde entran todos es peor producto, aunque
+  // las cuentas cierren.
   const asignadas: UnidadAsignada[] = [];
   let restantes = ocupantes;
 
   for (const unidad of recurso.unidades) {
-    if (restantes === 0) break;
-    const plazas = Math.min(restantes, unidad.capacidad);
-    if (evaluarDisponibilidad(agenda, unidad, inicioTramo, finTramo, plazas).tipo !== 'libre') {
-      continue;
+    if (plazasLibres(agenda, unidad, inicioTramo, finTramo) >= ocupantes) {
+      asignadas.push({ unidad, plazas: ocupantes });
+      restantes = 0;
+      break;
     }
-    asignadas.push({ unidad, plazas });
-    restantes -= plazas;
+  }
+
+  // Segunda pasada: si no hay ninguna que los aloje a todos, se reparte usando
+  // las plazas que a cada unidad le quedan de verdad. Pedirle `min(restantes,
+  // capacidad)` haría que una unidad a medio llenar se descarte entera, y un
+  // grupo que sí entra repartido terminaría rechazado.
+  if (restantes > 0) {
+    for (const unidad of recurso.unidades) {
+      if (restantes === 0) break;
+      const disponibles = plazasLibres(agenda, unidad, inicioTramo, finTramo);
+      if (disponibles <= 0) continue;
+      const plazas = Math.min(restantes, disponibles);
+      asignadas.push({ unidad, plazas });
+      restantes -= plazas;
+    }
   }
 
   if (restantes === 0) return aceptar(asignadas);

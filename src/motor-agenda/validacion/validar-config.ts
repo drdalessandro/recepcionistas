@@ -16,6 +16,7 @@
  */
 
 import { ErrorDeConfiguracion } from '../dominio/rechazos.js';
+import { MINUTOS_POR_DIA } from '../dominio/tiempo.js';
 import type {
   Combo,
   Membresia,
@@ -145,6 +146,15 @@ function validarOperacion(config: ConfigMotor, problemas: string[]): void {
         `Horario del día ${dia.dia}: la apertura (${dia.aperturaMin}) no es anterior al cierre (${dia.cierreMin}).`,
       );
     }
+    if (dia.aperturaMin < 0 || dia.cierreMin > MINUTOS_POR_DIA) {
+      problemas.push(
+        `Horario del día ${dia.dia}: [${dia.aperturaMin}, ${dia.cierreMin}] cae fuera del día ` +
+          `(0 a ${MINUTOS_POR_DIA} minutos).`,
+      );
+    }
+    if (!Number.isInteger(dia.dia) || dia.dia < 0 || dia.dia > 6) {
+      problemas.push(`El horario declara un día de semana inválido: ${dia.dia}.`);
+    }
   }
 
   const franja = config.franjaClinica;
@@ -231,7 +241,13 @@ function validarRecursos(
       continue;
     }
 
-    validarTiempos(recurso.tipo, recurso.tiempos, config.recursos, problemas);
+    validarTiempos(
+      recurso.tipo,
+      recurso.tiempos,
+      config.recursos,
+      config.granularidadAgendaMin,
+      problemas,
+    );
     recolectarNoRatificados(recurso, noRatificado);
   }
 
@@ -281,6 +297,7 @@ function validarTiempos(
   tipo: TipoRecurso,
   t: TiemposRecurso,
   recursos: readonly Recurso[],
+  granularidadAgendaMin: number,
   problemas: string[],
 ): void {
   const campos: readonly (readonly [string, unknown])[] = [
@@ -309,6 +326,15 @@ function validarTiempos(
   if (t.grillaInicioMin <= 0) {
     problemas.push(`Recurso "${tipo}": la grilla de inicio debe ser positiva.`);
     return;
+  }
+  // Sólo tiene sentido comparar contra una granularidad válida; si no lo es, ya
+  // hay un problema reportado por su cuenta y este chequeo sólo agregaría ruido.
+  if (granularidadAgendaMin > 0 && t.grillaInicioMin % granularidadAgendaMin !== 0) {
+    problemas.push(
+      `Recurso "${tipo}": arranca cada ${t.grillaInicioMin} min, que no es múltiplo de la ` +
+        `granularidad de la agenda (${granularidadAgendaMin} min). Sus horarios de inicio nunca ` +
+        `se le ofrecerían a nadie.`,
+    );
   }
 
   // ── El invariante ──
@@ -539,6 +565,30 @@ function validarListasDePrecios(
   faltantes: string[],
   noRatificado: NotaNoRatificada[],
 ): void {
+  // Las notas globales van primero: son del catálogo comercial, no de una
+  // versión de lista, y perderlas porque no haya listas cargadas sería
+  // justamente esconder lo que este informe existe para mostrar.
+  noRatificado.push({
+    ambito: 'membresias.estructura-y-precios',
+    motivo:
+      '[PROPUESTA NO RATIFICADA] La estructura de membresías (tiers, modalidades, formatos y ' +
+      'precios) está en revisión. Los valores cargados son la propuesta sobre la mesa, no una ' +
+      'lista acordada.',
+  });
+  noRatificado.push({
+    ambito: 'pausa.redondeoSesiones',
+    motivo:
+      'Con 15 días sobre 30 la proporción da exacta (8 → 4), pero un bloque de 20 días da 2,67 ' +
+      'sesiones y nadie decidió hacia qué lado redondear.',
+  });
+  noRatificado.push({
+    ambito: 'franjaClinica.bloqueaFlujoNormal',
+    motivo:
+      `Está en ${config.franjaClinica.bloqueaFlujoNormal}: el enunciado sólo dice que las reservas ` +
+      'clínicas se bloquean fuera de la franja, no que las de bienestar se bloqueen dentro. ' +
+      'Falta decisión de producto.',
+  });
+
   if (config.listasPrecios.length === 0) {
     problemas.push('No hay ninguna versión de lista de precios cargada.');
     return;
@@ -559,26 +609,6 @@ function validarListasDePrecios(
     }
     validarPreciosDeLista(config, lista, problemas, faltantes);
   }
-
-  noRatificado.push({
-    ambito: 'membresias.estructura-y-precios',
-    motivo:
-      '[PROPUESTA NO RATIFICADA] La estructura de membresías (tiers, modalidades, formatos y ' +
-      'precios) está en revisión. Los valores cargados son la propuesta sobre la mesa, no una ' +
-      'lista acordada.',
-  });
-  noRatificado.push({
-    ambito: 'pausa.redondeoSesiones',
-    motivo:
-      'Con 15 días sobre 30 la proporción da exacta (8 → 4), pero un bloque de 20 días da 2,67 ' +
-      'sesiones y nadie decidió hacia qué lado redondear.',
-  });
-  noRatificado.push({
-    ambito: 'franjaClinica.bloqueaFlujoNormal',
-    motivo:
-      'Está en false: el enunciado sólo dice que las reservas clínicas se bloquean fuera de la ' +
-      'franja, no que las de bienestar se bloqueen dentro. Falta decisión de producto.',
-  });
 }
 
 function validarPreciosDeLista(
@@ -639,6 +669,12 @@ function validarPreciosDeLista(
     if (tabulados.length === 0 && precio.precioPorPersonaUsd === undefined) {
       problemas.push(
         `La lista "${lista.version}", servicio "${precio.servicio}": no declara ningún precio.`,
+      );
+    }
+    if (precio.precioPorPersonaUsd !== undefined && !(precio.precioPorPersonaUsd > 0)) {
+      problemas.push(
+        `La lista "${lista.version}", servicio "${precio.servicio}": el precio por persona debe ` +
+          `ser positivo (se recibió ${precio.precioPorPersonaUsd}).`,
       );
     }
     for (const [ocupantes, valor] of tabulados) {

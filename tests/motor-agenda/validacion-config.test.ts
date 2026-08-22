@@ -677,7 +677,7 @@ describe('(j) exigirCatalogoDePreciosCompleto convierte los precios faltantes en
   // por ocupantes sean positivos, pero nunca mira `precioPorPersonaUsd`, que es
   // justamente cómo está cargada la multiplaza (R-06, USD 80 por persona). Una
   // lista con -80 arranca sin una sola queja.
-  it.fails('un precio por persona negativo debería ser un problema de configuración', () => {
+  it('un precio por persona negativo es un problema de configuración', () => {
     const config = conListas(configSanIsidro(), (lista) => ({
       ...lista,
       servicios: lista.servicios.map((s) =>
@@ -824,7 +824,7 @@ describe('(l) El informe: qué queda anotado aunque el motor arranque', () => {
   // si no hay listas cargadas. Un problema de precios se lleva puestos pendientes
   // que no tienen nada que ver con precios — y con `exigirRatificacion` prendido,
   // eso afloja el gate en vez de endurecerlo.
-  it.fails('sin listas de precios, el informe no debería perder las notas globales', () => {
+  it('sin listas de precios, el informe conserva las notas globales', () => {
     const informe = auditarConfig({ ...configSanIsidro(), listasPrecios: [] });
     expect(informe.noRatificado.map((n) => n.ambito)).toContain('pausa.redondeoSesiones');
   });
@@ -832,7 +832,7 @@ describe('(l) El informe: qué queda anotado aunque el motor arranque', () => {
   // BUG (no arreglado a propósito): el motivo de la nota de la franja clínica
   // afirma «Está en false», pero es un texto fijo que no mira la config. Con
   // `bloqueaFlujoNormal: true` el informe le miente a quien lo lee.
-  it.fails('la nota de la franja clínica no debería afirmar un valor que la config contradice', () => {
+  it('la nota de la franja clínica refleja el valor real de la config', () => {
     const base = configSanIsidro();
     const informe = auditarConfig({
       ...base,

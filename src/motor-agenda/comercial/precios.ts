@@ -122,6 +122,18 @@ export interface PedidoDeCotizacionDeServicio {
 export function cotizarServicio(pedido: PedidoDeCotizacionDeServicio): Resultado<Cotizacion> {
   const { motor, servicio, ocupantes, cliente, ahora } = pedido;
 
+  if (!Number.isInteger(ocupantes) || ocupantes < 1) {
+    // Sin esta guarda, cero ocupantes cotizan USD 0 y un número negativo cotiza
+    // en negativo: una cotización que se ve válida y que nadie mira dos veces.
+    return rechazar(
+      rechazo(
+        'OCUPANTES_INVALIDOS',
+        `No se puede cotizar para ${ocupantes} ocupante(s): tiene que ser un entero de 1 en adelante.`,
+        { detalle: { servicio, ocupantes } },
+      ),
+    );
+  }
+
   if (!motor.servicioPorCodigo.has(servicio)) {
     return rechazar(rechazo('SERVICIO_DESCONOCIDO', `No existe el servicio "${servicio}".`));
   }

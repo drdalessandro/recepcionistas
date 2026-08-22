@@ -106,32 +106,48 @@ export function verificarAutorizacionMedica(
   for (const servicio of servicios) {
     if (!servicio.requiereAutorizacionMedica) continue;
 
-    const autoriza = cliente.autorizaciones.some(
-      (a) =>
-        (a.servicio === servicio.codigo || a.servicio === '*') &&
-        a.vigenteDesde <= inicio &&
-        inicio <= a.vigenteHasta,
+    const delServicio = cliente.autorizaciones.filter(
+      (a) => a.servicio === servicio.codigo || a.servicio === '*',
+    );
+
+    const autoriza = delServicio.some(
+      (a) => a.vigenteDesde <= inicio && inicio <= a.vigenteHasta,
     );
     if (autoriza) continue;
 
-    const vencida = cliente.autorizaciones.find(
-      (a) => (a.servicio === servicio.codigo || a.servicio === '*') && a.vigenteHasta < inicio,
-    );
+    // Para el mensaje interesa la que estuvo vigente hasta hace menos —no la
+    // primera del arreglo— y, si no hay ninguna vencida, la que arranca antes:
+    // «todavía no empezó» es una situación muy distinta de «venció», y la
+    // diferencia le cambia a recepción lo que tiene que hacer.
+    const vencida = delServicio
+      .filter((a) => a.vigenteHasta < inicio)
+      .sort((a, b) => b.vigenteHasta.getTime() - a.vigenteHasta.getTime())[0];
+    const futura = delServicio
+      .filter((a) => a.vigenteDesde > inicio)
+      .sort((a, b) => a.vigenteDesde.getTime() - b.vigenteDesde.getTime())[0];
+
+    let detalleDelMotivo: string;
+    if (vencida) {
+      detalleDelMotivo = `La que hay venció el ${fechaHoraLocalLegible(vencida.vigenteHasta, reloj)}.`;
+    } else if (futura) {
+      detalleDelMotivo =
+        `La que hay recién entra en vigencia el ` +
+        `${fechaHoraLocalLegible(futura.vigenteDesde, reloj)}, después de este turno.`;
+    } else {
+      detalleDelMotivo = 'El cliente no tiene ninguna registrada.';
+    }
 
     rechazos.push(
       rechazo(
         'SIN_AUTORIZACION_MEDICA',
-        vencida
-          ? `${servicio.nombre} necesita autorización médica activa. La que hay venció el ` +
-            `${fechaHoraLocalLegible(vencida.vigenteHasta, reloj)}.`
-          : `${servicio.nombre} necesita autorización médica activa y el cliente no tiene ninguna ` +
-            `registrada.`,
+        `${servicio.nombre} necesita autorización médica activa. ${detalleDelMotivo}`,
         {
           regla: 'R-03',
           detalle: {
             servicio: servicio.codigo,
             autorizacionesRegistradas: cliente.autorizaciones.length,
-            vencioEl: vencida?.vigenteHasta,
+            ...(vencida ? { vencioEl: vencida.vigenteHasta } : {}),
+            ...(futura ? { entraEnVigenciaEl: futura.vigenteDesde } : {}),
           },
         },
       ),

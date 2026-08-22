@@ -129,6 +129,27 @@ IHHT.»** Tampoco está declarado. Los tramos de cámara ofrecen las tres
 alternativas en orden y el expansor se queda con la primera que cierra: con dos
 ocupantes, la monoplaza no los admite y sale biplaza.
 
+## Cómo se reparten las unidades
+
+Dos pasadas, y el orden es una decisión de producto, no una optimización.
+
+Primero busca **una sola unidad donde entre el grupo entero**. Partir a tres
+personas entre dos cámaras cuando hay una libre donde entran las tres es peor
+producto, aunque las cuentas cierren.
+
+Si ninguna los aloja a todos, reparte pidiéndole a cada unidad **las plazas que
+de verdad le quedan**. La versión ingenua —pedir `min(faltantes, capacidad)`—
+descarta una unidad a medio llenar aunque tenga lugar, y termina rechazando
+grupos que sí entran: con una multiplaza con dos plazas libres y otra vacía, un
+grupo de ocho se caía.
+
+Y compartir una unidad exige dos cosas a la vez: **ventana idéntica** —una cámara
+se presuriza como una sola sesión, así que sumarse a la tanda de 10:00 se puede y
+empezar una propia a las 10:30 no— y que la unidad **admita convivencia**. Tener
+lugar no alcanza: la biplaza no acepta desconocidos porque R-04 le cobra la
+cámara entera al que va solo, y el gabinete de Recovery Pro tampoco, por la misma
+razón por la que nunca recibe la tumbona del área común.
+
 ## Los rechazos son datos
 
 Un rechazo nunca es un booleano. Lleva un `codigo` tipado, la regla que lo
