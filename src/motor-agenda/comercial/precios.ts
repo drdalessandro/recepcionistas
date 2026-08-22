@@ -58,7 +58,22 @@ export function resolverLista(
   cliente: Cliente,
   ahora: Date,
 ): Resultado<ListaAplicable> {
-  if (fmVigente(cliente) && cliente.fmVersionListaPrecios) {
+  if (fmVigente(cliente)) {
+    if (!cliente.fmVersionListaPrecios) {
+      // Todo fundador congela una lista el día que se inscribe. Uno sin versión
+      // registrada es un dato roto, no un cliente común: cotizarlo contra la
+      // lista de hoy le cobraría de más y nadie se enteraría.
+      return rechazar(
+        rechazo(
+          'VERSION_LISTA_DESCONOCIDA',
+          `El cliente es Founding Member pero no tiene registrada la versión de lista que ` +
+            `congeló al inscribirse. No se cotiza contra la lista vigente: sería cobrarle de más. ` +
+            `Hay que cargarle la versión de su fecha de inscripción.`,
+          { regla: 'R-09', detalle: { cliente: cliente.id } },
+        ),
+      );
+    }
+
     const congelada = motor.listaPorVersion.get(cliente.fmVersionListaPrecios);
     if (!congelada) {
       return rechazar(

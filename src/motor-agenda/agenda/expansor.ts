@@ -45,7 +45,7 @@ import type {
 } from '../dominio/tipos.js';
 import type { MotorCompilado } from '../validacion/validar-config.js';
 import { derivarCadena, type TramoAEncadenar, type TramoDerivado } from './encadenamiento.js';
-import { conOcupaciones, evaluarDisponibilidad } from './ocupacion.js';
+import { conOcupaciones, evaluarDisponibilidad, plazasLibres } from './ocupacion.js';
 import { asignarTumbonas } from './pool-tumbonas.js';
 
 export interface PedidoDeExpansion {
@@ -217,9 +217,9 @@ function intentarVariante(
   //    tramos siguientes se alinean solos al derivar; el primero lo elige quien
   //    reserva, así que hay que revisarlo. Una cámara arranca en hora en punto;
   //    una tumbona, cada media hora.
+  const minutoDelDia = minutosDesdeMedianocheLocal(inicio, motor.config.reloj);
   const primero = aEncadenar[0];
   if (primero) {
-    const minutoDelDia = minutosDesdeMedianocheLocal(inicio, motor.config.reloj);
     const grilla = primero.tiempos.grillaInicioMin;
     if (minutoDelDia % grilla !== 0) {
       const recurso = motor.recursoPorTipo.get(primero.tipoRecurso);
@@ -239,7 +239,9 @@ function intentarVariante(
   }
 
   // 3. Derivar los offsets. Acá no interviene la disponibilidad: son los tiempos.
-  const cadena = derivarCadena(aEncadenar);
+  //    La grilla se aplica sobre el reloj de pared, así que la cadena necesita
+  //    saber a qué minuto del día arranca.
+  const cadena = derivarCadena(aEncadenar, minutoDelDia);
 
   // 4. Asignar unidades tramo por tramo, acumulando lo que se va tomando para
   //    que un tramo no se pise con otro del mismo plan.
@@ -281,8 +283,14 @@ function intentarVariante(
     const subReservas: Ocupacion[] = [];
     for (const toma of derivado.tomasDePool) {
       agenda = conOcupaciones(pedido.agenda, [...ocupaciones, ...subReservas]);
+
+      // La etapa dice hasta cuándo la usa el cliente; el turnaround del recurso
+      // prestado dice hasta cuándo queda bloqueado. La tumbona no deja de
+      // necesitar su limpieza por estar prestada a Recovery Pro. El validador ya
+      // garantizó que este recurso existe y tiene tiempos.
+      const turnaroundDelPool = motor.recursoPorTipo.get(toma.pool)?.tiempos?.turnaroundMin ?? 0;
       const desde = sumarMinutos(inicio, toma.desdeMin);
-      const hasta = sumarMinutos(inicio, toma.hastaMin);
+      const hasta = sumarMinutos(inicio, toma.hastaMin + turnaroundDelPool);
 
       const sub = tomarDelPool({
         motor,
@@ -406,23 +414,36 @@ function asignarUnidades(pedido: PedidoDeUnidades): Resultado<UnidadAsignada[]> 
   if (restantes === 0) return aceptar(asignadas);
 
   const capacidadTotal = recurso.unidades.reduce((s, u) => s + u.capacidad, 0);
-  const libres = asignadas.reduce((s, a) => s + a.plazas, 0);
+
+  // Los lugares que quedan de verdad en la ventana, contando las unidades a
+  // medio llenar. La asignación greedy de arriba descarta una unidad entera
+  // cuando no le entra el grupo completo, así que su cuenta serviría para
+  // decidir pero no para informar: diría «quedan 0» con dos plazas libres.
+  const lugaresDisponibles = recurso.unidades.reduce(
+    (total, unidad) => total + plazasLibres(agenda, unidad, inicioTramo, finTramo),
+    0,
+  );
 
   // Este es el rechazo que el enunciado describe como «multiplaza no encadena
   // con IHHT». No hay una regla para ese caso: hay un tramo encadenado que pide
   // más lugares de los que quedan, y un mensaje que lo cuenta bien.
-  if (esTramoEncadenado) {
+  //
+  // Sólo aplica cuando el recurso tiene algo de lugar pero no alcanza para el
+  // grupo, que es de lo que habla la regla. Si no queda ni un lugar, o si el
+  // grupo es una persona sola, no hay ninguna tanda que partir: está ocupado, y
+  // decir otra cosa manda a recepción a resolver un problema que no tiene.
+  if (esTramoEncadenado && ocupantes > 1 && lugaresDisponibles > 0) {
     return rechazar(
       rechazo(
         'ENCADENAMIENTO_SIN_CAPACIDAD',
         `Salen ${ocupantes} persona(s) del tramo anterior y ${recurso.nombre} sólo tiene lugar ` +
-          `para ${libres} entre ${ventana}. El encadenamiento no cierra: habría que partir el ` +
-          `grupo en tandas.`,
+          `para ${lugaresDisponibles} entre ${ventana}. El encadenamiento no cierra: habría que ` +
+          `partir el grupo en tandas.`,
         {
           detalle: {
             recurso: recurso.tipo,
             ocupantes,
-            lugaresDisponibles: libres,
+            lugaresDisponibles,
             unidadesTotales: recurso.unidades.length,
             ventana,
           },
@@ -445,8 +466,8 @@ function asignarUnidades(pedido: PedidoDeUnidades): Resultado<UnidadAsignada[]> 
     rechazo(
       'RECURSO_OCUPADO',
       `${recurso.nombre} no tiene lugar para ${ocupantes} persona(s) entre ${ventana}: ` +
-        `quedan ${libres}.`,
-      { detalle: { recurso: recurso.tipo, ocupantes, lugaresDisponibles: libres, ventana } },
+        `quedan ${lugaresDisponibles}.`,
+      { detalle: { recurso: recurso.tipo, ocupantes, lugaresDisponibles, ventana } },
     ),
   );
 }

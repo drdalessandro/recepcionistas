@@ -31,6 +31,7 @@ export function conOcupaciones(
 export type MotivoNoDisponible =
   | { readonly tipo: 'libre' }
   | { readonly tipo: 'ventana-distinta'; readonly choca: Ocupacion }
+  | { readonly tipo: 'no-compartible'; readonly choca: Ocupacion }
   | { readonly tipo: 'sin-plazas'; readonly ocupadas: number; readonly capacidad: number };
 
 /**
@@ -56,6 +57,19 @@ export function evaluarDisponibilidad(
       oc.inicio.getTime() === inicio.getTime() && oc.fin.getTime() === fin.getTime();
     if (!mismaVentana) return { tipo: 'ventana-distinta', choca: oc };
 
+    // Que sobre lugar no habilita a meter a otro: la unidad tiene que admitir
+    // convivencia. La biplaza y el gabinete de Recovery Pro no la admiten.
+    //
+    // En una unidad de capacidad 1 la distinción no aporta nada —está llena, y
+    // punto—, así que el motivo sigue siendo 'sin-plazas'. 'no-compartible' se
+    // reserva para el caso que de verdad confunde a recepción: hay lugar libre y
+    // aun así no se puede usar.
+    if (!unidad.compartible) {
+      return unidad.capacidad === 1
+        ? { tipo: 'sin-plazas', ocupadas: oc.plazas, capacidad: unidad.capacidad }
+        : { tipo: 'no-compartible', choca: oc };
+    }
+
     ocupadas += oc.plazas;
   }
 
@@ -63,6 +77,33 @@ export function evaluarDisponibilidad(
     return { tipo: 'sin-plazas', ocupadas, capacidad: unidad.capacidad };
   }
   return { tipo: 'libre' };
+}
+
+/**
+ * Cuántas plazas quedan realmente libres en esta unidad y esta ventana.
+ *
+ * No es `capacidad − ocupadas`: una unidad que no se comparte, o una tomada por
+ * un turno de otra ventana, tiene cero plazas libres aunque esté medio vacía.
+ * Es el número que va en el mensaje de rechazo, y decir «quedan 0» cuando quedan
+ * dos manda a recepción a buscar un hueco que existe.
+ */
+export function plazasLibres(
+  agenda: AgendaOcupada,
+  unidad: UnidadRecurso,
+  inicio: Date,
+  fin: Date,
+): number {
+  let ocupadas = 0;
+  for (const oc of agenda.ocupaciones) {
+    if (oc.unidadId !== unidad.id) continue;
+    if (!seSuperponen(inicio, fin, oc.inicio, oc.fin)) continue;
+    if (!unidad.compartible) return 0;
+    const mismaVentana =
+      oc.inicio.getTime() === inicio.getTime() && oc.fin.getTime() === fin.getTime();
+    if (!mismaVentana) return 0;
+    ocupadas += oc.plazas;
+  }
+  return Math.max(0, unidad.capacidad - ocupadas);
 }
 
 /** ¿Está disponible? Azúcar sobre `evaluarDisponibilidad`. */

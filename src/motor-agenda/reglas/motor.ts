@@ -73,6 +73,10 @@ export function evaluarReserva(pedido: PedidoDeEvaluacion): Resultado<PlanDeRese
     return rechazar(
       ...previos,
       ...expansion.rechazos,
+      // Sin plan no se sabe cuánto dura, pero sí si el centro abre ese día y a
+      // esa hora. Callarlo obliga a recepción a chocar dos veces: primero
+      // resuelve lo del recurso y recién entonces descubre que era domingo.
+      ...verificarHorario(config, solicitud.inicio, solicitud.inicio),
       ...verificarAutorizacionMedica(
         solicitud.cliente,
         posibles,

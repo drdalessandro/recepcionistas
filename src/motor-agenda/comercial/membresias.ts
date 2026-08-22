@@ -42,6 +42,18 @@ export function saldoDeSesiones(titularidad: Titularidad): number {
   return Math.max(0, titularidad.sesionesAsignadas - titularidad.sesionesUsadas);
 }
 
+/**
+ * ¿La titularidad está pausada en este instante?
+ *
+ * La pausa es un **período**, no un interruptor. Se declara con 30 días de
+ * anticipación, así que entre la declaración y el arranque el socio sigue
+ * usando su membresía con normalidad: si el estado se diera vuelta al declarar,
+ * quien avisa en diciembre que pausa en enero perdería diciembre.
+ */
+export function estaPausadaEn(titularidad: Titularidad, momento: Date): boolean {
+  return titularidad.pausas.some((p) => p.inicio <= momento && momento < p.fin);
+}
+
 /** ¿Puede consumir una sesión ahora mismo? */
 export function puedeConsumirSesion(
   titularidad: Titularidad,
@@ -53,8 +65,11 @@ export function puedeConsumirSesion(
   if (titularidad.estado === 'vencida') {
     return { puede: false, motivo: 'La membresía está vencida.' };
   }
-  if (titularidad.estado === 'pausada') {
-    return { puede: false, motivo: 'La membresía está pausada.' };
+  // Las dos formas de estar pausado: el estado guardado (la pausa ya arrancó y
+  // alguien la asentó) y el período declarado (todavía no arrancó, o nadie
+  // asentó nada). Alcanza con cualquiera.
+  if (titularidad.estado === 'pausada' || estaPausadaEn(titularidad, momento)) {
+    return { puede: false, motivo: 'La membresía está pausada en esa fecha.' };
   }
   if (momento > titularidad.finCiclo) {
     return {
@@ -96,7 +111,7 @@ function redondear(valor: number, modo: ModoRedondeo): number {
 }
 
 /**
- * Aplica una pausa a la titularidad.
+ * Declara una pausa sobre la titularidad.
  *
  * El efecto es **proporcional**, en las tres puntas a la vez: se suspende el
  * cobro por los días pausados, las sesiones del mes se reducen en la misma
@@ -104,14 +119,24 @@ function redondear(valor: number, modo: ModoRedondeo): number {
  * pausa de 15 días sobre una base de 30 deja una membresía Standard en 4
  * sesiones y con la renovación 15 días más tarde.
  *
- * (El cobro suspendido no se calcula acá: este módulo devuelve los días
- * pausados y quien factura los prorratea. El motor de agenda no cobra.)
+ * Pero la pausa **no arranca al declararla**. Se declara con 30 días de
+ * anticipación, así que el estado sigue siendo `activa` hasta que la ventana
+ * empieza; quién está pausado en una fecha lo responde `estaPausadaEn`. Si el
+ * estado se diera vuelta acá, quien avisa en diciembre que pausa en enero
+ * perdería diciembre, que es justo lo contrario de lo que el beneficio ofrece.
+ *
+ * `momento` es opcional y sólo sirve para el caso raro de declarar una pausa ya
+ * en curso; sin él, la titularidad queda activa con la pausa agendada.
+ *
+ * (El cobro suspendido no se calcula acá: este módulo registra los días pausados
+ * y quien factura los prorratea. El motor de agenda no cobra.)
  */
 export function aplicarPausa(
   titularidad: Titularidad,
   pausa: PausaMembresia,
   reglas: ReglasPausa,
   reloj: RelojLocal,
+  momento?: Date,
 ): Resultado<Titularidad> {
   const dias = diasDePausa(pausa);
   const problemas = [];
@@ -180,12 +205,15 @@ export function aplicarPausa(
     reglas.redondeoSesiones,
   );
 
+  const pausas = [...titularidad.pausas, pausa];
+  const yaEmpezo = momento !== undefined && pausa.inicio <= momento && momento < pausa.fin;
+
   return aceptar({
     ...titularidad,
-    estado: 'pausada',
+    estado: yaEmpezo ? 'pausada' : titularidad.estado,
     sesionesAsignadas,
     finCiclo: sumarDias(titularidad.finCiclo, dias),
-    pausas: [...titularidad.pausas, pausa],
+    pausas,
   });
 }
 
