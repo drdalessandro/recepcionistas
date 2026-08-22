@@ -375,7 +375,11 @@ export function armarAutoRespuesta(ctx: ContextoAutoRespuesta): DecisionAutoResp
           ? `${hola} Recibimos tu mensaje 👋 ${cuandoTeResponden}${
               ctx.proximoTurno ? ` Te esperamos ${ctx.proximoTurno}.` : ''
             }`
-          : `${hola} Recibimos tu mensaje 👋 Todavía no tenemos este número registrado: contanos tu nombre y apellido así te damos de alta. ${cuandoTeResponden}`,
+          : 'Hola! 👋🏼\n' +
+            'Gracias por tu interés en Biowellness San Isidro. Para poder asesorarte, compartinos por favor:\n\n' +
+            'Nombre y Apellido:\n' +
+            'Email:\n\n' +
+            'BIOWELLNESS: Longevidad Saludable - Recuperación Deportiva - Optimización Biológica.',
       };
   }
 }

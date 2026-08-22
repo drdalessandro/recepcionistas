@@ -125,9 +125,12 @@ describe('armado de la respuesta', () => {
     expect(r?.texto).toContain('abrimos mañana a las 08:00');
   });
 
-  it('a un número desconocido le pide el nombre para darlo de alta', () => {
+  it('a un número desconocido le pide nombre y email para poder asesorarlo', () => {
     const r = armarAutoRespuesta({ ...base, esConocido: false, nombre: undefined, texto: 'hola' });
-    expect(r?.texto).toContain('nombre y apellido');
+    expect(r?.texto).toContain('Nombre y Apellido:');
+    expect(r?.texto).toContain('Email:');
+    // El bloque va con los renglones en blanco tal cual los definió Andrés.
+    expect(r?.texto).toContain('compartinos por favor:\n\nNombre y Apellido:\nEmail:');
   });
 
   it('el comprobante deja aviso a Recepción además de acusar recibo', () => {
