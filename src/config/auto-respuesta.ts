@@ -68,3 +68,36 @@ export const VENTANA_LIBRE_HORAS = 24;
 
 /** Con menos de esto, la bandeja muestra la ventana en amarillo (se está por cerrar). */
 export const VENTANA_AVISO_MINUTOS = 60;
+
+/**
+ * Pausa entre los mensajes de una misma respuesta automática.
+ *
+ * El bot contesta dentro del webhook de Twilio, que espera la respuesta en una
+ * ventana acotada: cada segundo de pausa se descuenta de ese presupuesto. Tres
+ * segundos dan el ritmo de alguien escribiendo sin arriesgar un timeout (y con
+ * dos pausas encadenadas seguimos MUY por debajo del límite).
+ */
+export const SEGUNDOS_ENTRE_MENSAJES = 3;
+
+/**
+ * Los mensajes que siguen al saludo cuando el número NO está en la base.
+ *
+ * Van en mensajes aparte a propósito: los cuatro links en un solo globo lo
+ * estiran y WhatsApp arma la tarjeta de vista previa con el primero. La bajada
+ * ("Longevidad Saludable - …") queda SOLO en el saludo: repetirla acá, tres
+ * segundos después, se leía como un mensaje duplicado (Andrés, 2026-08-23).
+ */
+export const BIENVENIDA_DESCONOCIDO: string[] = [
+  'Queremos que conozcas más acerca de BIOWELLNESS\n' +
+    '\n' +
+    'Te compartimos información útil\n' +
+    'Web: https://www.biowellness.ar\n' +
+    'Mapa: https://maps.app.goo.gl/8dN7McDRnREjdDsV7',
+  'También podés entrar desde acá:\n' +
+    'App: https://app.biowellness.ar\n' +
+    'Info: https://info.biowellness.ar\n' +
+    '\n' +
+    'Contactanos:\n' +
+    'Email: info@biowellness.ar\n' +
+    'Instagram: @biowellness.ar',
+];
