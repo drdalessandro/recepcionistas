@@ -161,8 +161,9 @@ describe('armado de la respuesta', () => {
     expect(segundo).toContain('Mapa: ');
     expect(segundo).not.toContain('app.biowellness.ar');
 
-    expect(tercero).toContain('App: https://app.biowellness.ar');
-    expect(tercero).toContain('Info: https://info.biowellness.ar');
+    // Cada link con su título, para que se entienda a qué entra cada uno.
+    expect(tercero).toContain('Autogestión y App del usuario\nApp: https://app.biowellness.ar');
+    expect(tercero).toContain('Información sobre nuestros servicios\nInfo: https://info.biowellness.ar');
     // Instagram con la palabra, no un emoji: con "📷 biowellness.ar" no se
     // entendía que era la cuenta de IG (Andrés, 2026-08-23).
     expect(tercero).toContain('Instagram: @biowellness.ar');
