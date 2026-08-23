@@ -116,7 +116,7 @@ describe('armado de la respuesta', () => {
     const r = armarAutoRespuesta({ ...base, texto: 'hola', proximoTurno: 'el jueves a las 15:00' });
     expect(r?.intencion).toBe('generico');
     expect(r?.texto).toContain('¡Hola Ana!');
-    expect(r?.texto).toContain('En un rato te responde alguien del equipo.');
+    expect(r?.texto).toContain('Enseguida te contacta alguien del equipo.');
     expect(r?.texto).toContain('el jueves a las 15:00');
   });
 
