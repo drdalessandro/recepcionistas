@@ -133,6 +133,49 @@ describe('armado de la respuesta', () => {
     expect(r?.texto).toContain('compartinos por favor:\n\nNombre y Apellido:\nEmail:');
   });
 
+  it('al desconocido le siguen dos mensajes de presentación, al conocido ninguno', () => {
+    const desconocido = armarAutoRespuesta({ ...base, esConocido: false, nombre: undefined, texto: 'hola' });
+    expect(desconocido?.mensajesSiguientes).toHaveLength(2);
+    // El que ya está en la base no necesita que le presenten el centro.
+    const conocido = armarAutoRespuesta({ ...base, texto: 'hola' });
+    expect(conocido?.mensajesSiguientes).toBeUndefined();
+  });
+
+  it('la bajada de marca va SOLO en el saludo, no repetida tres segundos después', () => {
+    const r = armarAutoRespuesta({ ...base, esConocido: false, nombre: undefined, texto: 'hola' });
+    expect(r?.texto).toContain('Longevidad Saludable');
+    for (const m of r?.mensajesSiguientes ?? []) {
+      expect(m).not.toContain('Longevidad Saludable');
+    }
+  });
+
+  it('los links van repartidos: web y mapa en uno, app e info en el otro', () => {
+    const [segundo, tercero] = armarAutoRespuesta({
+      ...base,
+      esConocido: false,
+      nombre: undefined,
+      texto: 'hola',
+    })?.mensajesSiguientes as [string, string];
+
+    expect(segundo).toContain('Web: https://www.biowellness.ar');
+    expect(segundo).toContain('Mapa: ');
+    expect(segundo).not.toContain('app.biowellness.ar');
+
+    expect(tercero).toContain('App: https://app.biowellness.ar');
+    expect(tercero).toContain('Info: https://info.biowellness.ar');
+    // Instagram con la palabra, no un emoji: con "📷 biowellness.ar" no se
+    // entendía que era la cuenta de IG (Andrés, 2026-08-23).
+    expect(tercero).toContain('Instagram: @biowellness.ar');
+    expect(tercero).toContain('Email: info@biowellness.ar');
+  });
+
+  it('ningún globo se pasa del límite de un mensaje de WhatsApp', () => {
+    const r = armarAutoRespuesta({ ...base, esConocido: false, nombre: undefined, texto: 'hola' });
+    for (const m of [r?.texto ?? '', ...(r?.mensajesSiguientes ?? [])]) {
+      expect(m.length).toBeLessThan(1600);
+    }
+  });
+
   it('el comprobante deja aviso a Recepción además de acusar recibo', () => {
     const r = armarAutoRespuesta({ ...base, texto: 'ya pagué, te mando el comprobante', conAdjunto: true });
     expect(r?.intencion).toBe('comprobante-pago');

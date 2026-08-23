@@ -34,7 +34,7 @@ import {
   type DecisionAutoRespuesta,
   type Intencion,
 } from '../lib/auto-respuesta.js';
-import { MINUTOS_ENTRE_AUTO_RESPUESTAS } from '../config/auto-respuesta.js';
+import { MINUTOS_ENTRE_AUTO_RESPUESTAS, SEGUNDOS_ENTRE_MENSAJES } from '../config/auto-respuesta.js';
 import { crearAlertaRecepcion, enviarWhatsApp, fechaTurnoNotif } from './_shared.js';
 
 interface EntradaTwilio {
@@ -350,35 +350,52 @@ async function autoResponder(
     return undefined;
   }
 
-  await enviarWhatsApp(medplum, secrets, {
-    template: 'auto-respuesta',
-    sinPlantilla: true,
-    body: decision.texto,
-    ...(pacienteRef ? { pacienteRef } : { to: opts.telefono }),
-  });
+  // La respuesta puede ser más de un globo (ver `mensajesSiguientes`). Van en
+  // orden y con una pausa entre medio: pegados se leen como un solo mensaje
+  // partido al medio. La pausa corre DENTRO del webhook de Twilio, por eso
+  // SEGUNDOS_ENTRE_MENSAJES es chico y está en config.
+  const mensajes = [decision.texto, ...(decision.mensajesSiguientes ?? [])];
+  for (let i = 0; i < mensajes.length; i++) {
+    const cuerpo = mensajes[i] as string;
+    if (i > 0) {
+      await esperar(SEGUNDOS_ENTRE_MENSAJES * 1000);
+    }
 
-  // La respuesta también va al hilo, para que Recepción vea la conversación
-  // completa (incluido lo que contestó el sistema en su nombre).
-  if (pacienteRef && opts.topic?.id) {
-    await medplum
-      .createResource<Communication>({
-        resourceType: 'Communication',
-        status: 'completed',
-        sent: new Date().toISOString(),
-        subject: { reference: pacienteRef },
-        recipient: [{ reference: pacienteRef }],
-        partOf: [{ reference: `Communication/${opts.topic.id}` }],
-        payload: [{ contentString: decision.texto }],
-        extension: [
-          { url: EXT.canal, valueCode: 'whatsapp' },
-          { url: EXT.autoRespuesta, valueCode: decision.intencion },
-        ],
-      })
-      .catch(() => undefined);
+    await enviarWhatsApp(medplum, secrets, {
+      template: 'auto-respuesta',
+      sinPlantilla: true,
+      body: cuerpo,
+      ...(pacienteRef ? { pacienteRef } : { to: opts.telefono }),
+    });
+
+    // La respuesta también va al hilo, para que Recepción vea la conversación
+    // completa (incluido lo que contestó el sistema en su nombre).
+    if (pacienteRef && opts.topic?.id) {
+      await medplum
+        .createResource<Communication>({
+          resourceType: 'Communication',
+          status: 'completed',
+          sent: new Date().toISOString(),
+          subject: { reference: pacienteRef },
+          recipient: [{ reference: pacienteRef }],
+          partOf: [{ reference: `Communication/${opts.topic.id}` }],
+          payload: [{ contentString: cuerpo }],
+          extension: [
+            { url: EXT.canal, valueCode: 'whatsapp' },
+            { url: EXT.autoRespuesta, valueCode: decision.intencion },
+          ],
+        })
+        .catch(() => undefined);
+    }
   }
 
   await aplicarExtras(medplum, decision, { ...opts, pacienteRef });
   return decision.intencion;
+}
+
+/** Pausa entre globos de una misma respuesta automática. */
+function esperar(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 /** Lo que la decisión pide ADEMÁS de contestar: silencio, aviso, solicitud. */

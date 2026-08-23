@@ -17,6 +17,7 @@
  */
 import { HORARIO_SEMANAL } from '../config/horario.js';
 import {
+  BIENVENIDA_DESCONOCIDO,
   CENTRO_DIRECCION,
   CENTRO_MAPA,
   LINKS_PRECIOS,
@@ -247,6 +248,12 @@ export interface DecisionAutoRespuesta {
   intencion: Intencion;
   /** El texto a mandar por WhatsApp. */
   texto: string;
+  /**
+   * Mensajes que salen DESPUÉS de `texto`, en globos aparte y con una pausa
+   * entre medio. Se usan cuando partir el contenido se lee mejor que un solo
+   * globo largo (ver `BIENVENIDA_DESCONOCIDO`).
+   */
+  mensajesSiguientes?: string[];
   /** Además, anotar una solicitud de turno para la bandeja de Recepción. */
   crearSolicitudTurno?: boolean;
   /** Además, dejar un aviso en la vista Avisos. */
@@ -380,6 +387,9 @@ export function armarAutoRespuesta(ctx: ContextoAutoRespuesta): DecisionAutoResp
             'Nombre y Apellido:\n' +
             'Email:\n\n' +
             'BIOWELLNESS: Longevidad Saludable - Recuperación Deportiva - Optimización Biológica.',
+        // Al desconocido le sigue la presentación de la marca; al que ya está
+        // en la base no, que no necesita que le presenten el centro.
+        ...(ctx.esConocido ? {} : { mensajesSiguientes: BIENVENIDA_DESCONOCIDO }),
       };
   }
 }
