@@ -94,7 +94,11 @@ export const BIENVENIDA_DESCONOCIDO: string[] = [
     'Web: https://www.biowellness.ar\n' +
     'Mapa: https://maps.app.goo.gl/8dN7McDRnREjdDsV7',
   'También podés entrar desde acá:\n' +
+    '\n' +
+    'Autogestión y App del usuario\n' +
     'App: https://app.biowellness.ar\n' +
+    '\n' +
+    'Información sobre nuestros servicios\n' +
     'Info: https://info.biowellness.ar\n' +
     '\n' +
     'Contactanos:\n' +
