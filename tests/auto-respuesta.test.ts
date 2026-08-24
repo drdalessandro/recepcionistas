@@ -133,6 +133,46 @@ describe('armado de la respuesta', () => {
     expect(r?.texto).toContain('compartinos por favor:\n\nNombre y Apellido:\nEmail:');
   });
 
+  // 2026-08-22 es SÁBADO y 2026-08-23 DOMINGO (Argentina = UTC-3).
+  const sabado = (hhmmArg: string): Date => {
+    const [h, m] = hhmmArg.split(':').map(Number);
+    return new Date(Date.UTC(2026, 7, 22, (h as number) + 3, m as number));
+  };
+  const domingo = (hhmmArg: string): Date => {
+    const [h, m] = hhmmArg.split(':').map(Number);
+    return new Date(Date.UTC(2026, 7, 23, (h as number) + 3, m as number));
+  };
+  const aDesconocido = (ahora: Date): string =>
+    armarAutoRespuesta({ ...base, ahora, esConocido: false, nombre: undefined, texto: 'hola' })
+      ?.texto ?? '';
+
+  it('con el centro abierto, al desconocido no se le habla de horarios', () => {
+    const r = aDesconocido(viernes('15:00'));
+    expect(r).toContain('Para poder asesorarte');
+    expect(r).not.toContain('estamos cerrados');
+    expect(r).not.toContain('Horario:');
+  });
+
+  it('el domingo avisa que está cerrado, cuándo se responde y el horario', () => {
+    const r = aDesconocido(domingo('11:00'));
+    expect(r).toContain('Ahora estamos cerrados');
+    expect(r).toContain('te respondemos mañana a las 08:00');
+    expect(r).toContain('Horario: lunes a viernes de 08:00 a 22:00');
+    expect(r).toContain('domingo cerrado');
+  });
+
+  it('el sábado a la noche NO promete "mañana": el domingo no abre', () => {
+    const r = aDesconocido(sabado('21:00'));
+    expect(r).toContain('te respondemos el lunes a las 08:00');
+    expect(r).not.toContain('mañana');
+  });
+
+  it('la firma lleva el 🧬 al final', () => {
+    for (const ahora of [viernes('15:00'), domingo('11:00')]) {
+      expect(aDesconocido(ahora)).toContain('Optimización Biológica. 🧬');
+    }
+  });
+
   it('al desconocido le siguen dos mensajes de presentación, al conocido ninguno', () => {
     const desconocido = armarAutoRespuesta({ ...base, esConocido: false, nombre: undefined, texto: 'hola' });
     expect(desconocido?.mensajesSiguientes).toHaveLength(2);

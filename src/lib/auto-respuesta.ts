@@ -244,6 +244,40 @@ export interface ContextoAutoRespuesta {
   silencioDesdeISO?: string;
 }
 
+/**
+ * El saludo al número que NO está en la base.
+ *
+ * Fuera de horario cambia: avisa que está cerrado, dice CUÁNDO se responde y
+ * suma el horario de la semana. El "cuándo" NO se hardcodea — un "mañana" fijo
+ * miente los sábados a la noche, que reabren el lunes. Lo calcula
+ * `textoProximaApertura` contra el horario real, así que si cambia el horario
+ * cambia el mensaje (Andrés, 2026-08-24).
+ */
+function bienvenidaDesconocido(abierto: boolean, apertura: string | undefined): string {
+  const pedido = 'Nombre y Apellido:\nEmail:';
+  const firma = 'BIOWELLNESS: Longevidad Saludable - Recuperación Deportiva - Optimización Biológica. 🧬';
+
+  if (abierto) {
+    return (
+      'Hola! 👋🏼\n' +
+      'Gracias por tu interés en Biowellness San Isidro. Para poder asesorarte, compartinos por favor:\n\n' +
+      `${pedido}\n\n` +
+      firma
+    );
+  }
+
+  // Sin apertura calculable (horario sin ningún día abierto) no se promete una
+  // hora que no existe.
+  const cuando = apertura ? `te respondemos ${apertura}` : 'te respondemos apenas reabramos';
+  return (
+    'Hola! 👋🏼\n' +
+    `Gracias por tu interés en Biowellness San Isidro. Ahora estamos cerrados: pasanos tu nombre, apellido y mail y ${cuando}.\n\n` +
+    `${pedido}\n\n` +
+    `Horario: ${textoHorarioSemanal()}.\n\n` +
+    firma
+  );
+}
+
 export interface DecisionAutoRespuesta {
   intencion: Intencion;
   /** El texto a mandar por WhatsApp. */
@@ -382,11 +416,7 @@ export function armarAutoRespuesta(ctx: ContextoAutoRespuesta): DecisionAutoResp
           ? `${hola} Recibimos tu mensaje 👋 ${cuandoTeResponden}${
               ctx.proximoTurno ? ` Te esperamos ${ctx.proximoTurno}.` : ''
             }`
-          : 'Hola! 👋🏼\n' +
-            'Gracias por tu interés en Biowellness San Isidro. Para poder asesorarte, compartinos por favor:\n\n' +
-            'Nombre y Apellido:\n' +
-            'Email:\n\n' +
-            'BIOWELLNESS: Longevidad Saludable - Recuperación Deportiva - Optimización Biológica.',
+          : bienvenidaDesconocido(abierto, apertura),
         // Al desconocido le sigue la presentación de la marca; al que ya está
         // en la base no, que no necesita que le presenten el centro.
         ...(ctx.esConocido ? {} : { mensajesSiguientes: BIENVENIDA_DESCONOCIDO }),
