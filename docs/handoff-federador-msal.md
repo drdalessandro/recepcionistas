@@ -158,10 +158,56 @@ search van por `system|value`), así que la elección no tiene consecuencia
 funcional — pero si algún día federamos una ficha (`POST /Patient`, que el scope
 `Patient/*.write` habilita), hay que confirmar cuál espera el bus.
 
+### Cómo se prueba: `npm run federador:check`
+
+```bash
+npm run federador:check                    # QA. Las dos capas.
+npm run federador:check -- --dni 12497884  # con un documento concreto
+npm run federador:check -- --solo-local    # sin tocar Medplum
+npm run federador:check -- --prod          # producción, a propósito
+```
+
+**El ambiente lo decide el flag, nunca el `.env`.** Sin `--prod` es imposible que
+este script le pegue a producción, que es lo que corresponde dado que el
+environment de QA de Postman trae la URL productiva.
+
+Prueba **dos capas separadas**, porque las credenciales viven en dos lados y
+fallan igual:
+
+| Capa | Con qué | Qué responde |
+|---|---|---|
+| 1 · local | `BUS_MSAL_*` del `.env` | ¿la *token secret word* sirve? |
+| 2 · bot | Project Secrets de Medplum | ¿el servidor la tiene bien cargada, y el bot deployado? |
+
+Sin esa separación, "no anda" son tres arreglos distintos con el mismo síntoma:
+secret word equivocada, secret sin cargar, o bot sin deployar. El cruce de las
+dos capas sale impreso al final.
+
+Tres cosas que el script hace a propósito:
+
+- **Nunca imprime el secreto.** Muestra una huella (`largo · sha256:…`) que
+  alcanza para comparar el `.env` contra el servidor sin exponer nada.
+- **Frena antes de ejecutar el bot** si el Project Secret `BUS_MSAL_URL` apunta a
+  producción y no se pidió `--prod`. Enterarse por la respuesta del bot ya sería
+  tarde: la consulta al padrón real ya habría ocurrido.
+- **Distingue "no se pudo probar" de "falló".** Un proxy o una allowlist de
+  egreso que corta el pedido devuelve texto plano, no JSON; reportar eso como
+  "el bus rechazó la credencial" mandaría a cambiar una secret word que está
+  bien. Es la misma disciplina que hizo falta en el bot.
+
+> ⚠️ **`sin-resultados` contra QA no es una falla.** El Ministerio **no publica
+> documentos de prueba**: la colección de QA usa el literal `dniPaciente` como
+> placeholder. Que la búsqueda vuelva vacía significa que el circuito completo
+> —firma → token → búsqueda → Bundle válido— funcionó.
+
+> ⚠️ **Que tu máquina llegue al bus no garantiza que Medplum llegue.** Los bots
+> salen desde AWS Lambda, con otra ruta de red. La Capa 2 es la única que prueba
+> *esa* salida; la Capa 1 prueba la credencial.
+
 ## Lo que falta para terminarlo
 
-1. **Cargar los tres Project Secrets** y probar contra **QA**
-   (`https://bus-test.msal.gob.ar`, ver la advertencia de arriba).
+1. **Cargar los tres Project Secrets** y probar contra **QA** con
+   `npm run federador:check` (ver arriba).
 2. **UI**: en el alta, al tipear el DNI, ofrecer los campos y que la recepcionista
    confirme. **Nunca escribir sin que alguien lo vea**: el bot sugiere, la persona
    decide.
@@ -169,11 +215,54 @@ funcional — pero si algún día federamos una ficha (`POST /Patient`, que el s
    verificar contra el servidor que Medplum persista `_family.extension` (los
    tipos no la modelan) antes de escribirla.
 
+## Lo que la guía técnica NO dice (leída entera, 31 páginas)
+
+Vale la pena dejarlo escrito, porque son huecos reales del contrato y no
+omisiones nuestras. Cada uno es algo que hoy resolvemos por inferencia y que la
+primera corrida contra QA puede confirmar:
+
+1. **No documenta el caso "no encontrado" de la búsqueda por DNI.** Para las
+   búsquedas solo describe el 200, el 400 (system mal) y el 500 (parámetro
+   nulo). Que un DNI no federado devuelva un `Bundle` con `total: 0` es el
+   comportamiento FHIR estándar, **pero la guía no lo afirma**. Para el endpoint
+   hermano (`GET /Patient/{id}`) sí documenta **404 + `OperationOutcome`** con
+   `diagnostics: "… not found"`. Por eso el bot trata un **404 como
+   `sin-resultados`** y no como caída: si fuera lo segundo, el caso más común de
+   todos se vería como "el padrón no contesta". El `detalle` guarda cuál de las
+   dos formas llegó.
+
+2. **No hay documentos de prueba de QA.** La palabra "QA" no aparece en ninguna
+   de las 31 páginas, y la colección de QA usa el literal `dniPaciente`. Los
+   únicos documentos que existen son ejemplos de la doc, todos apuntando al host
+   de **producción**: `23327755` (p. 6-7, el ejemplo de *esta* búsqueda),
+   `12497884` y `21506540` (Anexo II). Ninguno tiene garantía de existir en QA.
+
+3. **Un paciente federado puede no tener DNI.** El ejemplo completo del Anexo I
+   (`ANTONIA MARIA VACCARO FALINO`, id 513298) **no tiene identifier de
+   RENAPER**: tiene CI de la PFA y números de hospital. O sea que
+   `sin-resultados` significa *"no hay nadie con ese documento"*, **no** "esa
+   persona no está federada". Es un dato para la pregunta de cobertura de más
+   abajo.
+
+4. **No dice nada del JWT ni del `exp`.** Toda la autenticación la delega a otro
+   documento; nuestros 5 minutos siguen siendo una elección nuestra sin respaldo
+   ni contradicción. Por eso `federador:check` reintenta solo con el `exp` largo
+   de la colección cuando el auth falla: si con ese entra, la perilla es esa.
+
+5. **No hay rate limits ni cuotas documentadas.** Ninguna mención a 429 o
+   throttling. Lo único acotable es el `count` del `$match`.
+
+Dos rarezas del servicio que conviene tener presentes: usa **500** para
+"parámetro vacío" (un error de cliente disfrazado de caída), y el **422** del
+alta mezcla `severity: warning` con `severity: error` en el mismo `issue[]`.
+
 ## Dos preguntas que no son técnicas
 
 - **¿A quién cubre el Federador?** Si solo tiene a quien ya pasó por el sistema
   público, el autocompletado sirve en una fracción de las altas. Define el valor
-  real de todo esto y se responde con diez consultas contra QA.
+  real de todo esto y se responde con diez consultas contra QA. Ojo que hay
+  **dos preguntas** acá, no una: cuánta gente está en el padrón, y de esa gente
+  cuánta es **encontrable por DNI** — el Anexo I muestra que no son lo mismo.
 - **Legal.** Consultar el Federador con el DNI de una persona es tratamiento de
   datos personales (Ley 25.326). Si entra en el consentimiento general que ya se
   firma o necesita mención propia lo define **Andrés con el asesor legal**.

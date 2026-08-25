@@ -135,6 +135,33 @@ export function urlToken(busUrl: string): string {
   return `${busUrl.replace(/\/+$/, '')}${PATH_AUTH}`;
 }
 
+/**
+ * ¿El error lo puso el bus, o algo en el medio?
+ *
+ * Importa distinguirlo. Un proxy corporativo, un gateway o una allowlist de
+ * egreso cortan el pedido **antes de que llegue**, y reportar eso como "el bus
+ * rechazó la credencial" manda a cambiar una secret word que puede estar
+ * perfecta. Es la misma clase de mentira que decir "esa persona no está
+ * federada" cuando el registro nacional nunca contestó.
+ *
+ * El criterio: el bus contesta **JSON siempre** (así está en la colección
+ * oficial), así que un error con cuerpo de texto plano es casi con seguridad un
+ * intermediario. El 407 es de proxy por definición.
+ *
+ * Es una heurística, y como tal se equivoca hacia el lado prudente: ante la duda
+ * dice "no se pudo probar" en vez de acusar a la credencial.
+ */
+export function pareceIntermediario(status: number, cuerpo: string): boolean {
+  if (status === 407) {
+    return true;
+  }
+  const texto = cuerpo.trim();
+  if (texto && !texto.startsWith('{') && !texto.startsWith('[')) {
+    return true;
+  }
+  return /allowlist|egress|proxy|forbidden by|blocked/i.test(texto);
+}
+
 /** Un token vivo, por scope. */
 export interface TokenCacheado {
   scope: ScopeBus;

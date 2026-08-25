@@ -8,6 +8,7 @@ import {
   SCOPES,
   claimsClientAssertion,
   cuerpoPedidoToken,
+  pareceIntermediario,
   tokenSirve,
   urlBusquedaPorDni,
   urlToken,
@@ -140,6 +141,43 @@ describe('el cache del token', () => {
 
   it('sin cache, hay que pedirlo', () => {
     expect(tokenSirve(undefined, SCOPES.pacienteLeer, AHORA)).toBe(false);
+  });
+});
+
+/**
+ * Quién puso el error.
+ *
+ * Salió de una corrida real: el primer intento contra QA volvió con un
+ * `403 Host not in allowlist`, que lo puso el proxy de egreso y no el bus. Sin
+ * esta distinción el diagnóstico decía "el bus rechazó la credencial" — la misma
+ * clase de afirmación falsa que el bot hacía al reportar "no está federada"
+ * cuando el registro nacional nunca había contestado.
+ */
+describe('distinguir al bus de lo que se le cruza en el camino', () => {
+  it('un 407 es de proxy por definición', () => {
+    expect(pareceIntermediario(407, '')).toBe(true);
+  });
+
+  it('texto plano no lo escribió el bus: el bus contesta JSON', () => {
+    expect(pareceIntermediario(403, 'Host not in allowlist: bus-test.msal.gob.ar')).toBe(true);
+    expect(pareceIntermediario(502, '<html>502 Bad Gateway</html>')).toBe(true);
+  });
+
+  it('un error JSON SÍ es del bus: ahí la credencial es sospechosa', () => {
+    expect(pareceIntermediario(401, '{"error":"invalid_client"}')).toBe(false);
+    expect(pareceIntermediario(400, '{"message":"bad assertion"}')).toBe(false);
+  });
+
+  it('un JSON que habla de un proxy igual se marca', () => {
+    // Un gateway que devuelve JSON existe; la palabra manda sobre el formato.
+    expect(pareceIntermediario(403, '{"detail":"blocked by egress policy"}')).toBe(true);
+  });
+
+  it('un cuerpo vacío no acusa a nadie', () => {
+    // Sin evidencia no se inventa un culpable: `false` deja que el caller lo
+    // trate como respuesta del bus, que es el camino que sí pide confirmación.
+    expect(pareceIntermediario(500, '')).toBe(false);
+    expect(pareceIntermediario(500, '   ')).toBe(false);
   });
 });
 

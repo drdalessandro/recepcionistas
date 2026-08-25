@@ -73,7 +73,14 @@ export type MotivoSinDatos =
   | 'dni-invalido'
   /** El bus contestó mal (auth, red, timeout, 5xx, o un cuerpo que no es FHIR). */
   | 'bus-no-responde'
-  /** El bus contestó bien y esa persona no está federada. */
+  /**
+   * El bus contestó bien y **no hay nadie con ese DNI**.
+   *
+   * Ojo con leerlo como "no está federada": la propia guía técnica muestra un
+   * paciente federado **sin identifier de RENAPER** (Anexo I, id 513298, que
+   * tiene CI de la PFA y números de hospital pero no DNI). Puede estar en el
+   * padrón y no aparecer buscando por documento.
+   */
   | 'sin-resultados'
   /** Más de una persona con ese mismo documento: no elegimos por el usuario. */
   | 'ambiguo';
@@ -125,10 +132,20 @@ function base64url(v: Buffer | string): string {
 /**
  * JWT HS256 firmado con la secret word del dominio. Es el `clientAssertion` del
  * pedido de token — de un solo uso y de vida corta.
+ *
+ * El `ttlSegundos` es un parámetro y no una constante **solo** para el
+ * diagnóstico: la colección oficial usa ~69 días y nosotros 5 minutos, y si el
+ * bus llegara a rechazar la aserción hay que poder probar las dos vidas en una
+ * corrida en vez de deducir. El bot siempre usa el default.
  */
-export function firmarClientAssertion(issuer: string, secreto: string, ahora: Date): string {
+export function firmarClientAssertion(
+  issuer: string,
+  secreto: string,
+  ahora: Date,
+  ttlSegundos?: number,
+): string {
   const header = base64url(JSON.stringify({ typ: 'JWT', alg: 'HS256' }));
-  const payload = base64url(JSON.stringify(claimsClientAssertion(issuer, ahora)));
+  const payload = base64url(JSON.stringify(claimsClientAssertion(issuer, ahora, ttlSegundos)));
   const firma = base64url(createHmac('sha256', secreto).update(`${header}.${payload}`).digest());
   return `${header}.${payload}.${firma}`;
 }
@@ -223,6 +240,16 @@ export async function handler(
         return { ok: false, ambiente, motivo: 'bus-no-responde', detalle: 'no se pudo renovar el accessToken' };
       }
       resp = await buscar(token);
+    }
+    if (resp.status === 404) {
+      // La guía técnica **no documenta** qué contesta la búsqueda por DNI cuando
+      // la persona no está: para el endpoint hermano (`GET /Patient/{id}`) sí
+      // documenta 404 + OperationOutcome "not found". Un 404 es "no está", no
+      // "el registro se cayó": tratarlo como caída dejaría a la recepcionista
+      // viendo "el padrón no contesta" en el caso más común de todos.
+      // Queda el `detalle` para poder confirmar cuál de las dos formas usa.
+      console.log(`bw-federador: dni=${dni} ambiente=${ambiente} resultado=sin-resultados (404)`);
+      return { ok: false, ambiente, motivo: 'sin-resultados', detalle: 'HTTP 404' };
     }
     if (!resp.ok) {
       console.log(`bw-federador: búsqueda respondió ${resp.status}`);

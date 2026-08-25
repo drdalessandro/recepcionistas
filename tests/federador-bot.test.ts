@@ -85,6 +85,20 @@ describe('cuando el bus se porta mal, no dice que la persona no existe', () => {
     expect(r.motivo).toBe('bus-no-responde');
     expect(r.detalle).toContain('500');
   });
+
+  it('un 404 es "no está", no "se cayó"', async () => {
+    // La guía NO documenta qué contesta la búsqueda por DNI ante una persona no
+    // federada; para el endpoint hermano documenta 404 + OperationOutcome. Si
+    // esto fuera `bus-no-responde`, el caso MÁS COMÚN se vería como una caída.
+    mockFetch({
+      status: 404,
+      json: { resourceType: 'OperationOutcome', issue: [{ severity: 'error', diagnostics: 'Patient not found' }] },
+    });
+    const r = (await handler({} as never, evento({ dni: '12497884' }))) as ResultadoFederador;
+    expect(r.motivo).toBe('sin-resultados');
+    // El detalle queda para poder confirmar contra QA cuál de las dos formas usa.
+    expect(r.detalle).toContain('404');
+  });
 });
 
 describe('el camino feliz', () => {
