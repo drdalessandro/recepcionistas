@@ -226,6 +226,8 @@ export interface AltaPacienteInput {
   nombre?: string;
   firstName?: string;
   lastName?: string;
+  /** Nombre elegido (Ley 26.743), si difiere del legal. Es el que se muestra en todos lados. */
+  nombreElegido?: string;
   dni?: string;
   email?: string;
   telefono?: string;

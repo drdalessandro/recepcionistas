@@ -85,6 +85,64 @@ export function nombreLegal(opts: { texto: string; given?: string; family?: stri
 }
 
 /**
+ * El nombre elegido (Ley 26.743) como lo pide el perfil: `use: 'usual'`.
+ *
+ * `undefined` si no hay nada que guardar: un nombre elegido vacío no es "sin
+ * preferencia", es ruido en la ficha.
+ */
+export function nombreElegido(texto: string | undefined): HumanName | undefined {
+  const limpio = texto?.trim();
+  if (!limpio) {
+    return undefined;
+  }
+  return { use: 'usual', text: limpio };
+}
+
+/**
+ * Los `name` de la ficha, en el orden que hace que el sistema entero trate bien
+ * a la persona: **el elegido primero, el legal después**.
+ *
+ * El orden no es cosmético, es el mecanismo. `getDisplayString` (las ~20
+ * pantallas de la app) y los `name[0]` de los bots (saludos de WhatsApp,
+ * invitación al portal, borradores de respuesta) toman la primera entrada: con
+ * el elegido adelante, todo el trato usa el nombre por el que la persona pidió
+ * que la llamen —que es lo que manda la Ley 26.743 (art. 12)— sin tocar ninguno
+ * de esos veinte lugares. Quien necesita el nombre registral (el matching del
+ * Federador, cualquier trámite fiscal) lo busca por `use: 'official'`, que es
+ * como ya lo hace `src/lib/federador.ts`.
+ *
+ * El perfil `Patient-ar-core` pide exactamente estos dos slices: `NombreLegal`
+ * (`use: official`, 1..1) y `NombreElegido` (`use: usual`, 0..1).
+ */
+export function nombresPaciente(opts: {
+  legal: { texto: string; given?: string; family?: string };
+  elegido?: string;
+}): HumanName[] {
+  const usual = nombreElegido(opts.elegido);
+  const legal = nombreLegal(opts.legal);
+  return usual ? [usual, legal] : [legal];
+}
+
+/**
+ * Suma el nombre elegido a una ficha existente, adelante, sin tocar el resto.
+ *
+ * No pisa uno que ya esté: si la ficha ya tiene un `use: usual`, ese lo cargó
+ * alguien con la persona enfrente y corregirlo es una decisión de Recepción,
+ * no un efecto colateral de otra alta.
+ */
+export function conNombreElegido(
+  existentes: HumanName[] | undefined,
+  elegido: string | undefined,
+): HumanName[] {
+  const actuales = [...(existentes ?? [])];
+  const nuevo = nombreElegido(elegido);
+  if (!nuevo || actuales.some((n) => n.use === 'usual')) {
+    return actuales;
+  }
+  return [nuevo, ...actuales];
+}
+
+/**
  * Suma a una lista de identifiers los que falten, sin pisar los que ya están.
  *
  * Se compara por **system**, no por valor: si la ficha ya tiene un documento

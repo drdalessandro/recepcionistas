@@ -200,6 +200,25 @@ un aviso: el botón "Acceder con Google" desaparece y te enterás por el usuario
 Necesita el deploy de bots (§1) y el build del front (§3). **No** necesita el
 cron: la cancelación es el disparador.
 
+### Camino corto: el fixture arma todo
+
+```bash
+npm run seed:prueba-espera
+```
+
+Crea los dos pacientes de prueba, la espera anotada (HBOT, ventana de 7 días,
+sin preferencias) y un turno HBOT `booked` **mañana a las 15:00** de otro
+paciente. La prueba queda en una sola acción: *Agenda* → vista **"7 días"** →
+clic en el turno "HBOT (fixture…)" → **Cancelar** → mirar **Avisos**.
+
+Se puede repetir todas las veces que haga falta: cada corrida borra el turno
+anterior **y su Task de hueco** (el aviso es idempotente por turno para
+siempre; sin esa limpieza la segunda prueba no avisa nunca) y crea un turno
+nuevo. `PRUEBA_ESPERA_TELEFONO` en el `.env` pone tu número como destinatario
+del "Ofrecer por WhatsApp".
+
+### Camino manual (el circuito completo desde la UI)
+
 1. **Anotar la espera.** *Atender* → buscar al paciente → botón **"No hay lugar:
    anotar en la lista de espera"** (al lado de *Reservar turno*). Elegir servicio;
    días y franja son opcionales. Guardar con **"Anotar en la lista"**.

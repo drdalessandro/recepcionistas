@@ -17,6 +17,7 @@
     "test:watch": "vitest",
     "seed": "tsx src/seed/index.ts",
     "seed:prueba-recordatorios": "tsx src/seed/prueba-recordatorios.ts",
+    "seed:prueba-espera": "tsx src/seed/prueba-espera.ts",
     "datos-demo": "tsx src/seed/datos-demo.ts",
     "migrar:medios": "tsx src/seed/migrar-medio-pago.ts",
     "migrar:dni-renaper": "tsx src/seed/migrar-dni-renaper.ts",
