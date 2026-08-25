@@ -1,8 +1,24 @@
-import { describe, it, expect, vi, afterEach } from 'vitest';
+import { beforeEach, describe, it, expect, vi, afterEach } from 'vitest';
 import type { BotEvent } from '@medplum/core';
-import { handler, type EntradaFederador, type ResultadoFederador } from '../src/bots/federador.js';
+import type { EntradaFederador, ResultadoFederador } from '../src/bots/federador.js';
 import { BUS_URLS } from '../src/lib/bus-msal.js';
 import { SYSTEM_RENAPER_DNI } from '../src/fhir/identifiers.js';
+
+/**
+ * El bot cachea el `accessToken` **a nivel de módulo**, y en Lambda eso es
+ * deliberado: sin el cache, cada DNI tipeado son dos viajes al bus nacional.
+ *
+ * En los tests hay que romperlo. Con el módulo compartido, el token que dejó un
+ * caso anterior hace que el siguiente **no pase por el auth**, y entonces un
+ * fallo de autenticación se ve como un fallo de búsqueda — que fue exactamente
+ * lo que pasó al escribir el caso del 412.
+ */
+let handler: (typeof import('../src/bots/federador.js'))['handler'];
+
+beforeEach(async () => {
+  vi.resetModules();
+  ({ handler } = await import('../src/bots/federador.js'));
+});
 
 /**
  * El bot contra el bus del Ministerio.
@@ -98,6 +114,26 @@ describe('cuando el bus se porta mal, no dice que la persona no existe', () => {
     expect(r.motivo).toBe('sin-resultados');
     // El detalle queda para poder confirmar contra QA cuál de las dos formas usa.
     expect(r.detalle).toContain('404');
+  });
+});
+
+describe('el detalle propaga lo que dijo el bus, no un resumen nuestro', () => {
+  it('el 412 real de QA llega entero al que llamó', async () => {
+    // Sin esto, cualquier problema de auth se ve como "no se pudo obtener el
+    // accessToken" y hay que ir a CloudWatch para saber cuál era.
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () =>
+        new Response(
+          '{"httpStatus":"PRECONDITION_FAILED","name":"IllegalState","message":"Missing organization authentication","status":412}',
+          { status: 412 },
+        ),
+      ),
+    );
+    const r = (await handler({} as never, evento({ dni: '23327755' }))) as ResultadoFederador;
+    expect(r.motivo).toBe('bus-no-responde');
+    expect(r.detalle).toContain('412');
+    expect(r.detalle).toContain('Missing organization authentication');
   });
 });
 

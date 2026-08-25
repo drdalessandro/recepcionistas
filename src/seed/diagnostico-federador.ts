@@ -42,11 +42,14 @@ import {
   PATH_AUTH,
   SCOPES,
   ambienteBus,
+  clasificarErrorAuth,
   cuerpoPedidoToken,
+  mensajeDelBus,
   pareceIntermediario,
   urlBusquedaPorDni,
   urlToken,
   type AmbienteBus,
+  type ClaseErrorAuth,
 } from '../lib/bus-msal.js';
 import { firmarClientAssertion, type ResultadoFederador } from '../bots/federador.js';
 import { elegirPorDni } from '../lib/federador.js';
@@ -164,8 +167,17 @@ async function pedirToken(busUrl: string, issuer: string, secreto: string, ttl?:
  */
 type Veredicto = 'ok' | 'falla' | 'no-probado';
 
+/**
+ * Lo que la Capa 1 aprendió del rechazo, para que la conclusión no invente.
+ * Sin esto, un `412` y una firma mal terminan dando el mismo consejo.
+ */
+interface Notas {
+  claseAuth?: ClaseErrorAuth;
+  diceElBus?: string;
+}
+
 /** Capa 1: bus directo, con las credenciales del `.env`. */
-async function capaLocal(opts: Opciones, busUrl: string): Promise<Veredicto> {
+async function capaLocal(opts: Opciones, busUrl: string, notas: Notas): Promise<Veredicto> {
   console.log('\n--- Capa 1 · contra el bus desde acá (valida la TOKEN SECRET WORD) ---\n');
 
   const issuer = process.env.BUS_MSAL_ISSUER;
@@ -210,13 +222,47 @@ async function capaLocal(opts: Opciones, busUrl: string): Promise<Veredicto> {
   }
 
   if (!auth.ok) {
-    console.error(`\n✗ El bus RECHAZÓ la autenticación (HTTP ${auth.status}).`);
-    console.error(`  Respuesta: ${auth.cuerpo || '(vacía)'}`);
+    const clase = clasificarErrorAuth(auth.status ?? 0, auth.cuerpo ?? '');
+    const dice = mensajeDelBus(auth.cuerpo ?? '');
+    notas.claseAuth = clase;
+    notas.diceElBus = dice;
+    console.error(`\n✗ El bus rechazó la autenticación (HTTP ${auth.status}).`);
+    // Lo que el bus dice de sí mismo va primero y textual. Cuando el otro lado
+    // explica qué le falta, citarlo vale más que cualquier hipótesis nuestra.
+    if (dice) {
+      console.error(`  Dice: «${dice}»`);
+    }
+    console.error(`  Respuesta cruda: ${auth.cuerpo || '(vacía)'}`);
 
     // La colección oficial firma con exp = iat + 6000000 (~69 días) y nosotros
     // con 5 minutos. Está documentado como la primera perilla a mover, así que
     // se prueba sola: si con el exp largo entra, el problema es ASSERTION_TTL_S
     // y no la secret word — dos arreglos muy distintos.
+    //
+    // Pero solo cuando el rechazo puede ser de la aserción. Ante un 412 el bus
+    // ya dijo que le falta OTRA cosa; reintentar sería ruido, y peor: sugerir
+    // que la credencial está en discusión cuando no lo está.
+    if (clase !== 'credencial' && clase !== 'desconocido') {
+      console.error('\n  El bus NO está discutiendo la firma: está pidiendo un requisito previo.');
+      console.error('  **No cambies la token secret word por esto** — no es lo que te está reclamando.');
+      if (/organization authentication/i.test(dice ?? '')) {
+        // Este mensaje ya lo vimos y lo rastreamos: no hace falta que nadie
+        // vuelva a investigarlo desde cero.
+        console.error('\n  Este error ya está diagnosticado. Falta una SEGUNDA autenticación, la de la');
+        console.error('  aplicación, que es distinta de la del dominio que sí estamos haciendo:');
+        console.error('    POST {bus}/masterfile-federacion-service/api/usuarios/aplicacion/login');
+        console.error('    {"nombre": …, "clave": …, "codDominio": …}   → devuelve `token`');
+        console.error('  Son las credenciales `appName`/`appPassword` de los environments de Postman,');
+        console.error('  que vienen vacías: hay que pedírselas al Ministerio para el dominio 4002.');
+        console.error('  El detalle y las preguntas exactas están en');
+        console.error('  docs/handoff-federador-msal.md § "Missing organization authentication".');
+      } else {
+        console.error('  Lo que dice arriba es lo que hay que resolver, y probablemente no se resuelva');
+        console.error('  desde el código: mirá docs/handoff-federador-msal.md § "Missing organization authentication".');
+      }
+      return 'falla';
+    }
+
     console.log('\n  Reintentando con el `exp` largo de la colección oficial (iat + 6000000) para descartar el TTL…');
     try {
       const largo = await pedirToken(busUrl, issuer, secreto, 6_000_000);
@@ -471,9 +517,10 @@ async function capaBot(opts: Opciones): Promise<Veredicto> {
     case 'bus-no-responde':
       avisarAmbiente(r.ambiente);
       console.error(`\n✗ El bus no contestó bien: ${r.detalle ?? '(sin detalle)'}`);
-      console.error('  Si la Capa 1 pasó, los Project Secrets NO coinciden con lo que hay en el .env:');
-      console.error('  revisá BUS_MSAL_SECRET y BUS_MSAL_ISSUER en Medplum (se copian con espacios de más muy fácil).');
-      console.error('  El detalle completo está en el log del bot (AuditEvent / CloudWatch).');
+      console.error('  El bot no reporta el cuerpo del error del bus; está en su log (AuditEvent / CloudWatch).');
+      console.error('  Si la Capa 1 falló igual, es el MISMO problema visto desde el servidor y no hay');
+      console.error('  nada que alinear. Si la Capa 1 pasó, entonces sí: revisá que BUS_MSAL_SECRET y');
+      console.error('  BUS_MSAL_ISSUER en Medplum no tengan espacios de más al copiarlos.');
       return 'falla';
 
     case 'sin-resultados':
@@ -522,11 +569,12 @@ async function main(): Promise<void> {
     console.log('      Recordá que el environment "VARIABLES QA" de Postman trae la URL de producción.');
   }
 
+  const notas: Notas = {};
   let local: Veredicto = 'no-probado';
   let bot: Veredicto = 'no-probado';
 
   if (!opts.soloBot) {
-    local = await capaLocal(opts, busUrl);
+    local = await capaLocal(opts, busUrl, notas);
   }
   if (!opts.soloLocal) {
     try {
@@ -548,6 +596,16 @@ async function main(): Promise<void> {
   if (local === 'ok' && bot === 'falla') {
     console.log('\n  → La credencial SIRVE, pero el servidor no la tiene bien. El arreglo está en');
     console.log('    Medplum (Project → Secrets), no en el código ni en la credencial.');
+  } else if (local === 'falla' && bot === 'falla' && notas.claseAuth === 'precondicion') {
+    // Los dos lados fallan IGUAL y el bus dijo qué le falta. Que coincidan no
+    // acusa a la credencial: acusa a que falta un requisito, y con la misma
+    // credencial en los dos lados es lo esperable que fallen los dos.
+    console.log(`\n  → Los dos lados fallan igual, y el bus dice: «${notas.diceElBus ?? '(sin mensaje)'}».`);
+    console.log('    Eso NO es la credencial: es un requisito previo que le falta al pedido. La');
+    console.log('    configuración de tu lado está bien —.env y Project Secrets coinciden, el bot');
+    console.log('    está deployado y llega al bus—. Lo que falta se resuelve del lado del');
+    console.log('    Ministerio o con un paso de autenticación que todavía no tenemos documentado.');
+    console.log('    Ver docs/handoff-federador-msal.md § "Missing organization authentication".');
   } else if (local === 'falla' && bot === 'falla') {
     console.log('\n  → Falla de los dos lados: lo más probable es que la token secret word no sea la');
     console.log('    correcta para este ambiente. Sacala de dominios.msal.gob.ar → credenciales.');

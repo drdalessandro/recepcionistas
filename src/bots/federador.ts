@@ -44,6 +44,7 @@ import {
   ambienteBus,
   claimsClientAssertion,
   cuerpoPedidoToken,
+  mensajeDelBus,
   tokenSirve,
   urlBusquedaPorDni,
   urlToken,
@@ -150,13 +151,20 @@ export function firmarClientAssertion(
   return `${header}.${payload}.${firma}`;
 }
 
-/** Pide un accessToken para UN scope. */
+/**
+ * Pide un accessToken para UN scope.
+ *
+ * Devuelve también **por qué** falló, no solo que falló. El bus explica lo que
+ * le falta (`412 Missing organization authentication`, por ejemplo), y tragarse
+ * ese texto obliga a ir a buscarlo a CloudWatch para diagnosticar cualquier
+ * cosa. El `detalle` no lleva secretos: es la respuesta del otro lado.
+ */
 async function pedirToken(
   busUrl: string,
   issuer: string,
   secreto: string,
   scope: ScopeBus,
-): Promise<string | undefined> {
+): Promise<{ accessToken?: string; detalle?: string }> {
   const assertion = firmarClientAssertion(issuer, secreto, new Date());
   const resp = await fetch(urlToken(busUrl), {
     method: 'POST',
@@ -165,12 +173,15 @@ async function pedirToken(
     signal: AbortSignal.timeout(TIMEOUT_AUTH_MS),
   });
   if (!resp.ok) {
-    // Queda en CloudWatch: es donde se ve si el problema es la secret word.
-    console.log(`bw-federador: auth respondió ${resp.status}: ${(await resp.text().catch(() => '')).slice(0, 300)}`);
-    return undefined;
+    const crudo = (await resp.text().catch(() => '')).slice(0, 300);
+    console.log(`bw-federador: auth respondió ${resp.status}: ${crudo}`);
+    const dice = mensajeDelBus(crudo);
+    return { detalle: dice ? `auth HTTP ${resp.status}: ${dice}` : `auth HTTP ${resp.status}` };
   }
   const json = (await resp.json().catch(() => undefined)) as { accessToken?: string } | undefined;
-  return json?.accessToken;
+  return json?.accessToken
+    ? { accessToken: json.accessToken }
+    : { detalle: 'auth 200 pero sin accessToken' };
 }
 
 /** El token del cache si sirve; si no, uno nuevo (y lo guarda). */
@@ -179,16 +190,16 @@ async function tokenParaBuscar(
   issuer: string,
   secreto: string,
   forzarNuevo = false,
-): Promise<string | undefined> {
+): Promise<{ accessToken?: string; detalle?: string }> {
   const ahora = new Date();
   if (!forzarNuevo && tokenSirve(cacheToken, SCOPES.pacienteLeer, ahora)) {
-    return cacheToken?.accessToken;
+    return { accessToken: cacheToken?.accessToken };
   }
-  const accessToken = await pedirToken(busUrl, issuer, secreto, SCOPES.pacienteLeer);
-  cacheToken = accessToken
-    ? { scope: SCOPES.pacienteLeer, accessToken, venceEn: new Date(ahora.getTime() + TOKEN_TTL_MS) }
+  const r = await pedirToken(busUrl, issuer, secreto, SCOPES.pacienteLeer);
+  cacheToken = r.accessToken
+    ? { scope: SCOPES.pacienteLeer, accessToken: r.accessToken, venceEn: new Date(ahora.getTime() + TOKEN_TTL_MS) }
     : undefined;
-  return accessToken;
+  return r;
 }
 
 export async function handler(
@@ -220,9 +231,12 @@ export async function handler(
   }
 
   try {
-    let token = await tokenParaBuscar(busUrl, issuer, secreto);
+    const primero = await tokenParaBuscar(busUrl, issuer, secreto);
+    let token = primero.accessToken;
     if (!token) {
-      return { ok: false, ambiente, motivo: 'bus-no-responde', detalle: 'no se pudo obtener el accessToken' };
+      // Se propaga lo que dijo el bus. Sin esto, cualquier problema de auth se
+      // veía igual desde afuera y había que ir a CloudWatch para distinguirlos.
+      return { ok: false, ambiente, motivo: 'bus-no-responde', detalle: primero.detalle ?? 'no se pudo obtener el accessToken' };
     }
 
     const buscar = async (bearer: string): Promise<Response> =>
@@ -235,9 +249,10 @@ export async function handler(
     if (resp.status === 401 || resp.status === 403) {
       // El cache tenía un token que el servidor ya invalidó: UN reintento con
       // uno nuevo. Sin esto, cachear cambiaría un problema por otro.
-      token = await tokenParaBuscar(busUrl, issuer, secreto, true);
+      const renovado = await tokenParaBuscar(busUrl, issuer, secreto, true);
+      token = renovado.accessToken;
       if (!token) {
-        return { ok: false, ambiente, motivo: 'bus-no-responde', detalle: 'no se pudo renovar el accessToken' };
+        return { ok: false, ambiente, motivo: 'bus-no-responde', detalle: renovado.detalle ?? 'no se pudo renovar el accessToken' };
       }
       resp = await buscar(token);
     }
@@ -252,8 +267,17 @@ export async function handler(
       return { ok: false, ambiente, motivo: 'sin-resultados', detalle: 'HTTP 404' };
     }
     if (!resp.ok) {
-      console.log(`bw-federador: búsqueda respondió ${resp.status}`);
-      return { ok: false, ambiente, motivo: 'bus-no-responde', detalle: `HTTP ${resp.status}` };
+      // Mismo criterio que en el auth: si el bus explicó qué le falta, eso viaja
+      // en el detalle en vez de quedar solo en el log.
+      const crudo = (await resp.text().catch(() => '')).slice(0, 300);
+      console.log(`bw-federador: búsqueda respondió ${resp.status}: ${crudo}`);
+      const dice = mensajeDelBus(crudo);
+      return {
+        ok: false,
+        ambiente,
+        motivo: 'bus-no-responde',
+        detalle: dice ? `HTTP ${resp.status}: ${dice}` : `HTTP ${resp.status}`,
+      };
     }
 
     // Un 200 NO garantiza un Bundle: un gateway puede devolver HTML, y el

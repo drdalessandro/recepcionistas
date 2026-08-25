@@ -7,7 +7,9 @@ import {
   PATH_FEDERADOR,
   SCOPES,
   claimsClientAssertion,
+  clasificarErrorAuth,
   cuerpoPedidoToken,
+  mensajeDelBus,
   pareceIntermediario,
   tokenSirve,
   urlBusquedaPorDni,
@@ -178,6 +180,46 @@ describe('distinguir al bus de lo que se le cruza en el camino', () => {
     // trate como respuesta del bus, que es el camino que sí pide confirmación.
     expect(pareceIntermediario(500, '')).toBe(false);
     expect(pareceIntermediario(500, '   ')).toBe(false);
+  });
+});
+
+/**
+ * Qué está discutiendo el bus.
+ *
+ * Salió de la primera corrida real contra QA: el bus contestó
+ * `412 Missing organization authentication` y el diagnóstico concluyó "lo más
+ * probable es que la token secret word no sea la correcta" — mandando a cambiar
+ * una credencial que el bus ni había mirado. Un 412 no habla de la firma.
+ */
+describe('la firma, o un requisito previo', () => {
+  const EL_412_REAL = '{"httpStatus":"PRECONDITION_FAILED","name":"IllegalState","message":"Missing organization authentication","status":412}';
+
+  it('el 412 real de QA es una precondición, NO la credencial', () => {
+    expect(clasificarErrorAuth(412, EL_412_REAL)).toBe('precondicion');
+  });
+
+  it('se cita al bus en vez de adivinar', () => {
+    expect(mensajeDelBus(EL_412_REAL)).toBe('Missing organization authentication');
+  });
+
+  it('un 401 sí pone la credencial en discusión', () => {
+    expect(clasificarErrorAuth(401, '{"error":"invalid_client"}')).toBe('credencial');
+    expect(clasificarErrorAuth(403, '')).toBe('credencial');
+  });
+
+  it('el mensaje manda aunque el código no sea 401', () => {
+    expect(clasificarErrorAuth(400, '{"error_description":"invalid signature"}')).toBe('credencial');
+  });
+
+  it('lee el diagnostics de un OperationOutcome, que es la otra forma del bus', () => {
+    // Así contestan el 400 y el 404 según la guía técnica.
+    const oo = '{"resourceType":"OperationOutcome","issue":[{"severity":"error","diagnostics":"Patient with identifier … not found"}]}';
+    expect(mensajeDelBus(oo)).toContain('not found');
+  });
+
+  it('sin JSON no hay mensaje que citar, y no se inventa uno', () => {
+    expect(mensajeDelBus('<html>502</html>')).toBeUndefined();
+    expect(clasificarErrorAuth(500, 'boom')).toBe('desconocido');
   });
 });
 

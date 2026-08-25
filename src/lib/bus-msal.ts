@@ -162,6 +162,56 @@ export function pareceIntermediario(status: number, cuerpo: string): boolean {
   return /allowlist|egress|proxy|forbidden by|blocked/i.test(texto);
 }
 
+/**
+ * El mensaje que el bus da de sí mismo, si lo da.
+ *
+ * Contesta en al menos dos formas: su envoltorio propio (`{"message": …}`, como
+ * el 412) y `OperationOutcome` de FHIR (`issue[].diagnostics`, como el 400 y el
+ * 404 de la guía). Vale la pena leerlo antes de opinar: cuando el otro lado
+ * explica qué le falta, adivinar es peor que citarlo.
+ */
+export function mensajeDelBus(cuerpo: string): string | undefined {
+  let json: unknown;
+  try {
+    json = JSON.parse(cuerpo);
+  } catch {
+    return undefined;
+  }
+  const o = json as {
+    message?: string;
+    error_description?: string;
+    issue?: Array<{ diagnostics?: string }>;
+  } | null;
+  const diagnostics = o?.issue?.map((i) => i?.diagnostics).filter(Boolean).join(' · ');
+  return o?.message || o?.error_description || diagnostics || undefined;
+}
+
+/** Qué clase de rechazo es el del endpoint de auth. */
+export type ClaseErrorAuth = 'credencial' | 'precondicion' | 'desconocido';
+
+/**
+ * ¿El bus está discutiendo nuestra **firma**, o pidiendo otra cosa?
+ *
+ * La diferencia decide qué se toca. Un `412 Missing organization authentication`
+ * no dice nada de la *token secret word*: dice que falta un requisito previo. Y
+ * mandar a cambiar la credencial por eso hace perder horas cambiando algo que
+ * está bien — el mismo error de siempre, adivinar en vez de leer lo que el otro
+ * lado dijo.
+ */
+export function clasificarErrorAuth(status: number, cuerpo: string): ClaseErrorAuth {
+  if (status === 412) {
+    return 'precondicion';
+  }
+  if (status === 401 || status === 403) {
+    return 'credencial';
+  }
+  const mensaje = mensajeDelBus(cuerpo) ?? cuerpo;
+  if (/invalid[_ ]?(client|token|signature|assertion|grant)|signature|unauthorized/i.test(mensaje)) {
+    return 'credencial';
+  }
+  return 'desconocido';
+}
+
 /** Un token vivo, por scope. */
 export interface TokenCacheado {
   scope: ScopeBus;
