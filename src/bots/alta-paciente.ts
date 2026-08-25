@@ -15,7 +15,6 @@ import {
   EXT_CICLO_VIDA,
   EXT_LEAD_ORIGEN,
   ORIGENES_LEAD_LABELS,
-  SYSTEM,
   SYSTEM_CICLO_VIDA,
   SYSTEM_ETAPA_PIPELINE,
   TASK_INPUT_PROXIMA_ACCION,
@@ -23,6 +22,7 @@ import {
   type CicloVida,
 } from '../fhir/identifiers.js';
 import { demandaABasic } from '../fhir/demanda.js';
+import { busquedaPorDni, conIdentificadoresDni, identificadoresDni } from '../fhir/paciente.js';
 import { validarPedido } from '../lib/demanda.js';
 import { descripcionLead, fuenteDeLead, nombreDeLead, proximaAccionLead } from '../lib/lead.js';
 import { partirNombre, validarEmail } from '../lib/onboarding.js';
@@ -138,7 +138,10 @@ async function buscarExistente(
   e: EntradaAltaPaciente,
 ): Promise<Patient | undefined> {
   if (e.dni) {
-    const p = await medplum.searchOne('Patient', `identifier=${SYSTEM.dni}|${e.dni.trim()}`);
+    // Por los DOS systems del documento (el nuestro y el canónico de RENAPER):
+    // una ficha que solo tenga el canónico sería invisible acá y terminaría en
+    // un duplicado — el caso 2 del walk-in con otro disfraz.
+    const p = await medplum.searchOne('Patient', busquedaPorDni(e.dni));
     if (p) {
       return p;
     }
@@ -201,10 +204,9 @@ export async function handler(
       if (origen && !extension.some((x) => x.url === EXT.origenLead)) {
         extension.push({ url: EXT.origenLead, valueString: origen });
       }
-      const identifier = [...(existente.identifier ?? [])];
-      if (e.dni && !identifier.some((i) => i.system === SYSTEM.dni)) {
-        identifier.push({ system: SYSTEM.dni, value: e.dni.trim() });
-      }
+      // Suma el documento con los dos systems si falta alguno; nunca pisa uno
+      // ya cargado (corregir un documento es una decisión sobre la ficha).
+      const identifier = conIdentificadoresDni(existente.identifier, e.dni);
       const nuevosTelecom = telecom(e.telefono, e.email).filter(
         (n) => !(existente.telecom ?? []).some((t) => t.system === n.system && t.value === n.value),
       );
@@ -219,6 +221,7 @@ export async function handler(
       return { ok: true, patientId: actualizado.id, creado: false, ...(demandaId ? { demandaId } : {}) };
     }
 
+    const documento = identificadoresDni(e.dni);
     const creado = await medplum.createResource<Patient>({
       resourceType: 'Patient',
       active: true,
@@ -230,7 +233,9 @@ export async function handler(
           }
         : {}),
       name: [{ text: nombreText, given: [firstName], family: lastName }],
-      identifier: e.dni ? [{ system: SYSTEM.dni, value: e.dni.trim() }] : undefined,
+      // El documento con los dos systems: el nuestro tal como se tipeó y el
+      // canónico de RENAPER normalizado (ver src/fhir/paciente.ts).
+      ...(documento.length ? { identifier: documento } : {}),
       telecom: telecom(e.telefono, e.email),
       // fecha-alta: cohortes mensuales del CRM. Solo al CREAR (las fichas
       // viejas quedan sin fecha, decisión 2026-07: no se retro-etiqueta).

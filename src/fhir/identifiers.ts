@@ -153,7 +153,14 @@ export const SYSTEM = {
   invoice: `${BASE}/Identifier/invoice`,
   /** Identifier de Communication (para deduplicar recordatorios automáticos). */
   communication: `${BASE}/Identifier/communication`,
-  /** Documento (DNI) del paciente, para deduplicar altas. */
+  /**
+   * Documento (DNI) del paciente **con nuestro namespace**, para deduplicar
+   * altas. Es el histórico y guarda el valor TAL COMO SE TIPEÓ ("30.123.456" o
+   * "30123456"): las fichas viejas dependen de eso y no se re-normaliza.
+   *
+   * Para hablar con cualquiera afuera está `SYSTEM_RENAPER_DNI` (ver abajo), que
+   * se escribe **en paralelo** y siempre normalizado.
+   */
   dni: `${BASE}/Identifier/dni`,
   /**
    * Número de Founding Member (R-09): "1".."100". El value ubica la cohorte
@@ -360,6 +367,30 @@ export const ORIGENES_LEAD_LABELS: Record<OrigenLead, string> = {
   derivacion: 'Derivación médica',
   otro: 'Otro',
 };
+
+/**
+ * DNI con el system **canónico nacional** (RENAPER).
+ *
+ * No es nuestro: es el identificador con el que el resto del sistema de salud
+ * argentino nombra a una persona. Lo usa el Federador de Pacientes del
+ * Ministerio de Salud —`GET /fhir/Patient?identifier=http://www.renaper.gob.ar/dni|23327755`—
+ * y es el que aparece en los `Patient` federados junto a los de cada hospital y
+ * laboratorio (verificado contra la guía técnica Patient/FEDERADOR, OCT2025).
+ *
+ * Se escribe **además** del nuestro, nunca en lugar de él: una ficha lleva los
+ * dos identifiers con el mismo documento. Cuesta un renglón y hace que la ficha
+ * sea cruzable con cualquier otro sistema sin tabla de equivalencias ni
+ * migración posterior. Mismo criterio que ya usamos con el CRM: cuando el otro
+ * ya tiene un identificador, se usa el suyo en vez de inventar uno.
+ *
+ * ⚠️ Es `http://`, no `https://`: así está publicado el system y un token search
+ * de FHIR compara el string exacto. "Corregirlo" rompe el match.
+ *
+ * (El perfil `Patient` de AR Core también slicea el documento; no se pudo
+ * verificar su URL desde este entorno —`guias.hl7.org.ar` está bloqueado por el
+ * proxy—. Si difiere, es esta única constante la que cambia.)
+ */
+export const SYSTEM_RENAPER_DNI = 'http://www.renaper.gob.ar/dni';
 
 /** Clave del recurso de configuración de Tipo de Cambio (Basic). */
 export const CONFIG_TC_ID = 'config-tipo-cambio';

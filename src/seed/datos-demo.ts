@@ -18,6 +18,7 @@ import { getServicio } from '../config/catalogo.js';
 import { codigoConsulta } from '../config/medicos.js';
 import { EXT, SYSTEM } from '../fhir/identifiers.js';
 import { clasificacionDeServicio } from '../fhir/appointment.js';
+import { identificadoresDni } from '../fhir/paciente.js';
 import { META_DEMO, borrarRecursosDemo } from '../bots/_shared.js';
 
 const TZ = '-03:00';
@@ -89,7 +90,8 @@ async function generar(medplum: MedplumClient): Promise<void> {
       meta: META_DEMO,
       active: true,
       name: [{ text: `${p.nombre} ${p.apellido}`, given: [p.nombre], family: p.apellido }],
-      identifier: [{ system: SYSTEM.dni, value: p.dni }],
+      // Los dos systems del documento, igual que un alta real.
+      identifier: identificadoresDni(p.dni),
       telecom: [
         { system: 'phone', value: p.tel, use: 'mobile' },
         { system: 'email', value: p.email },

@@ -9,7 +9,7 @@ Naming: **kebab-case**.
 
 | Recurso FHIR | Uso | Extensiones custom |
 |---|---|---|
-| **Patient** | Ficha del paciente | `tipo-cliente`, `tag-fm`, `tc-bloqueo-fm`, `perfil-clinico`, `origen-lead` |
+| **Patient** | Ficha del paciente | `tipo-cliente`, `tag-fm`, `tc-bloqueo-fm`, `perfil-clinico`, `origen-lead`, `fecha-alta` |
 | **Practitioner** | Médicos, terapeutas, enfermeras | `split-porcentaje`, `tipo-contrato` |
 | **Schedule / Slot** | Disponibilidad de recursos físicos | `recurso-fisico`, `comparte-tumbona` |
 | **Appointment** | Turno reservado · **espera de lugar** (`status: waitlist`) | `orden-protocolo`, `requiere-hbot-previo`, `ocupantes`, `espera-dias`, `espera-franjas` |
@@ -53,6 +53,24 @@ Naming: **kebab-case**.
   ventana ("martes o jueves, a la tarde"), y sin eso el aviso se vuelve ruido:
   por eso van `espera-dias` (CSV con la convención de `Date.getDay()`) y
   `espera-franjas` (`manana|tarde|noche`). Vacías = cualquiera.
+- **Documento del paciente: DOS identifiers, a propósito.** La ficha lleva el DNI
+  dos veces:
+  - `https://biowellness.ar/fhir/Identifier/dni` — el nuestro, histórico. Guarda
+    el valor **tal como se tipeó** (`"30.123.456"`). Las fichas viejas y sus
+    búsquedas dependen de esa forma, así que no se re-normaliza.
+  - `http://www.renaper.gob.ar/dni` — el **canónico nacional**, siempre
+    normalizado a dígitos (`"30123456"`). Es el system con el que el Federador de
+    Pacientes del Ministerio de Salud y el resto del ecosistema nombran a una
+    persona (guía técnica Patient/FEDERADOR, OCT2025).
+
+  Cuesta un renglón y vuelve la ficha cruzable con cualquier otro sistema sin
+  tabla de equivalencias ni migración posterior — el mismo criterio que ya
+  usamos con el CRM: cuando el otro ya tiene un identificador, se usa el suyo.
+  El alta escribe los dos y **busca por los dos** (`busquedaPorDni`): una ficha
+  que solo tuviera el canónico sería invisible y terminaría en un duplicado.
+  Ojo con el `http://` — el token search de FHIR compara el string exacto.
+  Construcción en `src/fhir/paciente.ts`; fichas anteriores:
+  `npm run migrar:dni-renaper` (aditivo e idempotente).
 - **Contraindicaciones:** `CodeSystem` en estado `active` — tabla validada por el
   Director Médico (Dr. Conrado López Alonso, 2026-08-09). Una entrada nueva sin
   validar (`borradorPendienteRevision`) lo vuelve a `draft` hasta su aprobación.
