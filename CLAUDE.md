@@ -68,6 +68,7 @@ npm run bots:bundle        # bundlea los bots sin conectarse (dry-run)
 npm run deploy:bots        # crea + bundlea (esbuild) + deploya los bots — NO usa el CLI de Medplum
 npm run bots:check         # ¿están todos creados y con código deployado?
 npm run migrar:dni-renaper # suma el DNI con el system canónico (RENAPER) a fichas viejas
+npm run federador:check    # ¿anda el Federador del Ministerio? (QA por defecto; --prod es explícito)
 ```
 
 > Puesta en producción (deploy, cron, build del app, prueba end-to-end):
