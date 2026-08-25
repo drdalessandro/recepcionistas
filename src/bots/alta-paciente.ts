@@ -22,7 +22,7 @@ import {
   type CicloVida,
 } from '../fhir/identifiers.js';
 import { demandaABasic } from '../fhir/demanda.js';
-import { busquedaPorDni, conIdentificadoresDni, identificadoresDni } from '../fhir/paciente.js';
+import { busquedaPorDni, conIdentificadoresDni, identificadoresDni, nombreLegal } from '../fhir/paciente.js';
 import { validarPedido } from '../lib/demanda.js';
 import { descripcionLead, fuenteDeLead, nombreDeLead, proximaAccionLead } from '../lib/lead.js';
 import { partirNombre, validarEmail } from '../lib/onboarding.js';
@@ -212,7 +212,7 @@ export async function handler(
       );
       const actualizado = await medplum.updateResource<Patient>({
         ...existente,
-        name: existente.name?.length ? existente.name : [{ text: nombreText, given: [firstName], family: lastName }],
+        name: existente.name?.length ? existente.name : [nombreLegal({ texto: nombreText, given: firstName, family: lastName })],
         identifier,
         telecom: [...(existente.telecom ?? []), ...nuevosTelecom],
         extension: extension.length ? extension : undefined,
@@ -232,7 +232,7 @@ export async function handler(
             meta: { tag: [{ system: SYSTEM_CICLO_VIDA, code: e.cicloVida }] },
           }
         : {}),
-      name: [{ text: nombreText, given: [firstName], family: lastName }],
+      name: [nombreLegal({ texto: nombreText, given: firstName, family: lastName })],
       // El documento con los dos systems: el nuestro tal como se tipeó y el
       // canónico de RENAPER normalizado (ver src/fhir/paciente.ts).
       ...(documento.length ? { identifier: documento } : {}),

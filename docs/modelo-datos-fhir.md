@@ -71,6 +71,45 @@ Naming: **kebab-case**.
   Ojo con el `http://` — el token search de FHIR compara el string exacto.
   Construcción en `src/fhir/paciente.ts`; fichas anteriores:
   `npm run migrar:dni-renaper` (aditivo e idempotente).
+
+  **No es una invención nuestra: es lo que exige el perfil nacional.**
+  [`Patient-ar-core`](http://fhir.msal.gob.ar/core/StructureDefinition/Patient-ar-core)
+  (v0.5.0, DNSIS · Ministerio de Salud / HL7 Argentina) pide `identifier` **2..\***
+  con dos slices obligatorios discriminados por `use`:
+
+  | Slice | `use` | `system` |
+  |---|---|---|
+  | `DocumentoUnico` (1..1) | `official` | fijo: `http://www.renaper.gob.ar/dni` |
+  | `IdentificadorDominio` (1..1) | `usual` | el del dominio — el nuestro |
+
+  Por eso los identifiers llevan `use`: es la dimensión por la que el perfil
+  slicea, y sin él la ficha no conforma aunque los dos systems estén bien.
+
+### Qué falta para conformar `Patient-ar-core`
+
+El perfil deriva de `Patient-uv-ips` y pide, además de lo de arriba:
+
+| Requisito | Estado |
+|---|---|
+| `identifier` 2..* con `use` (arriba) | ✅ |
+| `active` 1..1 fijo en `true` | ✅ (el alta lo escribe) |
+| `name:NombreLegal` con `use: official` | ✅ |
+| `family.extension:FathersLastName` **1..1** (`humanname-fathers-family`) | ❌ **falta** |
+| `family.extension:MothersLastName` 0..1 | ❌ falta |
+| `name:NombreElegido` 0..1 (`use: usual`) — nombre elegido, Ley 26.743 | ❌ falta (decisión de producto) |
+
+Los dos apellidos **no se escriben adivinando**: el alta recibe un nombre
+completo y lo parte en dos, y de "Juan Pérez González" no se deduce si el
+apellido paterno es "Pérez" o si el compuesto es "Pérez González". Inventarlo
+sería poner en la ficha un dato de identidad que nadie afirmó. Además va en
+`_family` (extensión de un primitivo), que los tipos de Medplum no modelan: hay
+que verificar contra el servidor que lo persista antes de escribirlo. La fuente
+natural es el Federador, que ya lo devuelve separado.
+
+> Ojo con la cardinalidad: un **lead sin documento** (el curioso del mostrador)
+> no puede conformar `identifier` 2..*, y está bien — el perfil es para
+> intercambiar pacientes, no para el CRM interno. Se conforma cuando hay
+> documento.
 - **Contraindicaciones:** `CodeSystem` en estado `active` — tabla validada por el
   Director Médico (Dr. Conrado López Alonso, 2026-08-09). Una entrada nueva sin
   validar (`borradorPendienteRevision`) lo vuelve a `draft` hasta su aprobación.

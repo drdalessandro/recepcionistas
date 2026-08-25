@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { busquedaPorDni, conIdentificadoresDni, identificadoresDni } from '../src/fhir/paciente.js';
+import { busquedaPorDni, conIdentificadoresDni, identificadoresDni, nombreLegal } from '../src/fhir/paciente.js';
 import { SYSTEM, SYSTEM_RENAPER_DNI } from '../src/fhir/identifiers.js';
 import { variantesDni } from '../src/lib/dedup.js';
 
@@ -16,8 +16,8 @@ import { variantesDni } from '../src/lib/dedup.js';
 describe('identificadoresDni — los dos systems, cada uno con su forma', () => {
   it('el nuestro conserva el valor tal como se tipeó; el canónico va en dígitos', () => {
     expect(identificadoresDni('30.123.456')).toEqual([
-      { system: SYSTEM.dni, value: '30.123.456' },
-      { system: SYSTEM_RENAPER_DNI, value: '30123456' },
+      { use: 'usual', system: SYSTEM.dni, value: '30.123.456' },
+      { use: 'official', system: SYSTEM_RENAPER_DNI, value: '30123456' },
     ]);
   });
 
@@ -105,3 +105,41 @@ describe('convivencia con el dedupe existente', () => {
     expect(documentos.has('30.123.456')).toBe(true);
   });
 });
+
+/**
+ * Conformidad con `Patient-ar-core` (fhir.msal.gob.ar v0.5.0): el perfil exige
+ * `identifier` 2..* con dos slices discriminados por `use`, y el nombre legal
+ * con `use: official`.
+ */
+describe('Patient-ar-core — lo que el perfil nacional exige', () => {
+  it('los dos identifiers que pide el perfil, con su `use` como discriminador', () => {
+    const ids = identificadoresDni('30123456');
+    // DocumentoUnico: use official + system fijo de RENAPER.
+    const documentoUnico = ids.find((i) => i.system === SYSTEM_RENAPER_DNI);
+    expect(documentoUnico?.use).toBe('official');
+    // IdentificadorDominio: use usual + el system del dominio (el nuestro).
+    const delDominio = ids.find((i) => i.system === SYSTEM.dni);
+    expect(delDominio?.use).toBe('usual');
+  });
+
+  it('cumple la cardinalidad 2..* cuando hay documento', () => {
+    expect(identificadoresDni('30123456').length).toBeGreaterThanOrEqual(2);
+  });
+
+  it('el nombre legal va con use official', () => {
+    expect(nombreLegal({ texto: 'Juan Pérez', given: 'Juan', family: 'Pérez' })).toEqual({
+      use: 'official',
+      text: 'Juan Pérez',
+      given: ['Juan'],
+      family: 'Pérez',
+    });
+  });
+
+  it('un lead sin nombre no inventa given/family vacíos', () => {
+    const n = nombreLegal({ texto: 'Consulta en el mostrador · 14/08 15:30' });
+    expect(n.given).toBeUndefined();
+    expect(n.family).toBeUndefined();
+    expect(n.text).toContain('Consulta en el mostrador');
+  });
+});
+

@@ -16,8 +16,15 @@
  * de FHIR compara strings exactos, así que "30.123.456" y "30123456" son
  * documentos distintos para el servidor — por eso el canónico tiene una única
  * forma posible y el nuestro conserva la que ya está escrita.
+ *
+ * **Esto es lo que pide el perfil nacional**, no una invención nuestra:
+ * `Patient-ar-core` (fhir.msal.gob.ar, v0.5.0) exige `identifier` **2..\*** con
+ * dos slices obligatorios discriminados por `use` —`DocumentoUnico` (`use:
+ * official`, system fijo `http://www.renaper.gob.ar/dni`) e
+ * `IdentificadorDominio` (`use: usual`, system del dominio, o sea el nuestro)—.
+ * O sea: guardar los dos no es solo compatible con el perfil, es su requisito.
  */
-import type { Identifier } from '@medplum/fhirtypes';
+import type { HumanName, Identifier } from '@medplum/fhirtypes';
 import { SYSTEM, SYSTEM_RENAPER_DNI } from './identifiers.js';
 import { soloDigitos } from '../lib/dedup.js';
 
@@ -40,9 +47,41 @@ export function identificadoresDni(dni: string | undefined): Identifier[] {
     return [];
   }
   return [
-    { system: SYSTEM.dni, value: crudo },
-    { system: SYSTEM_RENAPER_DNI, value: digitos },
+    // `use` sale del perfil nacional (ver el bloque de arriba): el documento del
+    // dominio es `usual`, el de RENAPER es `official`. Es la dimensión por la
+    // que el perfil slicea `identifier`, así que sin `use` la ficha no conforma
+    // aunque tenga los dos systems correctos.
+    { use: 'usual', system: SYSTEM.dni, value: crudo },
+    { use: 'official', system: SYSTEM_RENAPER_DNI, value: digitos },
   ];
+}
+
+/**
+ * El nombre legal como lo pide el perfil: `use: 'official'`.
+ *
+ * El perfil además exige el **apellido paterno** en una extensión sobre
+ * `family` (`humanname-fathers-family`, 1..1) y admite el materno (0..1). Eso
+ * NO se escribe todavía, por dos razones concretas:
+ *
+ *  - **No lo sabemos.** El alta recibe un nombre completo y lo parte en dos; de
+ *    "Juan Pérez González" no se puede deducir si el apellido paterno es "Pérez"
+ *    o si el apellido compuesto es "Pérez González". Inventarlo sería escribir
+ *    en la ficha un dato de identidad que nadie afirmó — el mismo criterio por
+ *    el que un lead sin nombre no recibe uno inventado.
+ *  - **Va en `_family`**, la extensión del primitivo, que los tipos de Medplum
+ *    no modelan. Hay que probar contra el servidor que la persista antes de
+ *    escribirla a ciegas.
+ *
+ * Cuando el dato venga de una fuente que sí lo sabe —el Federador lo devuelve
+ * separado— se escribe de ahí.
+ */
+export function nombreLegal(opts: { texto: string; given?: string; family?: string }): HumanName {
+  return {
+    use: 'official',
+    text: opts.texto,
+    ...(opts.given ? { given: [opts.given] } : {}),
+    ...(opts.family ? { family: opts.family } : {}),
+  };
 }
 
 /**
