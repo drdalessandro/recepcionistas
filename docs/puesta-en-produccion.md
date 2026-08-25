@@ -197,6 +197,10 @@ un aviso: el botón "Acceder con Google" desaparece y te enterás por el usuario
 
 ## 4. Prueba end-to-end de la lista de espera
 
+> ✅ **Verificada contra producción el 2026-08-25**: fixture → cancelación desde
+> la Agenda → aviso en Avisos con el hueco exacto, el candidato por orden de
+> llegada, su teléfono y las dos acciones (Ofrecer por WhatsApp / Reservarle).
+
 Necesita el deploy de bots (§1) y el build del front (§3). **No** necesita el
 cron: la cancelación es el disparador.
 
