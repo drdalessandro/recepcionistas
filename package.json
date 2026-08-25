@@ -23,6 +23,7 @@
     "limpiar": "tsx src/seed/limpiar.ts",
     "bots:bundle": "tsx src/seed/deploy-bots.ts --dry-run",
     "bots:check": "tsx src/seed/diagnostico-bots.ts",
+    "bots:cron": "tsx src/seed/cron-bots.ts",
     "deploy:bots": "tsx src/seed/deploy-bots.ts",
     "email:test": "tsx src/seed/diagnostico-email.ts",
     "portal:check": "tsx src/seed/diagnostico-portal.ts",

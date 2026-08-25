@@ -67,6 +67,7 @@ npm run seed               # carga el catálogo en Medplum (credenciales en .env
 npm run bots:bundle        # bundlea los bots sin conectarse (dry-run)
 npm run deploy:bots        # crea + bundlea (esbuild) + deploya los bots — NO usa el CLI de Medplum
 npm run bots:check         # ¿están todos creados y con código deployado?
+npm run bots:cron          # horario de los bots de cron (--apply para escribirlo)
 npm run migrar:dni-renaper # suma el DNI con el system canónico (RENAPER) a fichas viejas
 npm run federador:check    # ¿anda el Federador del Ministerio? (QA por defecto; --prod es explícito)
 ```
@@ -96,7 +97,8 @@ lo manda (2026-08-14, verificado contra `src/bots/recordatorios.ts`).
 Twilio y SES ya están **operativos** (Project Secrets cargados y verificados,
 2026-07: los WhatsApp y emails salen de verdad). La tabla de contraindicaciones
 está **validada** por el Director Médico (Dr. Conrado López Alonso, 2026-08-09).
-Lo que queda hoy **no frena el desarrollo**: configurar el `cronString` de los
-bots de cron (paso a paso en [`docs/puesta-en-produccion.md`](docs/puesta-en-produccion.md)),
-y confirmar el precio de consulta del Dr. Conrado. Las plantillas de WhatsApp
+Lo que queda hoy **no frena el desarrollo**: correr `npm run bots:cron -- --apply`
+una vez contra producción (el horario ya está declarado en `src/seed/bots-def.ts`
+y el comando lo escribe y lo verifica), y confirmar el precio de consulta del
+Dr. Conrado. Las plantillas de WhatsApp
 ya están **todas aprobadas por Meta** y en uso (verificado 2026-08-14).

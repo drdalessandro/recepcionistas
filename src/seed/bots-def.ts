@@ -8,6 +8,19 @@ export interface DefBot {
   source: string;
   dist: string;
   description: string;
+  /**
+   * Horario del bot (`cronString` del recurso `Bot`), para los que corren solos.
+   *
+   * Está acá y no en un instructivo a propósito: el horario es una **decisión de
+   * negocio** —cada cuánto se libera un lugar, cuándo se cobra— y como tal se
+   * revisa en un PR como cualquier otra regla. Antes vivía como un snippet para
+   * copiar y pegar en `docs/puesta-en-produccion.md`, donde nada lo validaba y
+   * nadie sabía si el servidor coincidía.
+   *
+   * Lo aplica y lo verifica `npm run bots:cron`. Sin este campo, el bot no se
+   * programa: se ejecuta por pedido.
+   */
+  cron?: string;
 }
 
 export const BOTS: DefBot[] = [
@@ -22,13 +35,13 @@ export const BOTS: DefBot[] = [
   { name: 'bw-link-mercadopago', source: 'src/bots/link-mercadopago.ts', dist: 'dist/bots/link-mercadopago.js', description: 'Genera link de MercadoPago para pagar la seña.' },
   { name: 'bw-webhook-mercadopago', source: 'src/bots/webhook-mercadopago.ts', dist: 'dist/bots/webhook-mercadopago.js', description: 'Webhook de MercadoPago: confirma el turno al acreditarse el pago.' },
   { name: 'bw-asignar-plan', source: 'src/bots/asignar-plan.ts', dist: 'dist/bots/asignar-plan.js', description: 'Asigna una membresía/paquete (Coverage), emite el cobro inicial y avisa por WhatsApp.' },
-  { name: 'bw-cobro-membresias', source: 'src/bots/cobro-membresias.ts', dist: 'dist/bots/cobro-membresias.js', description: 'Cron días 1-5: renueva membresías (reset de sesiones + cobro mensual).' },
-  { name: 'bw-recordatorios', source: 'src/bots/recordatorios.ts', dist: 'dist/bots/recordatorios.js', description: 'Cron: envía recordatorios de turnos confirmados a 48 h y 2 h (WhatsApp).' },
-  { name: 'bw-vencer-tentativas', source: 'src/bots/vencer-tentativas.ts', dist: 'dist/bots/vencer-tentativas.js', description: 'Cron R-19: recordatorio de seña impaga y liberación del lugar al vencer la tentativa.' },
+  { name: 'bw-cobro-membresias', source: 'src/bots/cobro-membresias.ts', dist: 'dist/bots/cobro-membresias.js', description: 'Cron días 1-5: renueva membresías (reset de sesiones + cobro mensual).' , cron: '0 9 * * *' /* Solo actúa los días 1-5 y por ciclo no facturado; correrlo a diario es seguro. */ },
+  { name: 'bw-recordatorios', source: 'src/bots/recordatorios.ts', dist: 'dist/bots/recordatorios.js', description: 'Cron: envía recordatorios de turnos confirmados a 48 h y 2 h (WhatsApp).' , cron: '*/30 * * * *' /* 48 h y 2 h: cuanto más seguido, más cerca de la hora exacta. Idempotente por Communication. */ },
+  { name: 'bw-vencer-tentativas', source: 'src/bots/vencer-tentativas.ts', dist: 'dist/bots/vencer-tentativas.js', description: 'Cron R-19: recordatorio de seña impaga y liberación del lugar al vencer la tentativa.' , cron: '*/10 * * * *' /* R-19: la seña vence a las 2 h; cada 10 min el lugar liberado sale con poco retraso. */ },
   { name: 'bw-alta-paciente', source: 'src/bots/alta-paciente.ts', dist: 'dist/bots/alta-paciente.js', description: 'Alta de paciente (Patient) con dedupe por DNI/email/teléfono.' },
   { name: 'bw-invitar-paciente', source: 'src/bots/invitar-paciente.ts', dist: 'dist/bots/invitar-paciente.js', description: 'Invita al paciente al portal (invite Medplum) y entrega el link por WhatsApp/email/QR. Requiere admin.' },
   { name: 'bw-reset-password', source: 'src/bots/reset-password.ts', dist: 'dist/bots/reset-password.js', description: 'Reset de contraseña del portal: link sobre PORTAL_BASE_URL + email propio en castellano (endpoint público vía nginx). Requiere admin.' },
-  { name: 'bw-limpiar-demo', source: 'src/bots/limpiar-demo.ts', dist: 'dist/bots/limpiar-demo.js', description: 'Cron: borra los datos demo (tag demo) con más de 48 h.' },
+  { name: 'bw-limpiar-demo', source: 'src/bots/limpiar-demo.ts', dist: 'dist/bots/limpiar-demo.js', description: 'Cron: borra los datos demo (tag demo) con más de 48 h.' , cron: '0 * * * *' /* Borra los datos demo de más de 48 h. */ },
   { name: 'bw-enviar-whatsapp', source: 'src/bots/enviar-whatsapp.ts', dist: 'dist/bots/enviar-whatsapp.js', description: 'Envía WhatsApp (Twilio) y registra Communication.' },
   { name: 'bw-solicitar-turno', source: 'src/bots/solicitar-turno.ts', dist: 'dist/bots/solicitar-turno.js', description: 'Crea una solicitud de turno (Task) desde el portal del paciente y avisa a Recepción por WhatsApp.' },
   { name: 'bw-disponibilidad', source: 'src/bots/disponibilidad.ts', dist: 'dist/bots/disponibilidad.js', description: 'Solo lectura: horarios reservables para el paciente (portal) según su ventana R-13, capacidad R-07 y desfasaje Recovery.' },
