@@ -245,7 +245,7 @@ export function Avisos({ onAtender }: { onAtender: (pacienteId: string) => void 
                         leftSection={<IconUserPlus size={15} />}
                         onClick={() => setAltaDe(t)}
                       >
-                        Crear ficha
+                        Crear Cliente
                       </Button>
                     </>
                   )}
