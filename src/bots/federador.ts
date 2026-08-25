@@ -24,6 +24,12 @@
  * con la firma de Twilio). Lo puro —claims, body, URLs— está en
  * `src/lib/bus-msal.ts`.
  *
+ * ## Corre con alguien esperando en el mostrador
+ *
+ * No es un cron: del otro lado hay una recepcionista con la persona enfrente.
+ * Por eso los dos `fetch` van con **timeout corto** y el token se **reutiliza**
+ * entre ejecuciones — sin eso, cada DNI tipeado son dos viajes al bus nacional.
+ *
  * ## Falla abierta, nunca bloquea
  *
  * Sin credenciales, con el bus caído o con la persona no federada, devuelve un
@@ -36,12 +42,14 @@ import { createHmac } from 'node:crypto';
 import {
   SCOPES,
   ambienteBus,
-  type AmbienteBus,
   claimsClientAssertion,
   cuerpoPedidoToken,
+  tokenSirve,
   urlBusquedaPorDni,
   urlToken,
+  type AmbienteBus,
   type ScopeBus,
+  type TokenCacheado,
 } from '../lib/bus-msal.js';
 import { elegirPorDni, sugerenciaParaAlta, type SugerenciaAlta } from '../lib/federador.js';
 import { soloDigitos } from '../lib/dedup.js';
@@ -59,11 +67,13 @@ export interface EntradaFederador {
 export type MotivoSinDatos =
   /** Faltan los Project Secrets del bus: no se intentó nada. */
   | 'sin-credenciales'
+  /** `BUS_MSAL_URL` no es ninguno de los dos buses conocidos: no se firma nada. */
+  | 'bus-desconocido'
   /** DNI ilegible: no se consulta con basura. */
   | 'dni-invalido'
-  /** El bus contestó mal (auth, red, 5xx). */
+  /** El bus contestó mal (auth, red, timeout, 5xx, o un cuerpo que no es FHIR). */
   | 'bus-no-responde'
-  /** No está federada esa persona. */
+  /** El bus contestó bien y esa persona no está federada. */
   | 'sin-resultados'
   /** Más de una persona con ese mismo documento: no elegimos por el usuario. */
   | 'ambiguo';
@@ -84,6 +94,28 @@ export interface ResultadoFederador {
   /** Detalle para el log; nunca se muestra al paciente. */
   detalle?: string;
 }
+
+/**
+ * Presupuesto de espera. Corto a propósito: esto corre con una persona parada en
+ * el mostrador, no en un cron. Sin `signal`, un bus que acepta la conexión y no
+ * contesta deja la pantalla girando hasta que corte el runtime del bot.
+ */
+const TIMEOUT_AUTH_MS = 5_000;
+const TIMEOUT_BUSQUEDA_MS = 8_000;
+
+/**
+ * Vida que le asignamos al `accessToken`. El bus **no documenta** cuánto dura, y
+ * `tokenSirve` ya deja margen: si el servidor lo invalida antes, la búsqueda da
+ * 401 y se reintenta UNA vez con uno nuevo.
+ */
+const TOKEN_TTL_MS = 5 * 60_000;
+
+/**
+ * Token vivo entre ejecuciones. En Lambda el módulo sobrevive entre
+ * invocaciones tibias, así que acá es donde corresponde: cuatro personas en la
+ * cola dejan de ser ocho viajes al bus nacional.
+ */
+let cacheToken: TokenCacheado | undefined;
 
 /** Base64url de un Buffer o string (sin padding, con - y _). */
 function base64url(v: Buffer | string): string {
@@ -113,6 +145,7 @@ async function pedirToken(
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(cuerpoPedidoToken(scope, assertion)),
+    signal: AbortSignal.timeout(TIMEOUT_AUTH_MS),
   });
   if (!resp.ok) {
     // Queda en CloudWatch: es donde se ve si el problema es la secret word.
@@ -121,6 +154,24 @@ async function pedirToken(
   }
   const json = (await resp.json().catch(() => undefined)) as { accessToken?: string } | undefined;
   return json?.accessToken;
+}
+
+/** El token del cache si sirve; si no, uno nuevo (y lo guarda). */
+async function tokenParaBuscar(
+  busUrl: string,
+  issuer: string,
+  secreto: string,
+  forzarNuevo = false,
+): Promise<string | undefined> {
+  const ahora = new Date();
+  if (!forzarNuevo && tokenSirve(cacheToken, SCOPES.pacienteLeer, ahora)) {
+    return cacheToken?.accessToken;
+  }
+  const accessToken = await pedirToken(busUrl, issuer, secreto, SCOPES.pacienteLeer);
+  cacheToken = accessToken
+    ? { scope: SCOPES.pacienteLeer, accessToken, venceEn: new Date(ahora.getTime() + TOKEN_TTL_MS) }
+    : undefined;
+  return accessToken;
 }
 
 export async function handler(
@@ -141,34 +192,77 @@ export async function handler(
     // configurado. El alta sigue igual que siempre.
     return { ok: false, motivo: 'sin-credenciales' };
   }
+
   const ambiente = ambienteBus(busUrl);
+  if (ambiente === 'desconocido') {
+    // Antes de firmar nada. Un `http://` por error de tipeo mandaría el JWT
+    // —y después el accessToken y el DNI— en claro; un host equivocado se los
+    // mandaría a un tercero. La lista blanca de los dos buses es la defensa.
+    console.log(`bw-federador: BUS_MSAL_URL no es ninguno de los buses conocidos (${busUrl})`);
+    return { ok: false, ambiente, motivo: 'bus-desconocido' };
+  }
 
   try {
-    const token = await pedirToken(busUrl, issuer, secreto, SCOPES.pacienteLeer);
+    let token = await tokenParaBuscar(busUrl, issuer, secreto);
     if (!token) {
       return { ok: false, ambiente, motivo: 'bus-no-responde', detalle: 'no se pudo obtener el accessToken' };
     }
 
-    const resp = await fetch(urlBusquedaPorDni(busUrl, dni), {
-      headers: { Authorization: `Bearer ${token}`, Accept: 'application/fhir+json' },
-    });
+    const buscar = async (bearer: string): Promise<Response> =>
+      fetch(urlBusquedaPorDni(busUrl, dni), {
+        headers: { Authorization: `Bearer ${bearer}`, Accept: 'application/fhir+json' },
+        signal: AbortSignal.timeout(TIMEOUT_BUSQUEDA_MS),
+      });
+
+    let resp = await buscar(token);
+    if (resp.status === 401 || resp.status === 403) {
+      // El cache tenía un token que el servidor ya invalidó: UN reintento con
+      // uno nuevo. Sin esto, cachear cambiaría un problema por otro.
+      token = await tokenParaBuscar(busUrl, issuer, secreto, true);
+      if (!token) {
+        return { ok: false, ambiente, motivo: 'bus-no-responde', detalle: 'no se pudo renovar el accessToken' };
+      }
+      resp = await buscar(token);
+    }
     if (!resp.ok) {
       console.log(`bw-federador: búsqueda respondió ${resp.status}`);
       return { ok: false, ambiente, motivo: 'bus-no-responde', detalle: `HTTP ${resp.status}` };
     }
 
-    // La búsqueda devuelve un Bundle; un `Patient` suelto sería la búsqueda por id.
-    const cuerpo = (await resp.json().catch(() => undefined)) as Bundle | Patient | undefined;
+    // Un 200 NO garantiza un Bundle: un gateway puede devolver HTML, y el
+    // servidor FHIR un OperationOutcome. Colapsar eso a "no está federada"
+    // sería afirmar algo falso sobre el registro nacional, así que se separa.
+    const crudo = await resp.text();
+    // Se parsea como `unknown` a propósito: es entrada de un tercero, no un
+    // Bundle hasta que se compruebe. Castearlo antes de mirarlo sería la misma
+    // mentira que hacía que un OperationOutcome pasara por "no está federada".
+    let cuerpo: unknown;
+    try {
+      cuerpo = JSON.parse(crudo);
+    } catch {
+      console.log(`bw-federador: respuesta no-JSON (${crudo.slice(0, 200)})`);
+      return { ok: false, ambiente, motivo: 'bus-no-responde', detalle: 'respuesta no-JSON' };
+    }
+    const tipo = (cuerpo as { resourceType?: string } | null)?.resourceType;
+    if (tipo !== 'Bundle' && tipo !== 'Patient') {
+      const recibido = tipo ?? 'sin resourceType';
+      console.log(`bw-federador: se esperaba Bundle y llegó ${recibido}`);
+      return { ok: false, ambiente, motivo: 'bus-no-responde', detalle: `se esperaba Bundle, llegó ${recibido}` };
+    }
+
     const candidatos: Patient[] =
-      cuerpo?.resourceType === 'Bundle'
-        ? ((cuerpo.entry ?? [])
+      tipo === 'Bundle'
+        ? ((cuerpo as Bundle).entry ?? [])
             .map((e) => e.resource)
-            .filter((r): r is Patient => r?.resourceType === 'Patient'))
-        : cuerpo?.resourceType === 'Patient'
-          ? [cuerpo]
-          : [];
+            .filter((r): r is Patient => r?.resourceType === 'Patient')
+        : [cuerpo as Patient];
 
     const elegido = elegirPorDni(candidatos, dni);
+    // Consultar el padrón nacional con el documento de una persona es un
+    // tratamiento de datos: queda registrado quién se buscó y con qué resultado.
+    // Va al log de la ejecución (AuditEvent / CloudWatch), que la policy de
+    // Recepción no incluye — no lo ve el mostrador.
+    console.log(`bw-federador: dni=${dni} ambiente=${ambiente} resultado=${elegido.estado}`);
     if (elegido.estado !== 'unico') {
       return { ok: false, ambiente, motivo: elegido.estado };
     }
@@ -179,6 +273,8 @@ export async function handler(
       ...(elegido.datos.idFederador ? { idFederador: elegido.datos.idFederador } : {}),
     };
   } catch (e) {
+    // Incluye el AbortError del timeout: el bus tardó más de lo que se puede
+    // esperar con alguien en el mostrador.
     console.log(`bw-federador: ${e instanceof Error ? e.message : String(e)}`);
     return { ok: false, ambiente, motivo: 'bus-no-responde' };
   }

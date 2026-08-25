@@ -83,12 +83,27 @@ se usa.
 
 | Secret | Valor |
 |---|---|
-| `BUS_MSAL_URL` | `https://bus.msal.gob.ar` (el de **QA** para probar) |
+| `BUS_MSAL_URL` | **QA: `https://bus-test.msal.gob.ar`** · producción: `https://bus.msal.gob.ar` |
 | `BUS_MSAL_ISSUER` | `https://api.medplum.com.ar` |
 | `BUS_MSAL_SECRET` | la *token secret word* de la pantalla de credenciales |
 
-Sin los tres, el bot devuelve `sin-credenciales` y no intenta nada: el alta sigue
-funcionando exactamente como hoy.
+> ⚠️ **El environment "VARIABLES QA" de Postman trae la URL de PRODUCCIÓN**
+> (`busUrl: https://bus.msal.gob.ar`), mientras que la colección de QA usa
+> `bus-test.msal.gob.ar` **hardcodeado en las 10 requests** y nunca lee esa
+> variable. Copiar el valor del archivo que dice "QA" significa consultar el
+> registro nacional productivo con DNIs reales creyendo que se está probando.
+> Las dos URLs están con nombre en `BUS_URLS` (`src/lib/bus-msal.ts`) y el bot
+> **devuelve siempre `ambiente`** para que se pueda ver contra cuál habló.
+>
+> Si `BUS_MSAL_URL` no es ninguno de los dos, el bot devuelve `bus-desconocido`
+> y **no firma nada**: un `http://` por error de tipeo mandaría el JWT en claro.
+
+Sin los tres secrets, el bot devuelve `sin-credenciales` y no intenta nada: el
+alta sigue funcionando exactamente como hoy.
+
+**A confirmar**: si la *secret word* es la misma para QA y para producción, o si
+hay un registro de credenciales por ambiente. Los dos environments traen el campo
+vacío, así que de ahí no se deduce.
 
 ## Lo que ya está construido (`src/lib/federador.ts`)
 
@@ -145,9 +160,8 @@ funcional — pero si algún día federamos una ficha (`POST /Patient`, que el s
 
 ## Lo que falta para terminarlo
 
-1. **Cargar los tres Project Secrets** y probar contra **QA** — hace falta el
-   `busUrl` de QA (la pantalla de credenciales tiene el environment de Postman de
-   ese ambiente; el que se leyó es el de PROD).
+1. **Cargar los tres Project Secrets** y probar contra **QA**
+   (`https://bus-test.msal.gob.ar`, ver la advertencia de arriba).
 2. **UI**: en el alta, al tipear el DNI, ofrecer los campos y que la recepcionista
    confirme. **Nunca escribir sin que alguien lo vea**: el bot sugiere, la persona
    decide.
