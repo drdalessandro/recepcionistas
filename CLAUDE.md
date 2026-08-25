@@ -97,8 +97,10 @@ lo manda (2026-08-14, verificado contra `src/bots/recordatorios.ts`).
 Twilio y SES ya están **operativos** (Project Secrets cargados y verificados,
 2026-07: los WhatsApp y emails salen de verdad). La tabla de contraindicaciones
 está **validada** por el Director Médico (Dr. Conrado López Alonso, 2026-08-09).
-Lo que queda hoy **no frena el desarrollo**: correr `npm run bots:cron -- --apply`
-una vez contra producción (el horario ya está declarado en `src/seed/bots-def.ts`
-y el comando lo escribe y lo verifica), y confirmar el precio de consulta del
-Dr. Conrado. Las plantillas de WhatsApp
+El cron de producción está **aplicado y verificado** (2026-08-25:
+`bots:cron -- --apply` en verde, 4/4, `cronTiming` residual limpiado) y la
+**lista de espera está probada de punta a punta** contra producción
+(2026-08-25: `seed:prueba-espera` → cancelación → aviso con candidato en
+Avisos). Lo que queda hoy **no frena nada**: confirmar la zona horaria en que
+Medplum evalúa el cron y el precio de consulta del Dr. Conrado. Las plantillas de WhatsApp
 ya están **todas aprobadas por Meta** y en uso (verificado 2026-08-14).
