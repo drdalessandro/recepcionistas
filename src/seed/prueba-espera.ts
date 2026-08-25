@@ -35,9 +35,20 @@ import { esperaAAppointment } from '../fhir/lista-espera.js';
 import { clasificacionDeServicio } from '../fhir/appointment.js';
 import { EXT, SYSTEM } from '../fhir/identifiers.js';
 
-/** Ids fijos de los dos pacientes de prueba (configurables para usar reales). */
-const PACIENTE_ESPERA_ID = process.env.PRUEBA_ESPERA_PATIENT_ID ?? 'aa000000-0000-4000-8000-00000000e5e1';
-const PACIENTE_CANCELA_ID = process.env.PRUEBA_ESPERA_CANCELA_ID ?? 'aa000000-0000-4000-8000-00000000e5e2';
+/**
+ * Los dos pacientes de prueba se encuentran por IDENTIFIER (system de prueba) y
+ * se crean con POST si no existen. No se usa un id fijo con PUT porque este
+ * servidor **no hace update-as-create**: un PUT a un id inexistente devuelve
+ * `Not found` (verificado en la primera corrida real, 2026-08-25). En
+ * `prueba-recordatorios` el mismo patrón anda de casualidad: ese paciente ya
+ * existía.
+ *
+ * Con las variables de entorno se puede apuntar a pacientes REALES por id.
+ */
+const PACIENTE_ESPERA_REAL = process.env.PRUEBA_ESPERA_PATIENT_ID;
+const PACIENTE_CANCELA_REAL = process.env.PRUEBA_ESPERA_CANCELA_ID;
+const CLAVE_PACIENTE_ESPERA = 'espera-paciente-que-espera';
+const CLAVE_PACIENTE_CANCELA = 'espera-paciente-que-cancela';
 
 /** Teléfono del que espera: acá llega el WhatsApp si se toca "Ofrecer". */
 const TELEFONO_ESPERA = process.env.PRUEBA_ESPERA_TELEFONO ?? '+5491100000000';
@@ -54,11 +65,15 @@ const ID_ESPERA = 'espera-anotacion';
  */
 const SERVICIO = 'HBOT_MONO';
 
-function construir(ahora: Date): { espera: Appointment; turno: Appointment } {
+function construir(
+  ahora: Date,
+  esperaRef: string,
+  cancelaRef: string,
+): { espera: Appointment; turno: Appointment } {
   // La espera: ventana de 7 días desde ahora, sin preferencias — cualquier
   // hueco de la categoría le sirve, que es lo que hace la prueba determinística.
   const espera = esperaAAppointment({
-    pacienteRef: `Patient/${PACIENTE_ESPERA_ID}`,
+    pacienteRef: esperaRef,
     pacienteNombre: 'Paciente Prueba Espera',
     servicioCodigo: SERVICIO,
     categoria: 'hbot', // lo completa clasificacionDeServicio igual; explícito para el tipo
@@ -86,7 +101,7 @@ function construir(ahora: Date): { espera: Appointment; turno: Appointment } {
     start: inicio.toISOString(),
     end: new Date(inicio.getTime() + 60 * 60_000).toISOString(),
     identifier: [{ system: PRUEBA, value: ID_TURNO }],
-    participant: [{ actor: { reference: `Patient/${PACIENTE_CANCELA_ID}` }, status: 'accepted' }],
+    participant: [{ actor: { reference: cancelaRef }, status: 'accepted' }],
     // Sin esta extensión el turno NO aparece en ninguna vista de la agenda
     // (timeline.ts y proximos.ts descartan turnos sin recurso): la recepcionista
     // no podría encontrarlo para cancelarlo y la prueba muere invisible.
@@ -103,38 +118,51 @@ function requireEnv(nombre: string): string {
   return v;
 }
 
-/** Crea el paciente de prueba si no existe; si existe, no le toca nada. */
+/**
+ * Devuelve el paciente de prueba. Con `idReal` (variable de entorno) tiene que
+ * EXISTIR: apuntar a un paciente real que no está sería crear uno fantasma con
+ * datos de prueba. Sin `idReal`, se busca por identifier y se crea si falta.
+ */
 async function asegurarPaciente(
   medplum: MedplumClient,
-  id: string,
-  nombre: { given: string; family: string },
-  telefono?: string,
+  opts: { idReal?: string; clave: string; nombre: { given: string; family: string }; telefono?: string },
 ): Promise<Patient> {
-  const existente = await medplum.readResource('Patient', id).catch(() => undefined);
+  if (opts.idReal) {
+    const real = await medplum.readResource('Patient', opts.idReal).catch(() => undefined);
+    if (!real) {
+      throw new Error(
+        `El Patient/${opts.idReal} (de la variable de entorno) no existe en este servidor. ` +
+          'Corregí el id o quitá la variable para que el seed cree pacientes de prueba propios.',
+      );
+    }
+    return real;
+  }
+  const existente = await medplum.searchOne('Patient', `identifier=${PRUEBA}|${opts.clave}`);
   if (existente) {
     return existente;
   }
-  return medplum.updateResource({
+  return medplum.createResource<Patient>({
     resourceType: 'Patient',
-    id,
     active: true,
-    name: [{ given: [nombre.given], family: nombre.family }],
-    ...(telefono ? { telecom: [{ system: 'phone' as const, value: telefono }] } : {}),
+    identifier: [{ system: PRUEBA, value: opts.clave }],
+    name: [{ given: [opts.nombre.given], family: opts.nombre.family }],
+    ...(opts.telefono ? { telecom: [{ system: 'phone' as const, value: opts.telefono }] } : {}),
   });
 }
 
 async function main(): Promise<void> {
   const dryRun = process.argv.includes('--dry-run');
   const ahora = new Date();
-  const { espera, turno } = construir(ahora);
+  // Para el dry-run, referencias de mentira: no hay servidor del que sacar ids.
+  const { turno } = construir(ahora, 'Patient/(dry-run)', 'Patient/(dry-run)');
 
   console.log('=== Seed de prueba · lista de espera (paso 4) ===');
-  console.log(`  • Espera : Patient ${PACIENTE_ESPERA_ID} · ${SERVICIO} · ventana 7 días · tel ${TELEFONO_ESPERA}`);
+  console.log(`  • Espera : ${PACIENTE_ESPERA_REAL ?? '(paciente de prueba propio)'} · ${SERVICIO} · ventana 7 días · tel ${TELEFONO_ESPERA}`);
   const horaAR = new Date(turno.start as string).toLocaleString('es-AR', {
     timeZone: 'America/Argentina/Buenos_Aires',
     hour12: false,
   });
-  console.log(`  • Turno  : Patient ${PACIENTE_CANCELA_ID} · 'booked' mañana a las ${horaAR} (hora argentina)`);
+  console.log(`  • Turno  : ${PACIENTE_CANCELA_REAL ?? '(paciente de prueba propio)'} · 'booked' mañana a las ${horaAR} (hora argentina)`);
 
   if (dryRun) {
     console.log('\n[dry-run] No se conecta a Medplum. Recursos construidos OK.');
@@ -145,15 +173,21 @@ async function main(): Promise<void> {
   await medplum.startClientLogin(requireEnv('MEDPLUM_CLIENT_ID'), requireEnv('MEDPLUM_CLIENT_SECRET'));
   console.log('\nConectado a Medplum.');
 
-  const pEspera = await asegurarPaciente(
-    medplum,
-    PACIENTE_ESPERA_ID,
-    { given: 'Paciente', family: 'Prueba Espera' },
-    TELEFONO_ESPERA,
-  );
-  const pCancela = await asegurarPaciente(medplum, PACIENTE_CANCELA_ID, { given: 'Paciente', family: 'Prueba Cancela' });
+  const pEspera = await asegurarPaciente(medplum, {
+    idReal: PACIENTE_ESPERA_REAL,
+    clave: CLAVE_PACIENTE_ESPERA,
+    nombre: { given: 'Paciente', family: 'Prueba Espera' },
+    telefono: TELEFONO_ESPERA,
+  });
+  const pCancela = await asegurarPaciente(medplum, {
+    idReal: PACIENTE_CANCELA_REAL,
+    clave: CLAVE_PACIENTE_CANCELA,
+    nombre: { given: 'Paciente', family: 'Prueba Cancela' },
+  });
   console.log(`  ✓ Patient que espera  ${pEspera.id}`);
   console.log(`  ✓ Patient que cancela ${pCancela.id}`);
+  // Recién acá se arman los recursos de verdad, con los ids que el servidor dio.
+  const { espera, turno: turnoReal } = construir(ahora, `Patient/${pEspera.id}`, `Patient/${pCancela.id}`);
 
   // Limpiar la corrida anterior: el turno viejo (cancelado o no), su Task de
   // hueco, y la espera vieja. El turno se BORRA (no se reusa) porque el aviso es
@@ -183,7 +217,7 @@ async function main(): Promise<void> {
 
   const esperaCreada = await medplum.createResource(espera);
   console.log(`  ✓ Espera anotada      Appointment/${esperaCreada.id} (status waitlist)`);
-  const turnoCreado = await medplum.createResource(turno);
+  const turnoCreado = await medplum.createResource(turnoReal);
   console.log(`  ✓ Turno a cancelar    Appointment/${turnoCreado.id} (${turnoCreado.start})`);
 
   console.log('\nListo. La prueba ahora es UNA acción en la app:');
