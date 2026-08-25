@@ -32,6 +32,7 @@ export function NuevoPacienteModal({
   nombreInicial?: string;
 }): JSX.Element {
   const [nombre, setNombre] = useState('');
+  const [nombreElegido, setNombreElegido] = useState('');
   const [dni, setDni] = useState('');
   const [telefono, setTelefono] = useState('');
   const [email, setEmail] = useState('');
@@ -99,6 +100,7 @@ export function NuevoPacienteModal({
 
   function limpiar(): void {
     setNombre('');
+    setNombreElegido('');
     setDni('');
     setTelefono('');
     setEmail('');
@@ -117,6 +119,7 @@ export function NuevoPacienteModal({
     try {
       const r = await altaPaciente({
         nombre: nombre.trim(),
+        nombreElegido: nombreElegido.trim() || undefined,
         dni: dni.trim() || undefined,
         telefono: telefono.trim() || undefined,
         email: email.trim() || undefined,
@@ -146,6 +149,12 @@ export function NuevoPacienteModal({
           onChange={(e) => setNombre(e.currentTarget.value)}
           required
           data-autofocus
+        />
+        <TextInput
+          label="Nombre elegido (si difiere)"
+          placeholder="Como quiere que le digamos — es el nombre que va a ver en todos lados"
+          value={nombreElegido}
+          onChange={(e) => setNombreElegido(e.currentTarget.value)}
         />
         <Group grow>
           <TextInput label="DNI" placeholder="30123456" value={dni} onChange={(e) => setDni(e.currentTarget.value)} />

@@ -69,7 +69,13 @@ function validarCampo(campo: string, min: number, max: number): string | undefin
     if (parte === '') {
       return 'tiene una coma de más';
     }
-    const [rango, paso] = parte.split('/');
+    const pedazos = parte.split('/');
+    if (pedazos.length > 2) {
+      // `*/2/3` parseaba como paso 2 y descartaba el 3 en silencio — justo la
+      // clase de error que este módulo existe para no dejar pasar.
+      return `tiene más de una barra (${parte})`;
+    }
+    const [rango, paso] = pedazos;
     if (paso !== undefined) {
       const n = Number(paso);
       if (!/^\d+$/.test(paso) || n < 1 || n > max) {
@@ -116,7 +122,10 @@ export function describirCron(expresion: string): string {
 
   if (todosLosDias) {
     const cadaNMin = /^\*\/(\d+)$/.exec(minuto);
-    if (cadaNMin && hora === '*') {
+    // "cada N minutos" solo es verdad si N divide a 60: `*/45` dispara a :00 y
+    // :45 (con un salto de 15 al dar la vuelta). Antes que traducir mintiendo,
+    // se devuelve la expresión cruda.
+    if (cadaNMin && hora === '*' && 60 % Number(cadaNMin[1]) === 0) {
       const n = Number(cadaNMin[1]);
       return n === 1 ? 'cada minuto' : `cada ${n} minutos`;
     }
@@ -127,7 +136,7 @@ export function describirCron(expresion: string): string {
       return `cada hora, al minuto ${minuto}`;
     }
     const cadaNHoras = /^\*\/(\d+)$/.exec(hora);
-    if (cadaNHoras && /^\d+$/.test(minuto)) {
+    if (cadaNHoras && /^\d+$/.test(minuto) && 24 % Number(cadaNHoras[1]) === 0) {
       const n = Number(cadaNHoras[1]);
       return n === 1 ? `cada hora, al minuto ${minuto}` : `cada ${n} horas, al minuto ${minuto}`;
     }
@@ -139,10 +148,184 @@ export function describirCron(expresion: string): string {
 }
 
 /**
- * ¿Cuántas veces por día dispara? Aproximado, y solo para las formas que usamos.
+ * Lo único que hace falta saber de un Bot para decidir su horario.
+ *
+ * Se declara la forma mínima en vez de importar el tipo `Bot` de FHIR para que
+ * esta decisión sea comprobable con objetos literales: es la que determina si se
+ * le escribe algo al bot que cobra plata, y tiene que poder testearse sin
+ * levantar medio Medplum.
+ */
+export interface BotProgramable {
+  id?: string;
+  cronString?: string;
+  cronTiming?: unknown;
+  /** Attachment de Medplum: solo importa si trae contenido de verdad. */
+  executableCode?: { url?: string; data?: string };
+}
+
+/** Qué hay que hacer con un bot. */
+export type AccionCron =
+  | 'ya-esta'
+  | 'poner'
+  | 'cambiar'
+  | 'desprogramar'
+  | 'sin-codigo'
+  | 'duplicado'
+  | 'falta'
+  | 'cron-invalido';
+
+export interface CasoCron {
+  accion: AccionCron;
+  /** Vacío en `desprogramar`: el repo dice que este bot no corre solo. */
+  deseado: string;
+  actual?: string;
+  detalle?: string;
+  /** El bot arrastra un `cronTiming` (resto de configuración vieja por UI). */
+  conTiming?: boolean;
+}
+
+/**
+ * ¿Tiene código deployado?
+ *
+ * La misma pregunta que hace `bots:check`, y a propósito: un `executableCode`
+ * que quedó como Attachment vacío tras un `$deploy` a medias es truthy pero no
+ * es código. Si las dos herramientas no coinciden, una dice "OK" y la otra
+ * programa un bot que tiquea al vacío.
+ */
+export function tieneCodigo(bot: BotProgramable): boolean {
+  return Boolean(bot.executableCode?.url ?? bot.executableCode?.data);
+}
+
+/**
+ * Qué hacer con un bot que el repo declara que corre solo.
+ *
+ * Todas las guardias que el runbook prometía y nada garantizaba viven acá:
+ * no se programa un cron inválido, ni un bot sin código, ni uno duplicado.
+ */
+export function decidirCron(deseado: string, candidatos: readonly BotProgramable[]): CasoCron {
+  const validacion = validarCron(deseado);
+  if (!validacion.ok) {
+    // Mandarlo sería programar un bot que no va a correr nunca, en silencio.
+    return { accion: 'cron-invalido', deseado, detalle: validacion.error };
+  }
+  if (candidatos.length === 0) {
+    return { accion: 'falta', deseado };
+  }
+  if (candidatos.length > 1) {
+    return {
+      accion: 'duplicado',
+      deseado,
+      detalle: candidatos.map((b) => `Bot/${b.id}`).join(', '),
+    };
+  }
+  const bot = candidatos[0] as BotProgramable;
+  if (!tieneCodigo(bot)) {
+    return { accion: 'sin-codigo', deseado };
+  }
+  const actual = bot.cronString;
+  const conTiming = Boolean(bot.cronTiming);
+  if (actual === deseado && !conTiming) {
+    return { accion: 'ya-esta', deseado, actual };
+  }
+  if (actual === deseado && conTiming) {
+    // El horario coincide, pero el recurso arrastra un `cronTiming` de la época
+    // de configuración por UI. Los dos campos conviven y Medplum no documenta
+    // cuál gana: dejarlo es dejar el estado ambiguo sobre un bot que corre solo.
+    return { accion: 'cambiar', deseado, actual, conTiming, detalle: 'borrar el cronTiming' };
+  }
+  return { accion: actual ? 'cambiar' : 'poner', deseado, actual, conTiming };
+}
+
+/**
+ * El caso inverso: un bot del repo SIN `cron` declarado que en el servidor quedó
+ * programado.
+ *
+ * Sacarle el `cron` a un bot en el repo tiene que **desprogramarlo de verdad**.
+ * Si no, se frena el cobro automático en un PR, el PR se mergea, y el bot sigue
+ * cobrando igual.
+ */
+export function decidirDesprogramar(candidatos: readonly BotProgramable[]): CasoCron | undefined {
+  if (candidatos.length !== 1) {
+    return undefined;
+  }
+  const bot = candidatos[0] as BotProgramable;
+  if (!bot.cronString && !bot.cronTiming) {
+    return undefined;
+  }
+  return { accion: 'desprogramar', deseado: '', actual: bot.cronString, conTiming: Boolean(bot.cronTiming) };
+}
+
+/** Las acciones que implican escribir en el servidor. */
+export function hayQueEscribir(accion: AccionCron): boolean {
+  return accion === 'poner' || accion === 'cambiar' || accion === 'desprogramar';
+}
+
+/** Las que no se pueden resolver solas y necesitan que alguien haga algo. */
+export function estaBloqueado(accion: AccionCron): boolean {
+  return accion === 'sin-codigo' || accion === 'duplicado' || accion === 'falta' || accion === 'cron-invalido';
+}
+
+/**
+ * Expande un campo al conjunto de valores en los que dispara.
+ *
+ * `undefined` = no se puede saber con certeza (paso 0, forma ambigua como un
+ * paso sobre un valor suelto, que cada implementación de cron interpreta a su
+ * manera). Ante la duda no se cuenta, porque el número alimenta un aviso de
+ * seguridad y una cuenta optimista lo desactiva en silencio.
+ */
+function expandirCampo(campo: string, min: number, max: number): Set<number> | undefined {
+  const valores = new Set<number>();
+  for (const parte of campo.split(',')) {
+    const pedazos = parte.split('/');
+    if (pedazos.length > 2) {
+      return undefined;
+    }
+    const [rango, paso] = pedazos;
+    const salto = paso === undefined ? 1 : Number(paso);
+    if (!Number.isInteger(salto) || salto < 1) {
+      return undefined;
+    }
+    let desde: number;
+    let hasta: number;
+    if (rango === '*') {
+      desde = min;
+      hasta = max;
+    } else {
+      const extremos = (rango ?? '').split('-');
+      if (extremos.length > 2 || extremos.some((e) => !/^\d+$/.test(e))) {
+        return undefined;
+      }
+      if (extremos.length === 1) {
+        // Un paso sobre un valor suelto ("5/2") significa cosas distintas según
+        // la implementación: no se opina.
+        if (paso !== undefined) {
+          return undefined;
+        }
+        desde = hasta = Number(extremos[0]);
+      } else {
+        desde = Number(extremos[0]);
+        hasta = Number(extremos[1]);
+      }
+    }
+    if (desde > hasta || desde < min || hasta > max) {
+      return undefined;
+    }
+    for (let v = desde; v <= hasta; v += salto) {
+      valores.add(v);
+    }
+  }
+  return valores;
+}
+
+/**
+ * ¿Cuántas veces por día dispara? Exacto para todo lo que pasa `validarCron`
+ * con los tres campos de fecha en `*`; `undefined` cuando no se puede saber.
  *
  * Sirve para una sola cosa: avisar si alguien programa algo absurdo, tipo cada
- * minuto un bot que cobra plata. `undefined` = no se sabe, y entonces no se opina.
+ * minuto un bot que cobra plata. Se calcula **expandiendo** los campos y no con
+ * aritmética: `Math.floor(60/9)` dice 6, pero un paso de 9 en los minutos
+ * dispara 7 veces por hora (0, 9, …, 54) — la cuenta optimista subestimaba
+ * justo lo que el aviso existe para atajar.
  */
 export function corridasPorDia(expresion: string): number | undefined {
   const campos = expresion.trim().split(/\s+/);
@@ -153,22 +336,10 @@ export function corridasPorDia(expresion: string): number | undefined {
   if (diaMes !== '*' || mes !== '*' || diaSemana !== '*') {
     return undefined;
   }
-  const porHora = /^\*\/(\d+)$/.exec(minuto)
-    ? Math.floor(60 / Number(/^\*\/(\d+)$/.exec(minuto)![1]))
-    : minuto === '*'
-      ? 60
-      : /^\d+$/.test(minuto)
-        ? 1
-        : undefined;
-  if (porHora === undefined) {
+  const minutos = expandirCampo(minuto, 0, 59);
+  const horas = expandirCampo(hora, 0, 23);
+  if (!minutos || !horas || minutos.size === 0 || horas.size === 0) {
     return undefined;
   }
-  const horas = hora === '*'
-    ? 24
-    : /^\*\/(\d+)$/.test(hora)
-      ? Math.floor(24 / Number(/^\*\/(\d+)$/.exec(hora)![1]))
-      : /^\d+$/.test(hora)
-        ? 1
-        : undefined;
-  return horas === undefined ? undefined : porHora * horas;
+  return minutos.size * horas.size;
 }

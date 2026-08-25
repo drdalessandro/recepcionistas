@@ -408,3 +408,8 @@ alta mezcla `severity: warning` con `severity: error` en el mismo `issue[]`.
 - **Legal.** Consultar el Federador con el DNI de una persona es tratamiento de
   datos personales (Ley 25.326). Si entra en el consentimiento general que ya se
   firma o necesita mención propia lo define **Andrés con el asesor legal**.
+  **Las opciones ya están armadas y analizadas** (legal + operación + marca) en
+  [`decision-consentimiento-federador.md`](decision-consentimiento-federador.md).
+  Adelanto del hallazgo central: el texto vigente (sección 7) promete NO
+  compartir datos con terceros salvo autorización expresa — el consentimiento
+  actual no es que no cubra la consulta, **la prohíbe**.

@@ -117,68 +117,6 @@ marcar la próxima vez.
 
 ### Verificar
 
-```bash
-npm run bots:check
-```
-
-Reporta por bot `✓ OK` / `⚠ SIN CÓDIGO` (existe pero nunca se deployó) /
-`✗ FALTA`, lista huérfanos del servidor y sale con código 1 si algo falta.
-
-**`bots:check` no mira el cron**: un bot puede salir `✓ OK` y no estar programado.
-
-### Qué se deploya de lo último
-
-La lista de espera vive en `src/bots/_shared.ts` (`avisarListaDeEspera`), que se
-bundlea **dentro de cada bot**. Sin redeploy, `bw-estado-turno` y
-`bw-vencer-tentativas` siguen corriendo la versión vieja y el aviso nunca sale.
-
-## 2. Cron de los bots
-
-**El repo no configura el cron.** `deploy-bots.ts` crea y deploya, pero nunca
-escribe el horario: hay que ponerlo a mano, **una vez por bot**, en el recurso
-`Bot` del servidor.
-
-> ⚠️ **El campo es `cronString`, no `cronTimer`.** Los docs decían `cronTimer`
-> hasta el 2026-08-14 y ese campo **no existe** en Medplum: escribirlo no programa
-> nada y no da error. Los campos reales del recurso `Bot` son `cronString` (cron
-> de 5 campos) y `cronTiming` (un `Timing` FHIR).
-
-| Bot | `cronString` | Por qué |
-|---|---|---|
-| `bw-vencer-tentativas` | `*/10 * * * *` | R-19: la seña vence a las 2 h; cada 10 min el lugar se libera con poco retraso. |
-| `bw-recordatorios` | `*/30 * * * *` | Recordatorios de 48 h y 2 h: cuanto más seguido, más cerca de la hora exacta. Es idempotente por `Communication`, correrlo de más no duplica. |
-| `bw-cobro-membresias` | `0 9 * * *` | Solo actúa los días 1-5 y por ciclo no facturado; correrlo a diario es seguro. |
-| `bw-limpiar-demo` | `0 * * * *` | Borra los datos demo de más de 48 h. |
-
-> **Zona horaria**: no está definida en el repo en qué TZ evalúa Medplum el cron.
-> Si es UTC, `0 9 * * *` son las 06:00 de Argentina. **Confirmar antes de asumir**
-> el horario del cobro de membresías — es el único cuyo horario importa.
-
-### Ponerlo
-
-Desde la UI: Bot → editar el recurso → campo **`cronString`** → guardar. (Eso es
-editar el *recurso*, no el código: no rompe el bundling.)
-
-O de una, para los cuatro:
-
-```bash
-npx tsx -e "import 'dotenv/config'; import { MedplumClient } from '@medplum/core';
-const CRON = { 'bw-vencer-tentativas': '*/10 * * * *', 'bw-recordatorios': '*/30 * * * *',
-               'bw-cobro-membresias': '0 9 * * *', 'bw-limpiar-demo': '0 * * * *' };
-void (async () => {
-  const m = new MedplumClient({ baseUrl: process.env.MEDPLUM_BASE_URL, fetch });
-  await m.startClientLogin(process.env.MEDPLUM_CLIENT_ID, process.env.MEDPLUM_CLIENT_SECRET);
-  for (const [nombre, cron] of Object.entries(CRON)) {
-    const bot = await m.searchOne('Bot', 'name=' + encodeURIComponent(nombre));
-    if (!bot?.id) { console.log('✗ falta', nombre); continue; }
-    const out = await m.updateResource({ ...bot, cronString: cron });
-    console.log('✓', nombre, 'Bot/' + out.id, '→', out.cronString);
-  }
-})();"
-```
-
-### Verificar
-
 Que el campo quedó escrito: `npm run bots:cron` (sin `--apply`). Sale con código
 1 si el servidor no coincide con el repo, así que sirve de gate.
 
@@ -261,6 +199,25 @@ un aviso: el botón "Acceder con Google" desaparece y te enterás por el usuario
 
 Necesita el deploy de bots (§1) y el build del front (§3). **No** necesita el
 cron: la cancelación es el disparador.
+
+### Camino corto: el fixture arma todo
+
+```bash
+npm run seed:prueba-espera
+```
+
+Crea los dos pacientes de prueba, la espera anotada (HBOT, ventana de 7 días,
+sin preferencias) y un turno HBOT `booked` **mañana a las 15:00** de otro
+paciente. La prueba queda en una sola acción: *Agenda* → vista **"7 días"** →
+clic en el turno "HBOT (fixture…)" → **Cancelar** → mirar **Avisos**.
+
+Se puede repetir todas las veces que haga falta: cada corrida borra el turno
+anterior **y su Task de hueco** (el aviso es idempotente por turno para
+siempre; sin esa limpieza la segunda prueba no avisa nunca) y crea un turno
+nuevo. `PRUEBA_ESPERA_TELEFONO` en el `.env` pone tu número como destinatario
+del "Ofrecer por WhatsApp".
+
+### Camino manual (el circuito completo desde la UI)
 
 1. **Anotar la espera.** *Atender* → buscar al paciente → botón **"No hay lugar:
    anotar en la lista de espera"** (al lado de *Reservar turno*). Elegir servicio;

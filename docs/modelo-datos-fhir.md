@@ -96,7 +96,7 @@ El perfil deriva de `Patient-uv-ips` y pide, además de lo de arriba:
 | `name:NombreLegal` con `use: official` | ✅ |
 | `family.extension:FathersLastName` **1..1** (`humanname-fathers-family`) | ❌ **falta** |
 | `family.extension:MothersLastName` 0..1 | ❌ falta |
-| `name:NombreElegido` 0..1 (`use: usual`) — nombre elegido, Ley 26.743 | ❌ falta (decisión de producto) |
+| `name:NombreElegido` 0..1 (`use: usual`) — nombre elegido, Ley 26.743 | ✅ (2026-08-25) — campo opcional del alta; va **primero** en `name`, así `getDisplayString` y los `name[0]` de los bots muestran el elegido en todos lados sin tocar cada pantalla. El legal queda como `official` (lo buscan por `use` el Federador y lo fiscal). |
 
 Los dos apellidos **no se escriben adivinando**: el alta recibe un nombre
 completo y lo parte en dos, y de "Juan Pérez González" no se deduce si el

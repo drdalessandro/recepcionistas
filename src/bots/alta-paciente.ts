@@ -22,7 +22,7 @@ import {
   type CicloVida,
 } from '../fhir/identifiers.js';
 import { demandaABasic } from '../fhir/demanda.js';
-import { busquedaPorDni, conIdentificadoresDni, identificadoresDni, nombreLegal } from '../fhir/paciente.js';
+import { busquedaPorDni, conIdentificadoresDni, conNombreElegido, identificadoresDni, nombresPaciente } from '../fhir/paciente.js';
 import { validarPedido } from '../lib/demanda.js';
 import { descripcionLead, fuenteDeLead, nombreDeLead, proximaAccionLead } from '../lib/lead.js';
 import { partirNombre, validarEmail } from '../lib/onboarding.js';
@@ -32,6 +32,12 @@ export interface EntradaAltaPaciente {
   nombre?: string;
   firstName?: string;
   lastName?: string;
+  /**
+   * Nombre elegido (Ley 26.743), si difiere del legal. Va primero en `name`
+   * (`use: usual`): es el que usan todas las pantallas y los mensajes. El legal
+   * queda como `use: official` para el Federador y lo fiscal.
+   */
+  nombreElegido?: string;
   dni?: string;
   email?: string;
   telefono?: string;
@@ -212,7 +218,11 @@ export async function handler(
       );
       const actualizado = await medplum.updateResource<Patient>({
         ...existente,
-        name: existente.name?.length ? existente.name : [nombreLegal({ texto: nombreText, given: firstName, family: lastName })],
+        // Si la ficha ya tiene nombres, solo se le suma el elegido (adelante,
+        // sin pisar uno que ya este). Si no tiene, nacen los dos.
+        name: existente.name?.length
+          ? conNombreElegido(existente.name, e.nombreElegido)
+          : nombresPaciente({ legal: { texto: nombreText, given: firstName, family: lastName }, elegido: e.nombreElegido }),
         identifier,
         telecom: [...(existente.telecom ?? []), ...nuevosTelecom],
         extension: extension.length ? extension : undefined,
@@ -232,7 +242,7 @@ export async function handler(
             meta: { tag: [{ system: SYSTEM_CICLO_VIDA, code: e.cicloVida }] },
           }
         : {}),
-      name: [nombreLegal({ texto: nombreText, given: firstName, family: lastName })],
+      name: nombresPaciente({ legal: { texto: nombreText, given: firstName, family: lastName }, elegido: e.nombreElegido }),
       // El documento con los dos systems: el nuestro tal como se tipeó y el
       // canónico de RENAPER normalizado (ver src/fhir/paciente.ts).
       ...(documento.length ? { identifier: documento } : {}),
