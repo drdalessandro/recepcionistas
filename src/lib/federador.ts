@@ -21,9 +21,21 @@ import { soloDigitos } from './dedup.js';
 /** `identifier.system` del id nacional de la persona en el Federador. */
 export const SYSTEM_FEDERADOR = 'https://federador.msal.gob.ar/patient-id';
 
-/** Extensiones estándar de HL7 con el apellido de cada rama, que el Federador sí distingue. */
+/**
+ * Extensiones estándar de HL7 con el apellido de cada rama, que el Federador sí
+ * distingue (y nosotros, a partir de un nombre suelto, no sabemos deducir).
+ *
+ * ⚠️ Hay DOS grafías dando vueltas y por eso se leen las dos: las **respuestas**
+ * del Federador y el perfil `Patient-ar-core` usan la forma estándar de HL7
+ * (`…-fathers-family`), pero los **bodies de ejemplo de la colección oficial**
+ * usan `…-fathersfamily`, sin el guion del medio. Leer solo una de las dos deja
+ * el apellido paterno en `undefined` según de dónde venga el recurso.
+ */
 export const EXT_APELLIDO_PATERNO = 'http://hl7.org/fhir/StructureDefinition/humanname-fathers-family';
 export const EXT_APELLIDO_MATERNO = 'http://hl7.org/fhir/StructureDefinition/humanname-mothers-family';
+/** Variante sin guion que aparece en los ejemplos de la colección de Postman. */
+export const EXT_APELLIDO_PATERNO_ALT = 'http://hl7.org/fhir/StructureDefinition/humanname-fathersfamily';
+export const EXT_APELLIDO_MATERNO_ALT = 'http://hl7.org/fhir/StructureDefinition/humanname-mothersfamily';
 
 /** Lo que el Federador sabe de una persona y a nosotros nos sirve. */
 export interface DatosFederados {
@@ -67,8 +79,8 @@ export function leerPacienteFederado(p: Patient | undefined): DatosFederados | u
     dni: dni ? soloDigitos(dni) : undefined,
     nombres: (nombre?.given ?? []).filter(Boolean),
     apellido: nombre?.family,
-    apellidoPaterno: familyExt?.find((e) => e.url === EXT_APELLIDO_PATERNO)?.valueString,
-    apellidoMaterno: familyExt?.find((e) => e.url === EXT_APELLIDO_MATERNO)?.valueString,
+    apellidoPaterno: valorExtension(familyExt, EXT_APELLIDO_PATERNO, EXT_APELLIDO_PATERNO_ALT),
+    apellidoMaterno: valorExtension(familyExt, EXT_APELLIDO_MATERNO, EXT_APELLIDO_MATERNO_ALT),
     genero: p.gender,
     fechaNacimiento: p.birthDate,
     // `deceasedDateTime` o `deceasedBoolean`: cualquiera de los dos alcanza.
@@ -170,3 +182,18 @@ export function sugerenciaParaAlta(
 export function haySugerencia(s: SugerenciaAlta): boolean {
   return Object.values(s).some((v) => Boolean(v));
 }
+
+/** Primer valor que aparezca de cualquiera de las grafías de la extensión. */
+function valorExtension(
+  extensiones: { url?: string; valueString?: string }[] | undefined,
+  ...urls: string[]
+): string | undefined {
+  for (const url of urls) {
+    const v = extensiones?.find((e) => e.url === url)?.valueString;
+    if (v) {
+      return v;
+    }
+  }
+  return undefined;
+}
+

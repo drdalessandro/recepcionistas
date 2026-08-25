@@ -1,7 +1,7 @@
 # Federador de Pacientes (MSAL) — autocompletar el alta por DNI
 
-> Estado: **la mitad que no depende del bus está hecha y testeada**
-> (`src/lib/federador.ts`). Falta el token, y para eso falta un documento.
+> Estado: **implementado de punta a punta** (`bw-federador`). Falta configurar
+> los Project Secrets y probarlo contra QA.
 > Fecha: 2026-08-25.
 
 ## Para qué
@@ -32,36 +32,63 @@ DNI**, por apellido paterno, apellido+género, fecha de nacimiento+género,
 teléfono+género, y `POST /Patient/$match` (matching probabilístico con nombre +
 apellido paterno + fecha de nacimiento + género + un identifier, con `count`).
 
-## Lo que falta: el token
+## Autenticación (Bus Auth v2) — verificado
 
-Todos los endpoints piden `Authorization: Bearer <token generado por Bus Auth v2>`
-y remiten a un documento **"Auth FHIR"** que no tenemos. Los dos sitios que lo
-publican están **bloqueados por el proxy de egress** del entorno de desarrollo
-(`guias.hl7.org.ar` y `simplifier.net` devuelven 403 en el CONNECT), así que no
-se pudo leer desde acá.
+Sale de la **colección de Postman oficial** del Federador (PacientesPROD,
+OCT 2025), no de una deducción:
 
-**Lo que sí se puede deducir de nuestra propia pantalla de credenciales**, y
-conviene confirmar antes de codificar:
+```
+POST {busUrl}/bus-auth/v2/auth          (sin Authorization)
+Content-Type: application/json
 
-- La pantalla muestra un **"Token secret word"** (con selector de longitud y
-  botón *Regenerar*) y un **Issuer** que es nuestra URL. Eso sugiere un JWT
-  firmado con **secreto compartido (HS256)** y `iss = https://api.medplum.com.ar`
-  — no el esquema de clave pública RSA registrada.
-- El `scope` va **en el body** del pedido de token, uno por servicio.
+{
+  "grantType": "client_credentials",
+  "scope": "Patient/*.read",
+  "clientAssertionType": "urn:ietf:params:oauth:client-assertion-type:jwt-bearer",
+  "clientAssertion": "<JWT firmado>"
+}
+→ { "accessToken": "…" }
+```
 
-> ⚠️ Una exploración con un asistente de IA describió el flujo como OAuth2 + JWT
-> con claims `iss` / `sub` / `aud` / `iat` / `exp`, firma RS256 **o** HS256, y
-> tokens de vida corta (~15 min). Es **coherente** con lo anterior y sirve como
-> hipótesis de trabajo, pero **no es fuente primaria**: no está verificado contra
-> la documentación oficial y no se implementó nada en base a eso.
+El `clientAssertion` es un **JWT HS256** firmado con la *token secret word* del
+dominio:
 
-### Cómo destrabarlo (lo más rápido)
+| Claim | Valor |
+|---|---|
+| `iss` | la URL del dominio — para nosotros `https://api.medplum.com.ar` |
+| `iat` / `exp` | segundos. **Nosotros usamos 5 minutos** (ver abajo) |
+| `aud`, `sub`, `name`, `ident`, `role` | los **literales** `'aud'`, `'sub'`, … |
 
-La misma pantalla de `dominios.msal.gob.ar` tiene, por servicio, los links
-**"GET TOKEN FHIR"** y **Postman (QA / PROD)**. Esa colección de Postman trae el
-endpoint exacto, el body y —si el JWT se arma del lado del cliente— el
-*pre-request script* que lo construye. **Exportarla y leerla resuelve la duda sin
-depender de ninguna doc bloqueada.**
+Después, cada llamada FHIR va con `Authorization: Bearer <accessToken>`.
+
+**Tres cosas que conviene tener presentes:**
+
+1. **Un token por servicio.** El `scope` va en el body y la pantalla de
+   credenciales es explícita: si el dominio tiene varios habilitados, se manda
+   **únicamente** el del servicio que se va a usar.
+2. **Los claims de relleno se replican tal cual.** `aud: 'aud'`, `sub: 'sub'`…
+   son literales en la colección oficial: el bus no los valida. "Mejorarlos" con
+   valores que parezcan sensatos sería inventar un contrato que nadie especificó.
+3. **El `exp` del ejemplo son ~69 días** (`iat + 6000000`) para una aserción de
+   un solo uso. Usamos **5 minutos** (`ASSERTION_TTL_S`): un `exp` más corto
+   nunca es más permisivo. Si el auth fallara, es la primera perilla a mover.
+
+### El path del Federador no es el de la documentación
+
+La guía muestra los ejemplos con `/fhir/Patient`, pero **todas las búsquedas de
+la colección** usan `/masterfile-federacion-service/fhir/Patient`. Ese es el que
+se usa.
+
+### Secrets (en Medplum, nunca en el repo ni en `app/.env`)
+
+| Secret | Valor |
+|---|---|
+| `BUS_MSAL_URL` | `https://bus.msal.gob.ar` (el de **QA** para probar) |
+| `BUS_MSAL_ISSUER` | `https://api.medplum.com.ar` |
+| `BUS_MSAL_SECRET` | la *token secret word* de la pantalla de credenciales |
+
+Sin los tres, el bot devuelve `sin-credenciales` y no intenta nada: el alta sigue
+funcionando exactamente como hoy.
 
 ## Lo que ya está construido (`src/lib/federador.ts`)
 
@@ -89,6 +116,14 @@ exige el apellido paterno (`1..1`) y nosotros **no sabemos deducirlo** de un
 nombre suelto ("Juan Pérez González" es ambiguo). El Federador sí lo sabe, así
 que es la fuente natural de ese dato.
 
+## Dos grafías de la extensión del apellido
+
+Las **respuestas** del Federador y el perfil `Patient-ar-core` usan la forma
+estándar de HL7 (`humanname-fathers-family`), pero los **bodies de ejemplo de la
+colección** usan `humanname-fathersfamily`, sin el guion del medio. Se leen las
+dos: mirar una sola deja el apellido paterno en `undefined` según de dónde venga
+el recurso.
+
 ## Contradicción a tener presente
 
 En la respuesta **real** del Federador, el DNI de RENAPER viene con
@@ -110,14 +145,15 @@ funcional — pero si algún día federamos una ficha (`POST /Patient`, que el s
 
 ## Lo que falta para terminarlo
 
-1. **El token** (arriba). Es lo único bloqueante.
-2. **Bot `bw-federador`**, solo lectura: token por scope + `GET Patient?identifier=…dni|…`
-   + `leerPacienteFederado`. La *secret word* va como **Project Secret de
-   Medplum**, nunca en `app/.env` (que se embebe en el bundle del navegador).
-3. **UI**: en el alta, al tipear el DNI, ofrecer los campos y que la recepcionista
-   confirme. Nunca escribir sin que alguien lo vea.
-4. **Probar contra QA primero.** Es el único entorno de prueba real que tenemos:
-   el repo no tiene staging propio.
+1. **Cargar los tres Project Secrets** y probar contra **QA** — hace falta el
+   `busUrl` de QA (la pantalla de credenciales tiene el environment de Postman de
+   ese ambiente; el que se leyó es el de PROD).
+2. **UI**: en el alta, al tipear el DNI, ofrecer los campos y que la recepcionista
+   confirme. **Nunca escribir sin que alguien lo vea**: el bot sugiere, la persona
+   decide.
+3. **Escribir el apellido paterno** en la ficha. El dato ya llega separado; falta
+   verificar contra el servidor que Medplum persista `_family.extension` (los
+   tipos no la modelan) antes de escribirla.
 
 ## Dos preguntas que no son técnicas
 
