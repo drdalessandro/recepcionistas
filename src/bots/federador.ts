@@ -35,6 +35,8 @@ import type { Bundle, Patient } from '@medplum/fhirtypes';
 import { createHmac } from 'node:crypto';
 import {
   SCOPES,
+  ambienteBus,
+  type AmbienteBus,
   claimsClientAssertion,
   cuerpoPedidoToken,
   urlBusquedaPorDni,
@@ -73,6 +75,12 @@ export interface ResultadoFederador {
   /** Id de la persona en el Federador, por si después se quiere volver a consultar. */
   idFederador?: string;
   motivo?: MotivoSinDatos;
+  /**
+   * Contra qué bus se consultó. Se informa SIEMPRE: el environment de QA de
+   * Postman trae la URL de producción, así que "creí que estaba en QA" es un
+   * error que hay que poder ver, no deducir.
+   */
+  ambiente?: AmbienteBus;
   /** Detalle para el log; nunca se muestra al paciente. */
   detalle?: string;
 }
@@ -133,11 +141,12 @@ export async function handler(
     // configurado. El alta sigue igual que siempre.
     return { ok: false, motivo: 'sin-credenciales' };
   }
+  const ambiente = ambienteBus(busUrl);
 
   try {
     const token = await pedirToken(busUrl, issuer, secreto, SCOPES.pacienteLeer);
     if (!token) {
-      return { ok: false, motivo: 'bus-no-responde', detalle: 'no se pudo obtener el accessToken' };
+      return { ok: false, ambiente, motivo: 'bus-no-responde', detalle: 'no se pudo obtener el accessToken' };
     }
 
     const resp = await fetch(urlBusquedaPorDni(busUrl, dni), {
@@ -145,7 +154,7 @@ export async function handler(
     });
     if (!resp.ok) {
       console.log(`bw-federador: búsqueda respondió ${resp.status}`);
-      return { ok: false, motivo: 'bus-no-responde', detalle: `HTTP ${resp.status}` };
+      return { ok: false, ambiente, motivo: 'bus-no-responde', detalle: `HTTP ${resp.status}` };
     }
 
     // La búsqueda devuelve un Bundle; un `Patient` suelto sería la búsqueda por id.
@@ -161,15 +170,16 @@ export async function handler(
 
     const elegido = elegirPorDni(candidatos, dni);
     if (elegido.estado !== 'unico') {
-      return { ok: false, motivo: elegido.estado };
+      return { ok: false, ambiente, motivo: elegido.estado };
     }
     return {
       ok: true,
+      ambiente,
       sugerencia: sugerenciaParaAlta(elegido.datos, event.input?.yaCargado),
       ...(elegido.datos.idFederador ? { idFederador: elegido.datos.idFederador } : {}),
     };
   } catch (e) {
     console.log(`bw-federador: ${e instanceof Error ? e.message : String(e)}`);
-    return { ok: false, motivo: 'bus-no-responde' };
+    return { ok: false, ambiente, motivo: 'bus-no-responde' };
   }
 }

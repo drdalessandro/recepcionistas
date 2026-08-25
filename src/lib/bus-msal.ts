@@ -19,6 +19,36 @@
  * scopes habilitados, en el body va **únicamente** el del servicio que se usa.
  */
 
+/**
+ * Los dos buses, con nombre.
+ *
+ * ⚠️ **El environment "VARIABLES QA" de Postman miente en esto.** Dice
+ * `busUrl: https://bus.msal.gob.ar` — que es **producción**— mientras que la
+ * colección de QA tiene `bus-test.msal.gob.ar` **hardcodeado en las 10 requests**
+ * y nunca lee esa variable. Configurar el bus copiando el valor del environment
+ * de QA significa consultar el registro nacional productivo creyendo que se está
+ * probando. De ahí que las dos URLs estén acá, con nombre, y que el bot informe
+ * contra cuál habló.
+ */
+export const BUS_URLS = {
+  qa: 'https://bus-test.msal.gob.ar',
+  prod: 'https://bus.msal.gob.ar',
+} as const;
+
+export type AmbienteBus = 'qa' | 'prod' | 'desconocido';
+
+/** Contra qué bus se está hablando. Se reporta en el resultado, no se adivina. */
+export function ambienteBus(busUrl: string | undefined): AmbienteBus {
+  const normal = (busUrl ?? '').replace(/\/+$/, '').toLowerCase();
+  if (normal === BUS_URLS.qa) {
+    return 'qa';
+  }
+  if (normal === BUS_URLS.prod) {
+    return 'prod';
+  }
+  return 'desconocido';
+}
+
 /** Path del endpoint de autenticación (Bus Auth v2), relativo al `busUrl`. */
 export const PATH_AUTH = '/bus-auth/v2/auth';
 

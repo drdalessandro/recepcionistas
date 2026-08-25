@@ -1,6 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import {
   ASSERTION_TTL_S,
+  BUS_URLS,
+  ambienteBus,
   PATH_AUTH,
   PATH_FEDERADOR,
   SCOPES,
@@ -140,3 +142,44 @@ describe('el cache del token', () => {
     expect(tokenSirve(undefined, SCOPES.pacienteLeer, AHORA)).toBe(false);
   });
 });
+
+/**
+ * El environment "VARIABLES QA" de Postman trae la URL de PRODUCCIÓN en
+ * `busUrl`, mientras que la colección de QA usa `bus-test` hardcodeado en las 10
+ * requests. Configurar desde ese archivo = consultar el registro nacional
+ * productivo creyendo que se está probando.
+ */
+describe('los dos buses, para que nadie confunda QA con producción', () => {
+  it('QA es bus-test; producción es bus', () => {
+    expect(BUS_URLS.qa).toBe('https://bus-test.msal.gob.ar');
+    expect(BUS_URLS.prod).toBe('https://bus.msal.gob.ar');
+    expect(BUS_URLS.qa).not.toBe(BUS_URLS.prod);
+  });
+
+  it('reconoce cada ambiente por su URL', () => {
+    expect(ambienteBus(BUS_URLS.qa)).toBe('qa');
+    expect(ambienteBus(BUS_URLS.prod)).toBe('prod');
+  });
+
+  it('la URL que trae el environment de QA se reconoce como PRODUCCIÓN', () => {
+    // Es exactamente la trampa: el archivo dice QA y el valor es el de prod.
+    expect(ambienteBus('https://bus.msal.gob.ar')).toBe('prod');
+  });
+
+  it('una barra final o mayúsculas no cambian el ambiente', () => {
+    expect(ambienteBus('https://bus-test.msal.gob.ar/')).toBe('qa');
+    expect(ambienteBus('HTTPS://BUS-TEST.MSAL.GOB.AR')).toBe('qa');
+  });
+
+  it('cualquier otra cosa es desconocido, no se asume', () => {
+    expect(ambienteBus('https://otro.example')).toBe('desconocido');
+    expect(ambienteBus(undefined)).toBe('desconocido');
+    expect(ambienteBus('')).toBe('desconocido');
+  });
+
+  it('las URLs de token y búsqueda se arman bien contra QA', () => {
+    expect(urlToken(BUS_URLS.qa)).toBe('https://bus-test.msal.gob.ar/bus-auth/v2/auth');
+    expect(urlBusquedaPorDni(BUS_URLS.qa, '23327755')).toContain('bus-test.msal.gob.ar/masterfile-federacion-service');
+  });
+});
+
