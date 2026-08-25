@@ -245,8 +245,21 @@ async function capaLocal(opts: Opciones, busUrl: string, notas: Notas): Promise<
     if (clase !== 'credencial' && clase !== 'desconocido') {
       console.error('\n  El bus NO está discutiendo la firma: está pidiendo un requisito previo.');
       console.error('  **No cambies la token secret word por esto** — no es lo que te está reclamando.');
-      console.error('  Lo que dice arriba es lo que hay que resolver, y probablemente no se resuelva');
-      console.error('  desde el código: mirá docs/handoff-federador-msal.md § "Missing organization authentication".');
+      if (/organization authentication/i.test(dice ?? '')) {
+        // Este mensaje ya lo vimos y lo rastreamos: no hace falta que nadie
+        // vuelva a investigarlo desde cero.
+        console.error('\n  Este error ya está diagnosticado. Falta una SEGUNDA autenticación, la de la');
+        console.error('  aplicación, que es distinta de la del dominio que sí estamos haciendo:');
+        console.error('    POST {bus}/masterfile-federacion-service/api/usuarios/aplicacion/login');
+        console.error('    {"nombre": …, "clave": …, "codDominio": …}   → devuelve `token`');
+        console.error('  Son las credenciales `appName`/`appPassword` de los environments de Postman,');
+        console.error('  que vienen vacías: hay que pedírselas al Ministerio para el dominio 4002.');
+        console.error('  El detalle y las preguntas exactas están en');
+        console.error('  docs/handoff-federador-msal.md § "Missing organization authentication".');
+      } else {
+        console.error('  Lo que dice arriba es lo que hay que resolver, y probablemente no se resuelva');
+        console.error('  desde el código: mirá docs/handoff-federador-msal.md § "Missing organization authentication".');
+      }
       return 'falla';
     }
 

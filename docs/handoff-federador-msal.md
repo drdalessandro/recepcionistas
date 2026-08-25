@@ -268,34 +268,91 @@ delegan el tema, con la misma frase literal repetida en cada endpoint:
 es el paso concreto: por diseño, ninguna guía de recurso va a explicar este
 error.
 
-Tres hipótesis, ninguna confirmada:
+### La causa más probable: **hay una SEGUNDA autenticación y no la estamos haciendo**
 
-1. **Falta un paso de autenticación de aplicación/organización.** Los
-   environments de Postman del Ministerio traen `appName`, `appPassword` y
-   `appAccessToken` además de `domainTokenSecret` — y **ninguna de las dos
-   colecciones del Federador usa esas tres variables**. O sea que existe otro
-   flujo de auth, documentado en algún lado que no tenemos. Es la hipótesis que
-   mejor explica la palabra "organization".
-2. **El dominio está habilitado en producción pero no en QA.** Nuestra pantalla
-   de credenciales (`dominios.msal.gob.ar/systems/4002/credentials/2741`) es de
-   **producción**, y toda la documentación oficial de octubre 2025 está escrita
-   contra `bus.msal.gob.ar`: el host de QA no aparece ni una vez en ninguna de
-   las dos guías. Puede que en QA simplemente no nos conozcan.
-3. **Falta un identificador de organización en el pedido.** Menos probable: en
-   las guías la fila "Headers" lista **un solo header** (`Authorization`) en los
-   once endpoints. Pero eso describe las llamadas FHIR, no el POST de auth, que
-   ninguna guía documenta.
+Esto sale de la **implementación de referencia del propio Ministerio** (el SGH,
+Sistema de Gestión Hospitalaria), que documenta **dos validaciones distintas**:
+
+```shell
+# 1. Login de la APLICACIÓN — el que nos falta
+curl -X POST '{bus}/masterfile-federacion-service/api/usuarios/aplicacion/login' \
+  -d '{"nombre":"NOMBRE", "clave":"CLAVE", "codDominio":"..."}' \
+  -H "Content-Type: application/json"
+# → devuelve `token`
+
+# 2. Token del DOMINIO — el que sí hacemos
+curl -X POST '{bus}/bus-auth/auth' \
+  -d '{"grantType":"client_credentials", "scope":"…", "clientAssertion":"<JWT>"}'
+# → devuelve `accessToken`
+```
+
+Y su interceptor manda el primero como **header propio**, no como `Bearer`:
+
+```java
+headers.add("token", token.get());
+headers.add("codDominio", renaperWSConfig.getDominio());
+```
+
+**`nombre`/`clave` → `token` es exactamente el mapeo de
+`appName`/`appPassword` → `appAccessToken`** de los environments de Postman —
+las tres variables que ninguna colección del Federador usa y que estaban ahí sin
+explicación. Eso encaja con la palabra "organization" del error.
+
+Confianza: **alta pero no confirmada.** Los hechos son duros (el SGH es del
+Ministerio y el mapeo de nombres es exacto); lo que es inferencia nuestra es que
+el flujo **v2** exija ese paso — la referencia del SGH usa `bus-auth/auth` (v1).
+Ninguna fuente pública dice qué dispara ese mensaje: la cadena
+`"Missing organization authentication"` tiene **cero resultados** en todo GitHub
+y en la web indexada.
+
+Dato de forma que lo respalda: el cuerpo del error (`httpStatus` + `name` +
+`message` + `status`, sin ser un `OperationOutcome`) es el mapeo genérico de
+Spring `@ExceptionHandler(IllegalStateException.class)` +
+`@ResponseStatus(PRECONDITION_FAILED)`. O sea: el servidor **buscó** un registro
+de autenticación de organización asociado a la credencial y **no lo encontró**.
+No es "te falta un campo en el request".
+
+### Lo que hay que conseguir
+
+**Las credenciales de aplicación (`nombre` / `clave`).** La pantalla de
+`dominios.msal.gob.ar` nos dio la *token secret word* del **dominio**; falta el
+juego de la **aplicación**, que en los tres environments de Postman viene vacío.
+Sin eso no se puede ni probar la hipótesis.
 
 ### Para consultarle al Ministerio
 
-Tres preguntas concretas, en orden de utilidad:
+Cuatro preguntas, en orden de utilidad:
 
-1. ¿Nos pueden pasar el **documento "Auth FHIR"** de Bus Auth v2?
-2. ¿El dominio 4002 está habilitado en el ambiente de **QA**
-   (`bus-test.msal.gob.ar`), o solo en producción? ¿La *token secret word* es la
-   misma en los dos ambientes?
-3. ¿Qué significa `Missing organization authentication` y qué paso previo
-   espera? ¿Tiene que ver con `appName`/`appPassword`?
+1. ¿Nos pueden dar las **credenciales de aplicación** (`appName` / `appPassword`,
+   o `nombre` / `clave`) para el dominio 4002, y el `codDominio` que corresponde?
+2. ¿El flujo de **Bus Auth v2** requiere el login de aplicación
+   (`/api/usuarios/aplicacion/login`) **además** del `client_credentials` del
+   dominio? ¿Ese token va como header `token` + `codDominio`, como en el SGH?
+3. ¿Nos pueden pasar el **documento "Auth FHIR"** al que remiten todas las guías?
+4. ¿El dominio 4002 está habilitado en **QA** (`bus-test.msal.gob.ar`) o solo en
+   producción? ¿La *secret word* es la misma en los dos ambientes?
+
+### Un segundo problema que vamos a chocar después
+
+Independiente del 412, y conviene saberlo ahora: **nuestros claims de relleno
+probablemente no sirvan.** Nosotros mandamos los literales `'aud'`, `'sub'`,
+`'name'`, `'ident'`, `'role'` porque así están en la colección oficial, y así lo
+documentamos. Pero las implementaciones **reales en producción** (SGH, y ANDES de
+Neuquén) mandan valores con sentido:
+
+| Claim | SGH (referencia del Ministerio) | Nosotros |
+|---|---|---|
+| `sub` | *"Nombre del dominio"* | `'sub'` |
+| `name` | *"Apellido y Nombres del Usuario que accede"* | `'name'` |
+| `role` | *"Especialidad del usuario"* | `'role'` |
+| `ident` | *"Un identificador para el usuario"* | `'ident'` |
+| `aud` | la URL del endpoint de auth | `'aud'` |
+
+Y hay **deriva entre versiones de la documentación**: la guía de Simplifier dice
+que `sub` es el `client_id` de la aplicación y `iss` la URL de la aplicación
+(no del dominio), y agrega un claim `jti`. No se toca nada todavía —cambiarlo
+ahora sería mover dos variables a la vez—, pero es la siguiente perilla si el
+412 se destraba y aparece un error nuevo.
 
 Mientras tanto **el alta funciona exactamente como hoy**: sin token, el bot
 devuelve un motivo y la recepcionista tipea como siempre. Esto no bloquea nada.
