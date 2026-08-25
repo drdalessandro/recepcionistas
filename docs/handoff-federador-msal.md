@@ -1,7 +1,8 @@
 # Federador de Pacientes (MSAL) — autocompletar el alta por DNI
 
-> Estado: **implementado de punta a punta** (`bw-federador`). Falta configurar
-> los Project Secrets y probarlo contra QA.
+> Estado: **implementado y probado contra QA**. Todo lo que depende de nosotros
+> funciona; el bus contesta `412 Missing organization authentication`, que es un
+> requisito que falta **del lado del Ministerio**. Ver la sección homónima.
 > Fecha: 2026-08-25.
 
 ## Para qué
@@ -206,14 +207,98 @@ Tres cosas que el script hace a propósito:
 
 ## Lo que falta para terminarlo
 
-1. **Cargar los tres Project Secrets** y probar contra **QA** con
-   `npm run federador:check` (ver arriba).
+1. ~~Cargar los tres Project Secrets y probar contra QA.~~ **Hecho** (2026-08-25).
+   Los tres están cargados y el circuito llega al bus desde los dos lados. Falta
+   destrabar el `412` — ver § "Missing organization authentication".
 2. **UI**: en el alta, al tipear el DNI, ofrecer los campos y que la recepcionista
    confirme. **Nunca escribir sin que alguien lo vea**: el bot sugiere, la persona
    decide.
 3. **Escribir el apellido paterno** en la ficha. El dato ya llega separado; falta
    verificar contra el servidor que Medplum persista `_family.extension` (los
    tipos no la modelan) antes de escribirla.
+
+## "Missing organization authentication" — dónde estamos parados
+
+**Primera corrida real contra QA, 2026-08-25.** El bus contestó:
+
+```
+POST https://bus-test.msal.gob.ar/bus-auth/v2/auth   →  HTTP 412
+{"httpStatus":"PRECONDITION_FAILED","name":"IllegalState",
+ "message":"Missing organization authentication","status":412}
+```
+
+### Lo que esto SÍ demuestra (y es casi todo lo que faltaba probar)
+
+Es un resultado mucho mejor de lo que parece. Un 412 con cuerpo JSON estructurado
+es **el bus hablando**, no un timeout ni un proxy ni un DNS que no resuelve:
+
+- ✅ **Hay salida de red hasta el bus**, y desde los dos lados: desde la máquina
+  de desarrollo y desde el Lambda de Medplum (el bot falló igual, no distinto).
+- ✅ **El endpoint es el correcto** (`/bus-auth/v2/auth`) y acepta nuestro body.
+- ✅ **Los tres Project Secrets están cargados** y coinciden con el `.env`
+  (misma huella `sha256`), así que no hay nada desalineado.
+- ✅ **El bot está deployado y llega**. `bw-federador` ejecuta, resuelve
+  ambiente `qa`, y devuelve el error del bus.
+
+Todo lo que dependía de nosotros funciona. Lo que falta está del otro lado.
+
+### Lo que NO es
+
+**No es la *token secret word*.** Un 412 *Precondition Failed* no discute la
+firma: dice que falta un requisito previo. Una credencial mal firmada da 401/403
+con un mensaje de tipo `invalid_client` o `invalid signature`. Cambiar la secret
+word por este error es perder horas tocando algo que está bien.
+
+> El diagnóstico **daba ese consejo equivocado** en su primera versión: concluía
+> "lo más probable es que la token secret word no sea la correcta". Ya está
+> arreglado (`clasificarErrorAuth` en `src/lib/bus-msal.ts`): ahora cita
+> textualmente lo que dijo el bus y, ante una precondición, dice explícitamente
+> que no se toque la credencial.
+
+### Qué falta averiguar
+
+Las dos guías técnicas que tenemos (Patient/FEDERADOR, 31 pp. y
+Organization/REFES, 6 pp.) fueron leídas **enteras**: ninguna menciona el 412,
+"organization authentication", ni ningún segundo paso de autenticación. Las dos
+delegan el tema, con la misma frase literal repetida en cada endpoint:
+
+> `Authorization: Bearer token generado por Bus Auth v2 (ver documento Auth FHIR).`
+
+**Ese "documento Auth FHIR" es lo que nos falta, y tiene nombre propio.** Pedirlo
+es el paso concreto: por diseño, ninguna guía de recurso va a explicar este
+error.
+
+Tres hipótesis, ninguna confirmada:
+
+1. **Falta un paso de autenticación de aplicación/organización.** Los
+   environments de Postman del Ministerio traen `appName`, `appPassword` y
+   `appAccessToken` además de `domainTokenSecret` — y **ninguna de las dos
+   colecciones del Federador usa esas tres variables**. O sea que existe otro
+   flujo de auth, documentado en algún lado que no tenemos. Es la hipótesis que
+   mejor explica la palabra "organization".
+2. **El dominio está habilitado en producción pero no en QA.** Nuestra pantalla
+   de credenciales (`dominios.msal.gob.ar/systems/4002/credentials/2741`) es de
+   **producción**, y toda la documentación oficial de octubre 2025 está escrita
+   contra `bus.msal.gob.ar`: el host de QA no aparece ni una vez en ninguna de
+   las dos guías. Puede que en QA simplemente no nos conozcan.
+3. **Falta un identificador de organización en el pedido.** Menos probable: en
+   las guías la fila "Headers" lista **un solo header** (`Authorization`) en los
+   once endpoints. Pero eso describe las llamadas FHIR, no el POST de auth, que
+   ninguna guía documenta.
+
+### Para consultarle al Ministerio
+
+Tres preguntas concretas, en orden de utilidad:
+
+1. ¿Nos pueden pasar el **documento "Auth FHIR"** de Bus Auth v2?
+2. ¿El dominio 4002 está habilitado en el ambiente de **QA**
+   (`bus-test.msal.gob.ar`), o solo en producción? ¿La *token secret word* es la
+   misma en los dos ambientes?
+3. ¿Qué significa `Missing organization authentication` y qué paso previo
+   espera? ¿Tiene que ver con `appName`/`appPassword`?
+
+Mientras tanto **el alta funciona exactamente como hoy**: sin token, el bot
+devuelve un motivo y la recepcionista tipea como siempre. Esto no bloquea nada.
 
 ## Lo que la guía técnica NO dice (leída entera, 31 páginas)
 
