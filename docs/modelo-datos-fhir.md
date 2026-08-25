@@ -9,7 +9,7 @@ Naming: **kebab-case**.
 
 | Recurso FHIR | Uso | Extensiones custom |
 |---|---|---|
-| **Patient** | Ficha del paciente | `tipo-cliente`, `tag-fm`, `tc-bloqueo-fm`, `perfil-clinico`, `origen-lead` |
+| **Patient** | Ficha del paciente | `tipo-cliente`, `tag-fm`, `tc-bloqueo-fm`, `perfil-clinico`, `origen-lead`, `fecha-alta` |
 | **Practitioner** | Médicos, terapeutas, enfermeras | `split-porcentaje`, `tipo-contrato` |
 | **Schedule / Slot** | Disponibilidad de recursos físicos | `recurso-fisico`, `comparte-tumbona` |
 | **Appointment** | Turno reservado · **espera de lugar** (`status: waitlist`) | `orden-protocolo`, `requiere-hbot-previo`, `ocupantes`, `espera-dias`, `espera-franjas` |
@@ -53,6 +53,63 @@ Naming: **kebab-case**.
   ventana ("martes o jueves, a la tarde"), y sin eso el aviso se vuelve ruido:
   por eso van `espera-dias` (CSV con la convención de `Date.getDay()`) y
   `espera-franjas` (`manana|tarde|noche`). Vacías = cualquiera.
+- **Documento del paciente: DOS identifiers, a propósito.** La ficha lleva el DNI
+  dos veces:
+  - `https://biowellness.ar/fhir/Identifier/dni` — el nuestro, histórico. Guarda
+    el valor **tal como se tipeó** (`"30.123.456"`). Las fichas viejas y sus
+    búsquedas dependen de esa forma, así que no se re-normaliza.
+  - `http://www.renaper.gob.ar/dni` — el **canónico nacional**, siempre
+    normalizado a dígitos (`"30123456"`). Es el system con el que el Federador de
+    Pacientes del Ministerio de Salud y el resto del ecosistema nombran a una
+    persona (guía técnica Patient/FEDERADOR, OCT2025).
+
+  Cuesta un renglón y vuelve la ficha cruzable con cualquier otro sistema sin
+  tabla de equivalencias ni migración posterior — el mismo criterio que ya
+  usamos con el CRM: cuando el otro ya tiene un identificador, se usa el suyo.
+  El alta escribe los dos y **busca por los dos** (`busquedaPorDni`): una ficha
+  que solo tuviera el canónico sería invisible y terminaría en un duplicado.
+  Ojo con el `http://` — el token search de FHIR compara el string exacto.
+  Construcción en `src/fhir/paciente.ts`; fichas anteriores:
+  `npm run migrar:dni-renaper` (aditivo e idempotente).
+
+  **No es una invención nuestra: es lo que exige el perfil nacional.**
+  [`Patient-ar-core`](http://fhir.msal.gob.ar/core/StructureDefinition/Patient-ar-core)
+  (v0.5.0, DNSIS · Ministerio de Salud / HL7 Argentina) pide `identifier` **2..\***
+  con dos slices obligatorios discriminados por `use`:
+
+  | Slice | `use` | `system` |
+  |---|---|---|
+  | `DocumentoUnico` (1..1) | `official` | fijo: `http://www.renaper.gob.ar/dni` |
+  | `IdentificadorDominio` (1..1) | `usual` | el del dominio — el nuestro |
+
+  Por eso los identifiers llevan `use`: es la dimensión por la que el perfil
+  slicea, y sin él la ficha no conforma aunque los dos systems estén bien.
+
+### Qué falta para conformar `Patient-ar-core`
+
+El perfil deriva de `Patient-uv-ips` y pide, además de lo de arriba:
+
+| Requisito | Estado |
+|---|---|
+| `identifier` 2..* con `use` (arriba) | ✅ |
+| `active` 1..1 fijo en `true` | ✅ (el alta lo escribe) |
+| `name:NombreLegal` con `use: official` | ✅ |
+| `family.extension:FathersLastName` **1..1** (`humanname-fathers-family`) | ❌ **falta** |
+| `family.extension:MothersLastName` 0..1 | ❌ falta |
+| `name:NombreElegido` 0..1 (`use: usual`) — nombre elegido, Ley 26.743 | ❌ falta (decisión de producto) |
+
+Los dos apellidos **no se escriben adivinando**: el alta recibe un nombre
+completo y lo parte en dos, y de "Juan Pérez González" no se deduce si el
+apellido paterno es "Pérez" o si el compuesto es "Pérez González". Inventarlo
+sería poner en la ficha un dato de identidad que nadie afirmó. Además va en
+`_family` (extensión de un primitivo), que los tipos de Medplum no modelan: hay
+que verificar contra el servidor que lo persista antes de escribirlo. La fuente
+natural es el Federador, que ya lo devuelve separado.
+
+> Ojo con la cardinalidad: un **lead sin documento** (el curioso del mostrador)
+> no puede conformar `identifier` 2..*, y está bien — el perfil es para
+> intercambiar pacientes, no para el CRM interno. Se conforma cuando hay
+> documento.
 - **Contraindicaciones:** `CodeSystem` en estado `active` — tabla validada por el
   Director Médico (Dr. Conrado López Alonso, 2026-08-09). Una entrada nueva sin
   validar (`borradorPendienteRevision`) lo vuelve a `draft` hasta su aprobación.
