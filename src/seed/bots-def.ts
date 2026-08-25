@@ -41,4 +41,5 @@ export const BOTS: DefBot[] = [
   { name: 'bw-borrador-respuesta', source: 'src/bots/borrador-respuesta.ts', dist: 'dist/bots/borrador-respuesta.js', description: 'Solo lectura: redacta el BORRADOR de la respuesta de Recepción en Mensajes (la envía una persona, nunca el bot). Requiere ANTHROPIC_API_KEY.' },
   { name: 'bw-cancelar-turno', source: 'src/bots/cancelar-turno.ts', dist: 'dist/bots/cancelar-turno.js', description: 'Portal: el paciente cancela SU turno. Aplica R-14 (devuelve la sesión si avisó a tiempo), libera la sala y avisa a la lista de espera.' },
   { name: 'bw-mover-turno', source: 'src/bots/mover-turno.ts', dist: 'dist/bots/mover-turno.js', description: 'Portal: el paciente mueve SU turno en una sola operación (toma el lugar nuevo antes de soltar el viejo). Revalida la ventana R-13 y topea en 3 movimientos.' },
+  { name: 'bw-federador', source: 'src/bots/federador.ts', dist: 'dist/bots/federador.js', description: 'Solo lectura: busca a la persona por DNI en el Federador del Ministerio (Bus Auth v2) y devuelve lo que el alta puede completar. Sin credenciales no hace nada: el alta sigue igual.' },
 ];
