@@ -18,6 +18,7 @@
  * pantalla de credenciales lo dice explícitamente — si el dominio tiene varios
  * scopes habilitados, en el body va **únicamente** el del servicio que se usa.
  */
+import { SYSTEM_RENAPER_DNI } from '../fhir/identifiers.js';
 
 /**
  * Los dos buses, con nombre.
@@ -122,8 +123,11 @@ export function cuerpoPedidoToken(scope: ScopeBus, clientAssertion: string): Rec
 /** Búsqueda de un paciente por DNI en el Federador (path + query completos). */
 export function urlBusquedaPorDni(busUrl: string, dni: string): string {
   const base = busUrl.replace(/\/+$/, '');
-  // El system va sin encodear (así está en la colección); el valor sí, por las dudas.
-  return `${base}${PATH_FEDERADOR}/Patient?identifier=http://www.renaper.gob.ar/dni|${encodeURIComponent(dni)}`;
+  // El system sale de `identifiers.ts` y no hardcodeado: se busca por el mismo
+  // con el que después se filtra la respuesta (`src/lib/federador.ts`). Si
+  // divergieran, la búsqueda traería a alguien que el filtro descarta.
+  // Va sin encodear (así está en la colección); el valor sí, por las dudas.
+  return `${base}${PATH_FEDERADOR}/Patient?identifier=${SYSTEM_RENAPER_DNI}|${encodeURIComponent(dni)}`;
 }
 
 /** URL del endpoint de token. */

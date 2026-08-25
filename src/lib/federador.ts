@@ -169,10 +169,10 @@ export function sugerenciaParaAlta(
       sugerencia.apellidoMaterno = datos.apellidoMaterno;
     }
   }
-  if (!yaCargado.fechaNacimiento && datos.fechaNacimiento) {
+  if (!yaCargado.fechaNacimiento?.trim() && datos.fechaNacimiento) {
     sugerencia.fechaNacimiento = datos.fechaNacimiento;
   }
-  if (!yaCargado.genero && datos.genero) {
+  if (!yaCargado.genero?.trim() && datos.genero) {
     sugerencia.genero = datos.genero;
   }
   return sugerencia;
