@@ -38,7 +38,7 @@ import { MEDICOS, codigoConsulta } from '../config/medicos.js';
 import { COD, EXT, SYSTEM, TIPO_AVISO } from '../fhir/identifiers.js';
 import { clasificacionDeServicio } from '../fhir/appointment.js';
 import { identificadoresDni, nombreLegal } from '../fhir/paciente.js';
-import { META_DEMO, borrarRecursosDemo } from '../bots/_shared.js';
+import { META_DEMO, borrarRecursosDemo, conEsperaDeCuota } from '../bots/_shared.js';
 
 const TZ = '-03:00';
 
@@ -299,7 +299,7 @@ const SOLICITUDES: Array<{
 // ---------------------------------------------------------------------------
 
 async function scheduleId(medplum: MedplumClient, recursoCodigo: string): Promise<string | undefined> {
-  const sch = await medplum.searchOne('Schedule', `identifier=${SYSTEM.recursoCodigo}|SCH_${recursoCodigo}`);
+  const sch = await conEsperaDeCuota(() => medplum.searchOne('Schedule', `identifier=${SYSTEM.recursoCodigo}|SCH_${recursoCodigo}`));
   return sch?.id;
 }
 
@@ -313,12 +313,19 @@ async function enLotes<T>(items: T[], tamano: number, fn: (item: T) => Promise<v
 async function generar(medplum: MedplumClient, dias: number): Promise<void> {
   const ahora = new Date();
 
+  // Cuota FHIR de Medplum: cada escritura cuesta 100 puntos de 50.000/min
+  // (500 escrituras/min) y este generador hace ~1.400. TODAS las escrituras
+  // pasan por la espera de cuota: cuando el limitador se llena, el script
+  // espera lo que el 429 le pide y sigue — no muere a mitad de camino.
+  const crear = <T extends Parameters<MedplumClient['createResource']>[0]>(recurso: T) =>
+    conEsperaDeCuota(() => medplum.createResource(recurso));
+
   // Pacientes
   const defs = pacientesDemo();
   const pacientes: Patient[] = [];
   for (const p of defs) {
     pacientes.push(
-      await medplum.createResource<Patient>({
+      await crear<Patient>({
         resourceType: 'Patient',
         meta: META_DEMO,
         active: true,
@@ -368,7 +375,7 @@ async function generar(medplum: MedplumClient, dias: number): Promise<void> {
   ];
   for (const plan of planes) {
     const p = pacientes[plan.idx]!;
-    await medplum.createResource<Coverage>({
+    await crear<Coverage>({
       resourceType: 'Coverage',
       meta: META_DEMO,
       status: 'active',
@@ -382,7 +389,7 @@ async function generar(medplum: MedplumClient, dias: number): Promise<void> {
   console.log(`  • Planes (Coverage): ${planes.length}`);
 
   // Banner de seguridad: una contraindicación activa para mostrar el circuito.
-  await medplum.createResource({
+  await crear({
     resourceType: 'Flag',
     meta: META_DEMO,
     status: 'active',
@@ -407,7 +414,7 @@ async function generar(medplum: MedplumClient, dias: number): Promise<void> {
   }
   const practitioners = new Map<string, { id: string; nombre: string }>();
   for (const m of MEDICOS) {
-    const pract = await medplum.searchOne('Practitioner', `identifier=${SYSTEM.medico}|${m.codigo}`);
+    const pract = await conEsperaDeCuota(() => medplum.searchOne('Practitioner', `identifier=${SYSTEM.medico}|${m.codigo}`));
     if (pract?.id) {
       practitioners.set(m.codigo, { id: pract.id, nombre: pract.name?.[0]?.text ?? m.nombre });
     }
@@ -421,7 +428,7 @@ async function generar(medplum: MedplumClient, dias: number): Promise<void> {
     await enLotes(plan, 5, async (t) => {
       const paciente = pacientes[t.pacienteIdx]!;
       const servicio = getServicio(t.servicioCodigo);
-      const slot = await medplum.createResource<Slot>({
+      const slot = await crear<Slot>({
         resourceType: 'Slot',
         meta: META_DEMO,
         status: 'busy',
@@ -431,7 +438,7 @@ async function generar(medplum: MedplumClient, dias: number): Promise<void> {
         extension: [{ url: EXT.recursoFisico, valueString: t.recursoCodigo }],
       });
       const pract = t.practitionerCodigo ? practitioners.get(t.practitionerCodigo) : undefined;
-      await medplum.createResource<Appointment>({
+      await crear<Appointment>({
         resourceType: 'Appointment',
         meta: META_DEMO,
         status: t.status,
@@ -464,7 +471,7 @@ async function generar(medplum: MedplumClient, dias: number): Promise<void> {
   // Mensajes entrantes sin leer (sin `received`): badge de Mensajes + campanita.
   for (const [i, m] of MENSAJES.entries()) {
     const p = pacientes[m.pacienteIdx]!;
-    await medplum.createResource({
+    await crear({
       resourceType: 'Communication',
       meta: META_DEMO,
       status: 'completed',
@@ -481,7 +488,7 @@ async function generar(medplum: MedplumClient, dias: number): Promise<void> {
   // Solicitudes de turno (mismo shape que bw-solicitar-turno): badge de Solicitudes.
   for (const s of SOLICITUDES) {
     const p = pacientes[s.pacienteIdx]!;
-    await medplum.createResource<Task>({
+    await crear<Task>({
       resourceType: 'Task',
       meta: META_DEMO,
       status: 'requested',
@@ -523,7 +530,7 @@ async function generar(medplum: MedplumClient, dias: number): Promise<void> {
     },
   ];
   for (const [i, a] of avisos.entries()) {
-    await medplum.createResource<Task>({
+    await crear<Task>({
       resourceType: 'Task',
       meta: META_DEMO,
       status: 'requested',
@@ -551,7 +558,7 @@ async function generar(medplum: MedplumClient, dias: number): Promise<void> {
     { idx: 7, desc: 'Seña 50% · IHHT', ars: 65_250, medio: 'mercadopago' },
   ];
   for (const c of cobros) {
-    await medplum.createResource({
+    await crear({
       resourceType: 'Invoice',
       meta: META_DEMO,
       status: 'balanced',
