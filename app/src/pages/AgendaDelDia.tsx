@@ -2,7 +2,10 @@ import { useCallback, useEffect, useState } from 'react';
 import { ActionIcon, Alert, Box, Button, Center, Group, Loader, SegmentedControl, Stack, Text, Title, Tooltip } from '@mantine/core';
 import { IconRefresh, IconInfoCircle, IconChevronLeft, IconChevronRight } from '@tabler/icons-react';
 import { cargarTimeline, type TimelineData, type TurnoTimeline } from '../lib/timeline';
+import { cargarMapaSemana } from '../lib/semana';
+import { lunesDe, type MapaSemana as DatosMapa } from '@bw/lib/mapa-semana';
 import { Timeline } from '../components/Timeline';
+import { MapaSemana } from '../components/MapaSemana';
 import { ProximosTurnos } from '../components/ProximosTurnos';
 import { ReservaModal, type PresetReserva } from '../components/ReservaModal';
 import { TurnoModal } from '../components/TurnoModal';
@@ -11,11 +14,12 @@ import { colorEstado, labelEstado } from '../lib/estados';
 
 const REFRESCO_MS = 60_000;
 
-/** Rango visible: la grilla de UN día, o la ventana de 7/14 días (lista). */
-type Rango = 'dia' | '7' | '14';
+/** Rango visible: la grilla de UN día, el mapa de la semana, o la lista de 7/14 días. */
+type Rango = 'dia' | 'semana' | '7' | '14';
 
 const FMT_LARGO = new Intl.DateTimeFormat('es-AR', { weekday: 'long', day: 'numeric', month: 'long' });
 const FMT_CORTO = new Intl.DateTimeFormat('es-AR', { weekday: 'short', day: 'numeric', month: 'short' });
+const FMT_SEMANA = new Intl.DateTimeFormat('es-AR', { day: 'numeric', month: 'short' });
 
 /** Medianoche local: para comparar días sin que la hora meta ruido. */
 function aMedianoche(d: Date): Date {
@@ -29,6 +33,12 @@ function fechaLocalISO(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
+function sumarDias(d: Date, n: number): Date {
+  const x = new Date(d);
+  x.setDate(x.getDate() + n);
+  return x;
+}
+
 export function AgendaDelDia(): JSX.Element {
   const [rango, setRango] = useState<Rango>('dia');
   const [fecha, setFecha] = useState<Date>(() => aMedianoche(new Date()));
@@ -37,10 +47,14 @@ export function AgendaDelDia(): JSX.Element {
   const [cargando, setCargando] = useState(false);
   const [preset, setPreset] = useState<PresetReserva | null>(null);
   const [turnoSel, setTurnoSel] = useState<TurnoTimeline | null>(null);
+  const [lunes, setLunes] = useState<Date>(() => lunesDe(new Date()));
+  const [mapa, setMapa] = useState<DatosMapa | null>(null);
+  const [errorMapa, setErrorMapa] = useState<string | null>(null);
 
   const hoyMin = aMedianoche(new Date()).getTime();
   const esHoy = fecha.getTime() === hoyMin;
   const esPasado = fecha.getTime() < hoyMin;
+  const esSemanaActual = lunes.getTime() === lunesDe(new Date()).getTime();
 
   const refrescar = useCallback(async () => {
     setCargando(true);
@@ -78,7 +92,33 @@ export function AgendaDelDia(): JSX.Element {
     });
   };
 
-  const subtitulo = rango === 'dia' ? FMT_LARGO.format(fecha) : `Próximos ${rango} días`;
+  // El mapa de la semana carga cuando se entra a la vista o se cambia de semana.
+  useEffect(() => {
+    if (rango !== 'semana') {
+      return;
+    }
+    setMapa(null);
+    setErrorMapa(null);
+    cargarMapaSemana(lunes).then(setMapa, (e: unknown) => {
+      setErrorMapa(e instanceof Error ? e.message : 'Error al cargar la semana.');
+    });
+  }, [rango, lunes]);
+
+  /** Click en una celda del mapa: caer en la grilla de ese día. */
+  const irAlDia = (fechaISO: string): void => {
+    const [y, m, d] = fechaISO.split('-').map(Number);
+    setData(null);
+    setFecha(new Date(y as number, (m as number) - 1, d as number));
+    setRango('dia');
+  };
+
+  const domingo = sumarDias(lunes, 6);
+  const subtitulo =
+    rango === 'dia'
+      ? FMT_LARGO.format(fecha)
+      : rango === 'semana'
+        ? `Semana del ${FMT_SEMANA.format(lunes)} al ${FMT_SEMANA.format(domingo)}`.replace(/\./g, '')
+        : `Próximos ${rango} días`;
 
   return (
     <Stack gap="lg">
@@ -120,11 +160,43 @@ export function AgendaDelDia(): JSX.Element {
               </Button>
             </Group>
           )}
+          {rango === 'semana' && (
+            <Group gap={4} wrap="nowrap">
+              <Tooltip label="Semana anterior" withArrow>
+                <ActionIcon
+                  variant="default"
+                  size="lg"
+                  aria-label="Semana anterior"
+                  onClick={() => setLunes((l) => sumarDias(l, -7))}
+                >
+                  <IconChevronLeft size={18} />
+                </ActionIcon>
+              </Tooltip>
+              <Tooltip label="Semana siguiente" withArrow>
+                <ActionIcon
+                  variant="default"
+                  size="lg"
+                  aria-label="Semana siguiente"
+                  onClick={() => setLunes((l) => sumarDias(l, 7))}
+                >
+                  <IconChevronRight size={18} />
+                </ActionIcon>
+              </Tooltip>
+              <Button
+                variant={esSemanaActual ? 'default' : 'light'}
+                disabled={esSemanaActual}
+                onClick={() => setLunes(lunesDe(new Date()))}
+              >
+                Esta semana
+              </Button>
+            </Group>
+          )}
           <SegmentedControl
             value={rango}
             onChange={(v) => setRango(v as Rango)}
             data={[
               { value: 'dia', label: 'Día' },
+              { value: 'semana', label: 'Semana' },
               { value: '7', label: '7 días' },
               { value: '14', label: '14 días' },
             ]}
@@ -167,6 +239,22 @@ export function AgendaDelDia(): JSX.Element {
               />
             </Box>
           )}
+        </>
+      ) : rango === 'semana' ? (
+        <>
+          {errorMapa && (
+            <Alert color="red" icon={<IconInfoCircle size={16} />} title="No se pudo cargar">
+              {errorMapa}
+            </Alert>
+          )}
+
+          {mapa === null && !errorMapa && (
+            <Center mih={240}>
+              <Loader />
+            </Center>
+          )}
+
+          {mapa && <MapaSemana data={mapa} hoyISO={fechaLocalISO(new Date())} onDia={irAlDia} />}
         </>
       ) : (
         <ProximosTurnos dias={Number(rango)} />
