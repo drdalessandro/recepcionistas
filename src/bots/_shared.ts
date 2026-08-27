@@ -58,8 +58,42 @@ type Secrets = BotEvent['secrets'];
 /** Meta de datos de demostración (tag `demo`); se autodestruyen a las 48 h. */
 export const META_DEMO = { tag: [{ system: SYSTEM.demo, code: 'demo' }] };
 
-/** Tipos demo, en orden de borrado: hijos antes que padres (evita refs colgadas). */
-const TIPOS_DEMO = ['Communication', 'Invoice', 'Coverage', 'Flag', 'Appointment', 'Slot', 'Patient'] as const;
+/** ¿El recurso está etiquetado `demo`? */
+export function esRecursoDemo(r: { meta?: { tag?: Array<{ system?: string; code?: string }> } } | undefined): boolean {
+  return Boolean(r?.meta?.tag?.some((t) => t.system === SYSTEM.demo && t.code === 'demo'));
+}
+
+/**
+ * MODO AVIÓN de los pacientes demo: a un Patient con tag `demo` no le sale
+ * NINGÚN mensaje real — ni WhatsApp (Twilio) ni email (SES).
+ *
+ * Por qué acá y no en cada bot: los crons (`bw-recordatorios`,
+ * `bw-vencer-tentativas`, `bw-cobro-membresias`) no distinguen demo de real, y
+ * este es el único embudo por el que salen los envíos. Sin el guard, una demo
+ * de ocupación manda decenas de WhatsApp REALES a números inventados (que
+ * pueden ser de gente real, con costo de Twilio) y los emails `@example.com`
+ * rebotan en SES dañando la reputación del remitente.
+ *
+ * La Communication se registra igual, como 'completed' y CON el tag demo: el
+ * hilo de Mensajes se ve vivo (sirve para capacitar) y la limpieza de 48 h
+ * también se la lleva. Ante la duda (no se pudo leer el Patient) se asume real:
+ * mejor un WhatsApp de más a un demo que uno de menos a un paciente.
+ */
+async function pacienteEsDemo(medplum: MedplumClient, pacienteRef: string | undefined): Promise<boolean> {
+  const id = pacienteRef?.split('/')[1];
+  if (!id) {
+    return false;
+  }
+  const p = await medplum.readResource('Patient', id).catch(() => undefined);
+  return esRecursoDemo(p);
+}
+
+/**
+ * Tipos demo, en orden de borrado: hijos antes que padres (evita refs colgadas).
+ * `Task` primero: sin él, las solicitudes y avisos demo (campanita) quedaban
+ * huérfanos para siempre — la limpieza de 48 h no los tocaba.
+ */
+const TIPOS_DEMO = ['Task', 'Communication', 'Invoice', 'Coverage', 'Flag', 'Appointment', 'Slot', 'Patient'] as const;
 
 export interface ResultadoBorradoDemo {
   borrados: number;
@@ -191,8 +225,10 @@ export async function enviarWhatsApp(
     sinPlantilla?: boolean;
   },
 ): Promise<Communication> {
+  const modoAvion = await pacienteEsDemo(medplum, params.pacienteRef);
+
   let to = params.to;
-  if (!to && params.pacienteRef) {
+  if (!to && params.pacienteRef && !modoAvion) {
     const id = params.pacienteRef.split('/')[1];
     if (id) {
       const p = await medplum.readResource('Patient', id).catch(() => undefined);
@@ -205,7 +241,11 @@ export async function enviarWhatsApp(
   const from = secrets['TWILIO_WHATSAPP_FROM']?.valueString;
 
   let status: Communication['status'] = 'preparation';
-  if (to && sid && token && from) {
+  if (modoAvion) {
+    // Modo avión (ver pacienteEsDemo): el hilo lo muestra como enviado, Twilio
+    // nunca se entera.
+    status = 'completed';
+  } else if (to && sid && token && from) {
     // ¿Está abierta la ventana de 24 h de Meta? Si el paciente escribió hace
     // poco, el texto libre está permitido — y es MUCHO mejor que la plantilla:
     // una variable de plantilla no admite saltos de línea (Meta los borra) y la
@@ -290,6 +330,8 @@ export async function enviarWhatsApp(
     resourceType: 'Communication',
     status,
     sent: new Date().toISOString(),
+    // Con el tag demo, la limpieza de 48 h también borra estos mensajes.
+    ...(modoAvion ? { meta: META_DEMO } : {}),
     ...(params.identifier ? { identifier: [params.identifier] } : {}),
     ...(params.about ? { about: [{ reference: params.about }] } : {}),
     ...(params.pacienteRef
@@ -324,8 +366,13 @@ export async function enviarEmail(
     from?: string;
   },
 ): Promise<Communication> {
+  // Mismo modo avión que enviarWhatsApp: a un paciente demo no le sale email
+  // real — los `@example.com` rebotan en SES y eso daña la reputación del
+  // remitente, que es compartida con los emails reales.
+  const modoAvion = await pacienteEsDemo(medplum, params.pacienteRef);
+
   let to = params.to;
-  if (!to && params.pacienteRef) {
+  if (!to && params.pacienteRef && !modoAvion) {
     const id = params.pacienteRef.split('/')[1];
     if (id) {
       const p = await medplum.readResource('Patient', id).catch(() => undefined);
@@ -334,7 +381,9 @@ export async function enviarEmail(
   }
 
   let status: Communication['status'] = 'preparation';
-  if (to) {
+  if (modoAvion) {
+    status = 'completed';
+  } else if (to) {
     try {
       await medplum.sendEmail({
         to,
@@ -356,6 +405,8 @@ export async function enviarEmail(
     resourceType: 'Communication',
     status,
     sent: new Date().toISOString(),
+    // Con el tag demo, la limpieza de 48 h también borra estos mensajes.
+    ...(modoAvion ? { meta: META_DEMO } : {}),
     ...(params.about ? { about: [{ reference: params.about }] } : {}),
     ...(params.pacienteRef
       ? { subject: { reference: params.pacienteRef }, recipient: [{ reference: params.pacienteRef }] }
