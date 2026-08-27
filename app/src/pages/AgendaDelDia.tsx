@@ -110,7 +110,16 @@ export function AgendaDelDia(): JSX.Element {
   );
 }
 
-const ESTADOS_LEYENDA = ['pending', 'booked', 'arrived', 'checked-in', 'fulfilled'];
+/**
+ * "En curso" (`checked-in`) salió de la leyenda: Recepción ya no puede marcarlo
+ * —se sacó de las acciones del turno el 2026-08-15, porque el Encounter lo abre
+ * "Llegó" y nada financiero ni de reportes dependía de él—, así que el chip
+ * describía un estado que nadie podía producir.
+ *
+ * El código SIGUE vivo en `lib/estados.ts`: los turnos históricos que quedaron
+ * en `checked-in` se tienen que seguir viendo con su color y su etiqueta.
+ */
+const ESTADOS_LEYENDA = ['pending', 'booked', 'arrived', 'fulfilled'];
 
 function Leyenda(): JSX.Element {
   return (
@@ -124,7 +133,8 @@ function Leyenda(): JSX.Element {
         </Group>
       ))}
       <Group gap={6}>
-        <Box w={2} h={14} style={{ background: 'var(--mantine-color-blue-6)' }} />
+        {/* Mismo grosor que la línea real de la grilla (3px). */}
+        <Box w={3} h={14} style={{ background: 'var(--mantine-color-blue-6)' }} />
         <Text size="xs" c="dimmed">
           Ahora
         </Text>

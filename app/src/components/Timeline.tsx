@@ -208,6 +208,13 @@ export function Timeline({
               const cap = Math.max(1, sala.capacidad);
               const compacto = t.peso / cap < 0.5; // banda angosta (multiplaza): una sola línea de texto
               const pers = t.ocupantes > 1 ? ` · ${t.ocupantes} pers.` : '';
+              // Los asientos de una sala compartida (Multiplaza) se apilan PEGADOS:
+              // así 3 de 6 se leen como una columna llena hasta la mitad y no como
+              // tres rayitas sueltas. El aire de 1px y las esquinas redondeadas van
+              // solo en los extremos de la pila; entre personas va una hairline.
+              const primero = t.asiento === 0;
+              const ultimo = t.asiento + t.peso >= cap;
+              const r = (esExtremo: boolean): string => (esExtremo ? '5px' : '0px');
               return (
                 <Tooltip
                   key={i}
@@ -220,11 +227,13 @@ export function Timeline({
                       position: 'absolute',
                       left: `calc(${pct(t.inicioMin)} + 1px)`,
                       width: `calc(${anchoPct(t.inicioMin, Math.max(t.finMin, t.inicioMin + 30))} - 2px)`,
-                      top: `calc(${((t.asiento / cap) * 100).toFixed(2)}% + 1px)`,
-                      height: `calc(${((t.peso / cap) * 100).toFixed(2)}% - 2px)`,
+                      top: `calc(${((t.asiento / cap) * 100).toFixed(2)}% + ${primero ? 1 : 0}px)`,
+                      height: `calc(${((t.peso / cap) * 100).toFixed(2)}% - ${(primero ? 1 : 0) + (ultimo ? 1 : 0)}px)`,
                       background: `var(--mantine-color-${colorEstado(t.estado)}-6)`,
                       color: 'white',
-                      borderRadius: 5,
+                      borderRadius: `${r(primero)} ${r(primero)} ${r(ultimo)} ${r(ultimo)}`,
+                      // Separa a una persona de la de arriba sin abrir un hueco.
+                      boxShadow: primero ? undefined : 'inset 0 1px 0 rgba(255,255,255,0.45)',
                       padding: '1px 5px',
                       overflow: 'hidden',
                       cursor: onTurno ? 'pointer' : 'default',
