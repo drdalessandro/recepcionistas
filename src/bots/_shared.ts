@@ -95,6 +95,44 @@ async function pacienteEsDemo(medplum: MedplumClient, pacienteRef: string | unde
  */
 const TIPOS_DEMO = ['Task', 'Communication', 'Invoice', 'Coverage', 'Flag', 'Appointment', 'Slot', 'Patient'] as const;
 
+/** Milisegundos de espera que pide un 429 de Medplum; undefined si no es 429. */
+function esperaPor429(err: unknown): number | undefined {
+  const msg = err instanceof Error ? err.message : String(err);
+  if (!/too many requests/i.test(msg)) {
+    return undefined;
+  }
+  // El OperationOutcome trae el estado del limitador: {"_msBeforeNext":31575,…}.
+  const m = /"_msBeforeNext"\s*:\s*(\d+)/.exec(msg);
+  return m ? Number(m[1]) : 30_000;
+}
+
+/**
+ * Reintenta `fn` esperando lo que pida la CUOTA FHIR de Medplum (429).
+ *
+ * Medplum limita a 50.000 puntos/minuto por usuario y cada ESCRITURA cuesta
+ * 100 (500 escrituras/min). La demo de ocupación crea ~1.400 recursos y la
+ * limpieza los borra: cualquiera de las dos se come la cuota en el primer
+ * minuto. Sin esto, el generador moría por 429 a mitad de camino y la limpieza
+ * TRAGABA los 429 en silencio — reportaba "borrado" dejando restos, y la
+ * corrida siguiente apilaba una demo nueva sobre esos restos (turnos dobles).
+ *
+ * Un error que no es 429 se relanza intacto, sin reintentos.
+ */
+export async function conEsperaDeCuota<T>(fn: () => Promise<T>, maxEsperas = 10): Promise<T> {
+  for (let intento = 0; ; intento++) {
+    try {
+      return await fn();
+    } catch (err) {
+      const ms = esperaPor429(err);
+      if (ms === undefined || intento >= maxEsperas) {
+        throw err;
+      }
+      console.log(`  … cuota FHIR de Medplum llena: espero ${Math.ceil(ms / 1000)} s y sigo`);
+      await new Promise((r) => setTimeout(r, ms + 250));
+    }
+  }
+}
+
 export interface ResultadoBorradoDemo {
   borrados: number;
   porTipo: Record<string, number>;
@@ -117,13 +155,16 @@ export async function borrarRecursosDemo(
     if (opts.antesDe) {
       query += `&_lastUpdated=lt${opts.antesDe}`;
     }
-    const recursos = await medplum.searchResources(tipo, query);
+    const recursos = await conEsperaDeCuota(() => medplum.searchResources(tipo, query));
     for (const r of recursos) {
       if (!r.id) {
         continue;
       }
       try {
-        await medplum.deleteResource(tipo, r.id);
+        // Un 429 acá se ESPERA, no se traga: si se tragara, la limpieza
+        // reportaría éxito dejando restos, y la demo siguiente se apilaría
+        // encima (turnos duplicados en la misma sala y hora).
+        await conEsperaDeCuota(() => medplum.deleteResource(tipo, r.id!));
         porTipo[tipo] = (porTipo[tipo] ?? 0) + 1;
         borrados++;
       } catch {
