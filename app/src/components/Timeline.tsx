@@ -79,7 +79,7 @@ export function Timeline({
   if (!data.abierto) {
     return (
       <Text c="dimmed" mt="md">
-        El centro está cerrado hoy.
+        {data.esHoy ? 'El centro está cerrado hoy.' : 'El centro está cerrado ese día.'}
       </Text>
     );
   }
@@ -124,7 +124,9 @@ export function Timeline({
   const lineasMedia = `repeating-linear-gradient(to right, ${BORDE_TENUE} 0 1px, transparent 1px calc(100% / ${cols.length}))`;
   // El orden importa: la capa de horas se pinta encima de la de medias.
   const lineas = `${lineasHora}, ${lineasMedia}`;
-  const ahoraVisible = data.ahoraMin >= data.aperturaMin && data.ahoraMin <= data.cierreMin;
+  // Solo en el día de hoy: en la grilla de otro día la línea marcaría la hora
+  // actual sobre una fecha que no es, que es peor que no mostrar nada.
+  const ahoraVisible = data.esHoy && data.ahoraMin >= data.aperturaMin && data.ahoraMin <= data.cierreMin;
 
   return (
     <Box style={{ display: 'flex', flexDirection: 'column', height: ALTO_GRILLA, minHeight: 380 }}>

@@ -25,10 +25,22 @@ import { HORARIO_SEMANAL } from '@bw/config/horario';
 export interface PresetReserva {
   recursoCodigo: string;
   horaMin: number;
+  /**
+   * Día de la grilla desde la que se clickeó ("YYYY-MM-DD"). Sin esto el modal
+   * siempre arrancaba en hoy: al poder navegar la agenda a otro día, clickear un
+   * hueco del viernes abría una reserva para HOY y había que acordarse de
+   * corregir la fecha a mano. Opcional: quien no navega, no lo manda.
+   */
+  fechaISO?: string;
 }
 
 function fmtMin(min: number): string {
   return `${String(Math.floor(min / 60)).padStart(2, '0')}:${String(min % 60).padStart(2, '0')}`;
+}
+
+/** "YYYY-MM-DD" del día LOCAL (no UTC: ver el comentario de `hoy`). */
+function fechaLocalISO(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
 export function ReservaModal({
@@ -40,7 +52,10 @@ export function ReservaModal({
   onClose: () => void;
   onReservado: () => void;
 }): JSX.Element {
-  const hoy = new Date().toISOString().slice(0, 10);
+  // OJO: `toISOString()` es UTC. Con el centro abierto hasta las 22:00 y
+  // Argentina en −03:00, entre las 21 y las 22 devolvía YA el día siguiente y el
+  // modal arrancaba con la fecha de mañana. Va la fecha LOCAL.
+  const hoy = fechaLocalISO(new Date());
   const [query, setQuery] = useState('');
   const [resultados, setResultados] = useState<Patient[] | null>(null);
   const [buscando, setBuscando] = useState(false);
@@ -69,7 +84,7 @@ export function ReservaModal({
   useEffect(() => {
     if (preset) {
       setHora(fmtMin(preset.horaMin));
-      setFecha(hoy);
+      setFecha(preset.fechaISO ?? hoy);
       setServicioCodigo(null);
       setPaciente(null);
       setResultados(null);
