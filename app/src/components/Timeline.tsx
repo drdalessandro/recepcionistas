@@ -106,13 +106,34 @@ export function Timeline({
     );
   }
 
-  // Líneas de grilla cada 30' (en %) — la de la hora en punto un toque más notoria.
-  const lineas = `repeating-linear-gradient(to right, var(--mantine-color-default-border) 0 1px, transparent 1px calc(100% / ${cols.length}))`;
+  // Grilla vertical en dos pesos. Las horas en punto son el eje que se lee y sobre
+  // el que se edita ("¿qué hay libre a las 14:00?"), así que van gruesas; las medias
+  // horas quedan de apoyo. Se dibujan desde `cols` y no con un patrón repetido para
+  // que caigan en la hora exacta aunque el centro abra y cierre a la media.
+  const BORDE = 'var(--mantine-color-default-border)';
+  const BORDE_TENUE = `color-mix(in srgb, ${BORDE} 45%, transparent)`;
+  const horas = cols.filter((m) => m % 60 === 0);
+  const lineasHora = horas.length
+    ? `linear-gradient(to right, ${horas
+        .map(
+          (m) =>
+            `transparent ${pct(m)}, ${BORDE} ${pct(m)}, ${BORDE} calc(${pct(m)} + 2px), transparent calc(${pct(m)} + 2px)`,
+        )
+        .join(', ')})`
+    : 'none';
+  const lineasMedia = `repeating-linear-gradient(to right, ${BORDE_TENUE} 0 1px, transparent 1px calc(100% / ${cols.length}))`;
+  // El orden importa: la capa de horas se pinta encima de la de medias.
+  const lineas = `${lineasHora}, ${lineasMedia}`;
   const ahoraVisible = data.ahoraMin >= data.aperturaMin && data.ahoraMin <= data.cierreMin;
 
   return (
     <Box style={{ display: 'flex', flexDirection: 'column', height: ALTO_GRILLA, minHeight: 380 }}>
-      <style>{`.bw-slot:hover{background:var(--mantine-color-bio-light);}`}</style>
+      <style>{`
+        .bw-slot:hover{background:var(--mantine-color-bio-light);}
+        /* Sin rayas horizontales, la fila se sigue con el mouse: al pasar por
+           cualquier punto se tiñe entera y se ve de qué sala es ese hueco. */
+        .bw-fila:hover .bw-track{background-color:var(--mantine-color-default-hover);}
+      `}</style>
 
       {/* Encabezado de horas */}
       <Group gap={0} wrap="nowrap" style={{ flexShrink: 0 }}>
@@ -130,17 +151,20 @@ export function Timeline({
 
       {/* Filas de salas: se reparten el alto disponible */}
       {data.salas.map((sala) => (
-        <Group
-          key={sala.codigo}
-          gap={0}
-          wrap="nowrap"
-          align="stretch"
-          style={{ flex: 1, minHeight: 0, borderTop: '1px solid var(--mantine-color-default-border)' }}
-        >
+        <Group key={sala.codigo} className="bw-fila" gap={0} wrap="nowrap" align="stretch" style={{ flex: 1, minHeight: 0 }}>
+          {/* El separador de filas vive SOLO en la columna de nombres: sobre la
+              grilla taparía las verticales, que son las que hay que seguir. */}
           <Box
             w={NAME_W}
             px="xs"
-            style={{ flexShrink: 0, display: 'flex', flexDirection: 'column', justifyContent: 'center', minHeight: 0 }}
+            style={{
+              flexShrink: 0,
+              display: 'flex',
+              flexDirection: 'column',
+              justifyContent: 'center',
+              minHeight: 0,
+              borderTop: `1px solid ${BORDE}`,
+            }}
           >
             <Text fz={12} fw={500} lineClamp={2} lh={1.15}>
               {sala.nombre}
@@ -152,7 +176,7 @@ export function Timeline({
             )}
           </Box>
 
-          <Box style={{ position: 'relative', flex: 1, minHeight: 0, backgroundImage: lineas }}>
+          <Box className="bw-track" style={{ position: 'relative', flex: 1, minHeight: 0, backgroundImage: lineas }}>
             {/* Franjas clickeables para reservar: libres, o con aforo restante (multiplaza) */}
             {onReservar &&
               cols.map((m, i) => {
@@ -229,7 +253,9 @@ export function Timeline({
                   left: pct(data.ahoraMin),
                   top: 0,
                   bottom: 0,
-                  width: 2,
+                  // Un punto más gruesa que las horas: sigue siendo la vertical
+                  // más fuerte de la grilla ahora que las horas pesan 2px.
+                  width: 3,
                   background: 'var(--mantine-color-blue-6)',
                 }}
               />
