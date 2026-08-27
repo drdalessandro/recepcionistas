@@ -19,6 +19,7 @@
     "seed:prueba-recordatorios": "tsx src/seed/prueba-recordatorios.ts",
     "seed:prueba-espera": "tsx src/seed/prueba-espera.ts",
     "datos-demo": "tsx src/seed/datos-demo.ts",
+    "demo:ocupacion": "tsx src/seed/demo-ocupacion.ts",
     "migrar:medios": "tsx src/seed/migrar-medio-pago.ts",
     "migrar:dni-renaper": "tsx src/seed/migrar-dni-renaper.ts",
     "limpiar": "tsx src/seed/limpiar.ts",
