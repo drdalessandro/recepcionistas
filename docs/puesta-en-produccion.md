@@ -267,6 +267,28 @@ Entran **3 candidatos**, por orden de llegada (`Appointment.created`).
 El botón pasa a decir *"Ofrecido"*, pero eso es estado en memoria: se pierde al
 recargar. **El registro real es la `Communication`.**
 
+## 4b. Prueba end-to-end de la agenda semanal (R-21)
+
+```bash
+npm run seed:prueba-agenda-semanal -- --dry-run  # el plan, sin red
+npm run seed:prueba-agenda-semanal               # la prueba completa
+npm run seed:prueba-agenda-semanal -- --limpiar  # desarmar al terminar (¡correrlo!)
+```
+
+A diferencia de la de la lista de espera, esta prueba **se verifica sola**: arma
+un paciente demo (modo avión, sin WhatsApp reales), le registra la aptitud R-20
+por `bw-ingreso-presencial`, le asigna una membresía FOCUS Standard sin cobro,
+guarda la preferencia semanal (probando antes que una membresía **ajena** se
+rechaza), ejecuta `bw-agenda-semanal` a mano y chequea contra la misma lógica
+pura: fechas asignadas, campanita, saldo, idempotencia de la segunda corrida y
+el bloqueo R-21 al intentar una sesión de más en la semana. Al final imprime la
+checklist de lo que conviene mirar con los ojos (Agenda, Preferencia semanal en
+Atender, Avisos si hubo "sin lugar", el portal si se invita al paciente).
+
+⚠️ Los turnos que crea ocupan salas de verdad (Appointment + Slot): el
+`--limpiar` al terminar no es opcional. El tag demo borra al paciente a las
+48 h, pero los turnos creados por el cron no llevan tag — los borra el script.
+
 ## 5. Datos de prueba
 
 ```bash
