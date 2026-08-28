@@ -390,8 +390,8 @@ async function main(): Promise<void> {
       check(!extra.creado && Boolean(r21), `Tope semanal: 3.ª sesión en la semana del ${semanaLlena} → bloqueada`, r21?.mensaje);
     }
   } else {
-    console.log('  · R-21: las fechas quedaron repartidas en dos semanas (1 y 1), así que el tope');
-    console.log('    no se ejercita hoy — el caso está cubierto por los tests (semana-membresia).');
+    console.log(`  · R-21: ninguna semana llegó al tope (${despues.fechas.size} sesión(es) asignada(s), repartidas ${[...porSemana.values()].join(' y ') || '0'}),`);
+    console.log('    así que el tope no se ejercita hoy — el caso está cubierto por los tests (semana-membresia).');
   }
 
   // Resumen y pasos manuales.
