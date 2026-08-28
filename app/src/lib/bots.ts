@@ -126,6 +126,34 @@ export async function reservarCombo(input: ComboInput): Promise<ResultadoCombo> 
   return (await medplum.executeBot(id, input)) as ResultadoCombo;
 }
 
+export interface PreferenciaSemanalInput {
+  coverageId: string;
+  /** Días de la semana (0=domingo … 6=sábado). */
+  dias?: number[];
+  /** Hora "HH:mm" (Argentina), la misma para todos los días. */
+  hora?: string;
+  /** Asignación automática semanal encendida/apagada. */
+  activa: boolean;
+}
+
+export interface ResultadoPreferenciaSemanal {
+  ok: boolean;
+  mensaje?: string;
+  /** Aviso no bloqueante (p. ej. menos días que la frecuencia del plan). */
+  aviso?: string;
+  preferencia?: { dias: number[]; hora: string };
+  activa?: boolean;
+}
+
+/**
+ * Guarda la preferencia semanal de la membresía (R-21) en su Coverage y
+ * prende/apaga la asignación automática (`bw-agenda-semanal`).
+ */
+export async function guardarPreferenciaSemanal(input: PreferenciaSemanalInput): Promise<ResultadoPreferenciaSemanal> {
+  const id = await botIdPorNombre('bw-preferencia-semanal');
+  return (await medplum.executeBot(id, input)) as ResultadoPreferenciaSemanal;
+}
+
 /**
  * Envía un WhatsApp (y registra Communication).
  *

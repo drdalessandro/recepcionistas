@@ -51,7 +51,7 @@ git pull && npm run build:app     # nginx no se toca: sirve el dist nuevo al ins
 |---|---|---|
 | **Agenda** | `AgendaDelDia` | Línea de tiempo del día por sala (7/14 franjas), franjas libres clickeables para reservar, próximos turnos y **quiénes están esperando lugar** (lista de espera, por orden de llegada). |
 | **Planes y sesiones** | `PlanesSesiones` | Dashboard de saldo de planes (ver abajo). |
-| **Atender paciente** | `Atender` | Busca al paciente y abre su ficha: banner de seguridad, **badge de consentimiento firmado en el portal** (firmado con fecha / sin firmar / no verificable — señal binaria vía `bw-estado-consentimiento`, nunca el documento), planes (asignar / **pre-agendar**), reserva de turno/combo y cobro. Al elegir una Terapia Biológica, el switch de R-03 viene **precargado** si el paciente ya firmó en el portal, y el turno guarda si el consentimiento fue verificado o declarado por Recepción. |
+| **Atender paciente** | `Atender` | Busca al paciente y abre su ficha: banner de seguridad, **badge de consentimiento firmado en el portal** (firmado con fecha / sin firmar / no verificable — señal binaria vía `bw-estado-consentimiento`, nunca el documento), planes (asignar / **preferencia semanal**, R-21), reserva de turno/combo y cobro. Al elegir una Terapia Biológica, el switch de R-03 viene **precargado** si el paciente ya firmó en el portal, y el turno guarda si el consentimiento fue verificado o declarado por Recepción. |
 | **Avisos** | `Avisos` | Avisos automáticos del sistema (`Task code=aviso-recepcion`): **WhatsApp de número desconocido** (con botones *Responder por WhatsApp* y *Crear ficha* prellenada), pago duplicado a devolver, pago acreditado sin registro, seña de reserva vencida, pagos rechazados, diferencia de arqueo y **turno liberado con gente esperándolo** (candidatos en orden, con botón *Ofrecer por WhatsApp* y *Reservarle*). Badge rojo + campanita. **Hasta 2026-08-12 estas alertas se creaban solo con `code.text`: como las búsquedas FHIR por token no miran el texto, ninguna pantalla las listaba y el aviso moría en la base.** |
 | **Reportes** | `Reportes` | Indicadores de gestión + **"Nos piden y no tenemos"** (ver abajo). |
 | **Caja** | `Caja` | Caja chica: registrar gastos (lista cerrada de categorías + tope con autorización), reposiciones y ajustes, y **cerrar caja** (arqueo). El saldo esperado se DERIVA (contado del último arqueo + Invoices en efectivo − egresos): los ingresos nunca se re-registran. Diferencia de arqueo ≠ 0 → alerta urgente a Administración (Task). Movimientos = `Basic` (code `CodeSystem/caja`), arqueos = `PaymentReconciliation`; parámetros confirmados por Andrés (2026-08-10) en `src/config/caja.ts`. Contrato para Administración: [`handoff-caja-administracion.md`](handoff-caja-administracion.md). |
@@ -75,19 +75,23 @@ pierden: membresía al cerrar el mes, paquete al vencer).
   cuenta turnos futuros por cobertura vía la extensión `cobertura-usada` y reusa
   `saldoPlan` de `src/lib/planes.ts`).
 
-### Pre-agenda de membresías
+### Preferencia semanal de membresías (R-21)
 
-En `Atender → Planes`, cada membresía con saldo muestra **"Pre-agendar mes"**:
-propone y reserva de una vez las sesiones del mes según la frecuencia (2x/3x por
-semana).
+En `Atender → Planes`, cada membresía muestra **"Preferencia semanal"**
+(reemplaza a "Pre-agendar mes", 2026-09-01: las sesiones se gestionan por semana
+calendario, no reservando el mes entero de una).
 
-- Elegís días de la semana (sugeridos según la frecuencia), hora y fecha de inicio;
-  previsualiza la serie antes de reservar.
-- Reserva una por una con el bot de combo (asigna sala, valida R-01/R-02/R-07 y
-  consume sesión de la membresía), mostrando ✓/✗ por turno; manda **un** WhatsApp
-  de resumen (no uno por sesión).
-- Cálculo de fechas puro y testeado: `src/lib/serie-turnos.ts`
-  (`generarSerieFechas`, `diasSugeridos`). UI: `app/src/components/PreAgendaModal.tsx`.
+- Elegís días de la semana con nombre (sugeridos según la frecuencia 2x/3x) y
+  una hora, y prendés la **asignación automática**: no reserva nada en el acto —
+  guarda la preferencia en el `Coverage` (`bw-preferencia-semanal`) y el cron
+  `bw-agenda-semanal` reserva cada sesión apenas se abre la ventana R-13 del
+  socio (ver [`bots.md`](bots.md) § Agenda semanal).
+- Apagar el interruptor **pausa** la asignación sin perder los días/hora
+  guardados.
+- El tope semanal (frecuencia del plan, sin recupero) lo aplica el backend solo
+  al portal y al cron: el mostrador puede seguir reservando libre (override
+  humano, mismo contrato que R-13).
+- UI: `app/src/components/AgendaSemanalModal.tsx`.
 
 ### "Nos piden y no tenemos" (demanda no cubierta)
 

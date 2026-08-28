@@ -52,6 +52,10 @@ const SPECS: SpecExtension[] = [
   { url: EXT.sesionesMes, nombre: 'sesiones-mes', contexto: ['Coverage', 'Contract'], tipoValor: 'integer', descripcion: 'Sesiones por mes incluidas.' },
   { url: EXT.sesionesUsadas, nombre: 'sesiones-usadas', contexto: ['Coverage', 'Contract'], tipoValor: 'integer', descripcion: 'Sesiones consumidas en el ciclo.' },
   { url: EXT.precioBloqueadoFm, nombre: 'precio-bloqueado-fm', contexto: ['Coverage', 'Contract'], tipoValor: 'decimal', descripcion: 'Precio bloqueado en USD para FM.' },
+  // Agenda semanal de membresías (R-21)
+  { url: EXT.preferenciaDias, nombre: 'preferencia-dias', contexto: ['Coverage'], tipoValor: 'string', descripcion: 'Días preferidos de la semana, CSV "1,4" (0=domingo…6=sábado), para la asignación semanal (R-21).' },
+  { url: EXT.preferenciaHora, nombre: 'preferencia-hora', contexto: ['Coverage'], tipoValor: 'string', descripcion: 'Hora preferida "HH:mm" (Argentina) de las sesiones semanales del plan (R-21).' },
+  { url: EXT.agendaSemanalActiva, nombre: 'agenda-semanal-activa', contexto: ['Coverage'], tipoValor: 'boolean', descripcion: 'La asignación semanal automática (bw-agenda-semanal) está activa para este plan (R-21).' },
   // Invoice / ChargeItem
   { url: EXT.montoSplitBw, nombre: 'monto-split-bw', contexto: ['Invoice', 'ChargeItem'], tipoValor: 'Money', descripcion: 'Monto que corresponde a BW.' },
   { url: EXT.montoSplitProfesional, nombre: 'monto-split-profesional', contexto: ['Invoice', 'ChargeItem'], tipoValor: 'Money', descripcion: 'Monto que corresponde al profesional / prescriptores.' },

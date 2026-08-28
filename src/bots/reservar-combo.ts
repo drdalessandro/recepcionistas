@@ -29,8 +29,11 @@ import {
   type ReservaRecurso,
   type ResultadoValidacion,
 } from '../lib/reglas-turno.js';
-import { aptitudDePaciente, cargarReservasDelDia, consumirSesionDePlan, enviarWhatsApp, extraerCodigos, linkSena, resolverSolicitudTurno, scheduleIdDeRecurso, tieneBloqueoPago, type ConsumoPlan } from './_shared.js';
+import { aptitudDePaciente, cargarReservasDelDia, consumirSesionDePlan, enviarWhatsApp, extraerCodigos, linkSena, resolverSolicitudTurno, scheduleIdDeRecurso, sesionesDelPlanEnSemana, tieneBloqueoPago, type ConsumoPlan } from './_shared.js';
 import { vencimientoSena } from '../lib/sena.js';
+import { validarTopeSemanal } from '../lib/semana-membresia.js';
+import { estadoDeCoverage, planCodigoDeCoverage } from '../fhir/coverage.js';
+import { getMembresia } from '../config/membresias.js';
 
 export interface EntradaCombo {
   pacienteRef: string;
@@ -192,6 +195,20 @@ export async function handler(medplum: MedplumClient, event: BotEvent<EntradaCom
   partes.push(validarContraindicaciones([...new Set(categorias)], contraindicaciones, { autorizacionMedica: e.autorizacionMedica ?? false }));
   if (e.perfil) {
     partes.push(validarVentanaReserva(e.perfil, ahora, inicio));
+  }
+  // R-21 · tope semanal de la membresía. Solo con `perfil` (portal y asignación
+  // automática); el mostrador no lo manda y queda libre — mismo contrato que R-13.
+  if (e.perfil && e.coverageId) {
+    try {
+      const cov = await medplum.readResource('Coverage', e.coverageId);
+      const planCodigo = planCodigoDeCoverage(cov);
+      if (planCodigo && estadoDeCoverage(cov).tipo === 'membresia') {
+        const enSemana = await sesionesDelPlanEnSemana(medplum, e.pacienteRef, e.coverageId, inicio);
+        partes.push(validarTopeSemanal(enSemana, getMembresia(planCodigo).frecuenciaSemanal));
+      }
+    } catch {
+      // Coverage ilegible o plan desconocido: no bloquea acá (R-10 valida el saldo después).
+    }
   }
   partes.push({ ok: planRes.ok, bloqueos: planRes.bloqueos, advertencias: [] });
 

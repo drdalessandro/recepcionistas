@@ -89,6 +89,13 @@ export const EXT = {
   sesionesTotal: `${BASE}/StructureDefinition/sesiones-total`,
   /** Ciclo facturado (YYYY-MM) de la membresía. */
   cicloMes: `${BASE}/StructureDefinition/ciclo-mes`,
+  // Coverage — agenda semanal de membresías (R-21)
+  /** Días preferidos de la semana, CSV "1,4" (0=domingo … 6=sábado). */
+  preferenciaDias: `${BASE}/StructureDefinition/preferencia-dias`,
+  /** Hora preferida "HH:mm" (hora de Argentina) para las sesiones de la semana. */
+  preferenciaHora: `${BASE}/StructureDefinition/preferencia-hora`,
+  /** La asignación semanal automática (bw-agenda-semanal) está activa para este plan. */
+  agendaSemanalActiva: `${BASE}/StructureDefinition/agenda-semanal-activa`,
   // Invoice / ChargeItem
   montoSplitBw: `${BASE}/StructureDefinition/monto-split-bw`,
   montoSplitProfesional: `${BASE}/StructureDefinition/monto-split-profesional`,

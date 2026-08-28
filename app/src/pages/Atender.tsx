@@ -24,6 +24,7 @@ import {
   IconShieldX,
   IconCash,
   IconCalendarPlus,
+  IconCalendarTime,
   IconInfoCircle,
   IconLicense,
   IconUserPlus,
@@ -55,7 +56,7 @@ import { cargarPlanesActivos, planUsable, type PlanPaciente } from '../lib/plane
 import { MEDIOS_SELECT } from '../lib/medios';
 import { SYSTEM } from '@bw/fhir/identifiers';
 import { busquedasPara } from '@bw/lib/busqueda-paciente';
-import { PreAgendaModal } from '../components/PreAgendaModal';
+import { AgendaSemanalModal } from '../components/AgendaSemanalModal';
 import { InvitarPortal } from '../components/InvitarPortal';
 import { KioscoIngreso } from '../components/KioscoIngreso';
 import { NuevoPacienteModal } from '../components/NuevoPacienteModal';
@@ -368,7 +369,7 @@ function PanelPlanes({
   const [error, setError] = useState<string | null>(null);
   const [ok, setOk] = useState<string | null>(null);
   const [pendienteMP, setPendienteMP] = useState<{ monto: number; url?: string; nota?: string } | null>(null);
-  const [preAgenda, setPreAgenda] = useState<PlanPaciente | null>(null);
+  const [agendaSemanal, setAgendaSemanal] = useState<PlanPaciente | null>(null);
 
   const opciones =
     tipo === 'membresia'
@@ -448,14 +449,14 @@ function PanelPlanes({
                     </Badge>
                     {p.saldo.vencido && <Badge color="red">vencido</Badge>}
                     {p.saldo.agotado && !p.saldo.vencido && <Badge color="orange">agotado (R-10)</Badge>}
-                    {p.estado.tipo === 'membresia' && p.saldo.disponible && p.saldo.restantes > 0 && (
+                    {p.estado.tipo === 'membresia' && (
                       <Button
                         size="compact-sm"
                         variant="light"
-                        leftSection={<IconCalendarPlus size={14} />}
-                        onClick={() => setPreAgenda(p)}
+                        leftSection={<IconCalendarTime size={14} />}
+                        onClick={() => setAgendaSemanal(p)}
                       >
-                        Pre-agendar mes
+                        Preferencia semanal
                       </Button>
                     )}
                   </>
@@ -562,11 +563,10 @@ function PanelPlanes({
         </Alert>
       )}
 
-      <PreAgendaModal
-        plan={preAgenda}
-        pacienteRef={`Patient/${paciente.id}`}
-        onClose={() => setPreAgenda(null)}
-        onAgendado={() => void onCambio()}
+      <AgendaSemanalModal
+        plan={agendaSemanal}
+        onClose={() => setAgendaSemanal(null)}
+        onGuardado={() => void onCambio()}
       />
     </Card>
   );

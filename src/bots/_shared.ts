@@ -44,6 +44,7 @@ import type { IntensidadMembresia, Servicio } from '../domain/types.js';
 import { resolverTC } from '../config/tipo-cambio.js';
 import { CATEGORIA_COMERCIAL, getServicio, nombreServicioRecepcion } from '../config/catalogo.js';
 import { getMembresia } from '../config/membresias.js';
+import { claveSemana, perteneceASemana } from '../lib/semana-membresia.js';
 import { getPaquete } from '../config/paquetes.js';
 import { calcularSenaARS, type ItemCobro, type LineaCobro, type TipoItemCobro } from '../lib/pricing.js';
 import { lineaComercialDeItem } from '../lib/cobros.js';
@@ -2247,4 +2248,80 @@ export async function notificarPortal(
     console.error('notificarPortal falló (no interrumpe):', err instanceof Error ? err.message : err);
     return undefined;
   }
+}
+
+/* ------------------------------------------------------------------ */
+/* Agenda semanal de membresías (R-21)                                 */
+/* ------------------------------------------------------------------ */
+
+const fmtCivilAR = new Intl.DateTimeFormat('en-CA', {
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
+  timeZone: 'America/Argentina/Buenos_Aires',
+});
+
+/** Día civil "YYYY-MM-DD" en hora de Argentina (los bots corren en UTC). */
+export function fechaCivilAR(d: Date): string {
+  return fmtCivilAR.format(d);
+}
+
+/** Estados de Appointment que NO cuentan como sesión de la semana. */
+const ESTADOS_SIN_SESION = new Set(['cancelled', 'entered-in-error', 'noshow']);
+
+/**
+ * Fechas civiles (AR) que ya tienen una sesión de ESTE plan alrededor de
+ * `alrededorDe` (una semana antes y dos después: cubre la semana actual y la
+ * próxima con margen). Un combo de N componentes cuenta UNA sola vez: se agrupa
+ * por el identifier de combo (los componentes comparten fecha igual, pero el
+ * set también sirve para contar sin duplicar).
+ */
+export async function fechasConSesionDelPlan(
+  medplum: MedplumClient,
+  pacienteRef: string,
+  coverageId: string,
+  alrededorDe: Date,
+): Promise<Set<string>> {
+  const desde = new Date(alrededorDe.getTime() - 8 * 24 * 60 * 60 * 1000);
+  const hasta = new Date(alrededorDe.getTime() + 15 * 24 * 60 * 60 * 1000);
+  const turnos = await medplum.searchResources('Appointment', {
+    patient: pacienteRef,
+    date: `ge${desde.toISOString()}`,
+    'date:missing': 'false',
+    _count: 200,
+  });
+  const fechas = new Set<string>();
+  for (const t of turnos) {
+    if (!t.start || ESTADOS_SIN_SESION.has(t.status ?? '')) {
+      continue;
+    }
+    if (new Date(t.start).getTime() > hasta.getTime()) {
+      continue;
+    }
+    const cobertura = t.extension?.find((x) => x.url === EXT.coberturaUsada)?.valueString;
+    if (cobertura !== `Coverage/${coverageId}`) {
+      continue;
+    }
+    fechas.add(fechaCivilAR(new Date(t.start)));
+  }
+  return fechas;
+}
+
+/**
+ * R-21 · Cuántas sesiones de este plan tiene la semana calendario (AR) a la que
+ * pertenece `inicioTurno`. La usa `bw-reservar-combo` cuando recibe `perfil`
+ * (portal / asignación automática); el mostrador no manda `perfil` y queda
+ * libre, igual que con la ventana R-13.
+ */
+export async function sesionesDelPlanEnSemana(
+  medplum: MedplumClient,
+  pacienteRef: string,
+  coverageId: string,
+  inicioTurno: Date,
+): Promise<number> {
+  const fechas = await fechasConSesionDelPlan(medplum, pacienteRef, coverageId, inicioTurno);
+  const civil = fechaCivilAR(inicioTurno);
+  const [y, m, d] = civil.split('-').map(Number);
+  const lunesISO = claveSemana(new Date(y!, m! - 1, d!));
+  return [...fechas].filter((f) => perteneceASemana(f, lunesISO)).length;
 }

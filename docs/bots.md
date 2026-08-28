@@ -53,6 +53,8 @@ deployan al runtime **`awslambda`** de Medplum (configurable con la env
 | `bw-cancelar-turno` | **Portal**: el paciente cancela SU turno (verifica que lo sea). Aplica R-14 con la MISMA lógica que el mostrador (`cancelarTurnoYLiberar`): devuelve la sesión si avisó a tiempo, anula el saldo pendiente, avisa a la lista de espera y libera la sala. La urgencia médica declarada por el paciente devuelve la sesión **y** genera un aviso a Recepción. Ver [`handoff-portal-turnos.md`](handoff-portal-turnos.md). | `executeBot` desde el portal. |
 | `bw-mover-turno` | **Portal**: mueve SU turno en una sola operación (toma el lugar nuevo → mueve → suelta el viejo, en ese orden: nunca queda sin turno). **Revalida la ventana R-13** con la misma disponibilidad que pinta la grilla; tope de 3 movimientos (`MOVIMIENTOS.max`). Devuelve `motivo:'horario-ocupado'` + alternativas si el horario se ocupó. | `executeBot` desde el portal. |
 | `bw-borrador-respuesta` | **Solo lectura**: redacta el borrador de la próxima respuesta de un hilo de Mensajes, con el contexto del paciente que Recepción ya ve (turno, plan, saldo, bloqueo) y **sin nada clínico**. Lo envía una persona, nunca el bot. Si el tema necesita a un humano, lo dice en vez de sugerir. Requiere el secret `ANTHROPIC_API_KEY`. | `executeBot` desde el botón **Sugerir** de Mensajes. |
+| `bw-preferencia-semanal` | Guarda en el `Coverage` la preferencia semanal de la membresía (días con nombre + hora, R-21) y prende/apaga la asignación automática. Valida días abiertos y avisa si la cantidad de días no coincide con la frecuencia del plan. Apagar **pausa** (no borra) la preferencia. Pasa por bot porque el `Coverage` es de solo lectura para el mostrador. | `executeBot` (Atender → Planes → **Preferencia semanal**). |
+| `bw-agenda-semanal` | **Cron R-21:** recorre las membresías activas con la agenda semanal prendida y reserva cada sesión de la semana **apenas se abre su ventana R-13** (reusa `bw-reservar-combo` con `perfil`, que valida todo — la escalera FM > Intensivo > Standard da la prioridad sola). Hora ocupada → alternativa más cercana del mismo día + campanita al socio; día lleno → aviso en **Avisos** + campanita; bloqueo estructural (R-02/R-10/R-11/R-20) → aviso y no insiste. Sin WhatsApp por sesión (los recordatorios 48 h / 2 h salen igual). Idempotente: correrlo cada hora es seguro. | `cronString` del Bot (cada hora). |
 
 ## Lista de espera: qué pasa cuando se libera un lugar
 
@@ -245,6 +247,27 @@ Configurar el `cronString` del Bot **una vez** (p. ej. `*/30 * * * *` = cada 30
 min). Cuanto más seguido corra, más cerca de las 48 h / 2 h exactas sale el aviso;
 la idempotencia evita duplicados. Necesita los mismos secretos de Twilio que
 `bw-enviar-whatsapp`.
+
+## Agenda semanal de membresías (R-21)
+
+`bw-agenda-semanal` corre **cada hora** (`5 * * * *`, corrido del minuto 0 para
+no coincidir con `bw-limpiar-demo`) y materializa la preferencia semanal de cada
+membresía: la decisión de **qué fechas tocan ahora** es pura y está testeada
+(`candidatosSemana` en `src/lib/semana-membresia.ts`); la reserva en sí la hace
+`bw-reservar-combo` con `perfil` y `coverageId`, o sea con TODAS las
+validaciones (R-01/R-02/R-07/R-10/R-13/R-20/R-21) y consumiendo sesión del plan.
+
+- **La prioridad no se programa: es la ventana R-13.** El cron intenta todas las
+  membresías cada hora, pero cada sesión solo entra cuando su ventana se abre —
+  el FM (7 días) llega a la semana antes que el Intensivo (96 h) y este antes
+  que el Standard (72 h). No hay cola ni orden que mantener.
+- **Idempotente por diseño:** lo ya asignado se saltea (`fechasConSesionDelPlan`
+  agrupa combos por su identifier: N componentes = 1 sesión), las campanitas y
+  los avisos dedupean por identifier/clave, y lo que no entró en la ventana
+  queda para la corrida siguiente.
+- **Tope semanal (R-21) también en el gate:** `bw-reservar-combo` bloquea la
+  sesión que excede la frecuencia del plan en esa semana calendario — solo si
+  viene `perfil` (portal/cron); el mostrador queda libre, igual que con R-13.
 
 ## Alta e invitación de pacientes (onboarding)
 

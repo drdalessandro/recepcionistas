@@ -107,6 +107,26 @@ export const MEMBRESIA = {
   cobroDiaHasta: 5,
 } as const;
 
+/**
+ * Gestión semanal de membresías (R-21, decisión 2026-09-01).
+ *
+ * Las sesiones del plan se usan dentro de la SEMANA CALENDARIO (lunes a domingo,
+ * hora de Argentina): el tope semanal es la frecuencia del plan (2x Standard /
+ * 3x Intensivo) y **no hay recupero** — la sesión que una semana no se usó no se
+ * amontona en otra. La asignación corre sola (bot `bw-agenda-semanal`, cron
+ * horario): reserva la preferencia del socio apenas su ventana R-13 se abre, así
+ * la prioridad FM 7 días → Intensivo 96 h → Standard 72 h → público 48 h se da
+ * por sí misma. Igual que R-13, rige para el portal y el cron; el mostrador
+ * puede sobrepasarla a criterio humano (los bots la validan solo si reciben
+ * `perfil`).
+ */
+export const SEMANA_MEMBRESIA = {
+  /** Recupero de sesiones perdidas en semanas anteriores (0 = tope duro). */
+  recuperoSesiones: 0,
+  /** Cuántos horarios alternativos del MISMO día prueba la asignación automática. */
+  maxAlternativasDia: 8,
+} as const;
+
 /** Cascada de pricing para IV Therapy + Terapias Biológicas (R-08). */
 export const CASCADA_TB = {
   /** Costo fiscal: 25% del precio. */

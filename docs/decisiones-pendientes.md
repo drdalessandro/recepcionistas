@@ -84,6 +84,15 @@ El bloque está implementado, testeado y deployado: dashboard "Planes y sesiones
 (24h/1h) + saldo en riesgo por WhatsApp y email (`bw-recordatorios`, cron horario).
 Ver [`docs/app-recepcion.md`](app-recepcion.md) y [`docs/bots.md`](bots.md).
 
+> **2026-09-01 — la pre-agenda mensual fue reemplazada por la agenda semanal
+> (R-21):** las sesiones de la membresía se gestionan por semana calendario
+> (preferencia de días + hora en el `Coverage`, asignación automática con
+> `bw-agenda-semanal` apenas se abre la ventana R-13 de cada socio, tope duro =
+> frecuencia del plan sin recupero). Decidido con Andrés: reasignación
+> automática, tope duro, alternativa cercana del mismo día si la hora está
+> ocupada, y mostrador libre (el tope rige solo portal/cron). Ver
+> [`reglas-negocio.md`](reglas-negocio.md) R-21 y [`bots.md`](bots.md).
+
 > **Para que los avisos se envíen** (hoy quedan registrados como `Communication` en
 > estado `preparation` hasta que estén las cuentas) falta lo de abajo + configurar
 > el `cronString` del Bot `bw-recordatorios` (valor y procedimiento en

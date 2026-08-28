@@ -87,8 +87,10 @@ tarjeta.
 
 Ver [`docs/decisiones-pendientes.md`](docs/decisiones-pendientes.md). Horario y
 salas ya están definidos (agenda operativa) y el **bloque de gestión de sesiones
-está cerrado**: dashboard de saldo (con filtro "en riesgo"), pre-agenda de
-membresías y recordatorios de turno **48 h / 2 h por WhatsApp**
+está cerrado**: dashboard de saldo (con filtro "en riesgo"), agenda semanal de
+membresías (R-21: preferencia de días + hora y asignación automática
+`bw-agenda-semanal`; reemplazó a la pre-agenda mensual el 2026-09-01) y
+recordatorios de turno **48 h / 2 h por WhatsApp**
 (`bw-recordatorios`) implementados, testeados y deployados
 (ver [`docs/app-recepcion.md`](docs/app-recepcion.md) y [`docs/bots.md`](docs/bots.md)).
 El saldo en riesgo **se ve en el dashboard; no se avisa por mensaje**: el bot no
