@@ -165,14 +165,14 @@ describe('Seed — AccessPolicy Paciente — Portal (los dos usos de Coverage)',
     expect(escribible.criteria).not.toContain('category=');
   });
 
-  it('El paciente solo puede ejecutar los cuatro bots del portal, y ninguno más', () => {
+  it('El paciente solo puede ejecutar los cinco bots del portal, y ninguno más', () => {
     const portal = seed.accessPolicies.find((p) => p.name === 'Paciente — Portal')!;
     const bot = (portal.resource ?? []).find((r) => r.resourceType === 'Bot')!;
     expect(bot.readonly).toBe(true);
 
     const permitidos = (bot.criteria ?? '').replace('Bot?name=', '').split(',');
     expect(permitidos.sort()).toEqual(
-      ['bw-cancelar-turno', 'bw-disponibilidad', 'bw-mover-turno', 'bw-solicitar-turno'].sort(),
+      ['bw-cancelar-turno', 'bw-disponibilidad', 'bw-mover-turno', 'bw-preferencia-semanal', 'bw-solicitar-turno'].sort(),
     );
 
     // Lo que importa no es el string sino QUÉ queda afuera: un bot de más acá es

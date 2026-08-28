@@ -16,6 +16,12 @@ import { parsePreferencia, serializarDias, type PreferenciaSemanal } from '../li
 
 export interface EntradaPreferenciaSemanal {
   coverageId: string;
+  /**
+   * Desde el PORTAL viene siempre: el bot verifica que la membresía sea de este
+   * paciente antes de escribir (misma defensa que `bw-cancelar-turno`). El
+   * mostrador no lo manda: Recepción edita cualquier plan.
+   */
+  pacienteRef?: string;
   /** Días de la semana elegidos (0=domingo … 6=sábado). */
   dias?: number[];
   /** Hora "HH:mm" (Argentina), la misma para todos los días. */
@@ -41,7 +47,12 @@ export async function handler(
 ): Promise<ResultadoPreferenciaSemanal> {
   const e = event.input;
   try {
-    const coverage = await medplum.readResource('Coverage', e.coverageId);
+    const coverage = await medplum.readResource('Coverage', e.coverageId).catch(() => undefined);
+    // Mismo mensaje para "no existe" y "no es tuya": responder distinto le
+    // confirmaría a cualquiera si un id de Coverage existe o no.
+    if (!coverage || (e.pacienteRef && coverage.beneficiary?.reference !== e.pacienteRef)) {
+      return { ok: false, mensaje: 'No encontramos esa membresía en tu cuenta.' };
+    }
     if (!esPlanBW(coverage) || estadoDeCoverage(coverage).tipo !== 'membresia') {
       return { ok: false, mensaje: 'La agenda semanal es de las membresías (este plan no lo es).' };
     }

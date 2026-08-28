@@ -245,11 +245,13 @@ export const POLICY_PACIENTE_PORTAL: AccessPolicy = {
     //  - bw-cancelar-turno / bw-mover-turno: autogestión de SUS turnos. Los dos
     //    verifican que el turno sea del paciente antes de tocar nada: esta
     //    policy acota lo que LEE, no lo que le pasa a un bot.
+    //  - bw-preferencia-semanal: SU preferencia semanal (R-21). Con `pacienteRef`
+    //    el bot verifica que la membresía sea del paciente antes de escribir.
     // (Cambio acá => avisar al portal para actualizar su espejo.)
     {
       resourceType: 'Bot',
       readonly: true,
-      criteria: 'Bot?name=bw-solicitar-turno,bw-disponibilidad,bw-cancelar-turno,bw-mover-turno',
+      criteria: 'Bot?name=bw-solicitar-turno,bw-disponibilidad,bw-cancelar-turno,bw-mover-turno,bw-preferencia-semanal',
     },
   ],
 };
