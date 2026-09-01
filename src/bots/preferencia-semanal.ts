@@ -8,8 +8,11 @@
  */
 import type { BotEvent, MedplumClient } from '@medplum/core';
 import type { Coverage } from '@medplum/fhirtypes';
+import { getCombo } from '../config/combos.js';
 import { HORARIO_SEMANAL } from '../config/horario.js';
 import { getMembresia } from '../config/membresias.js';
+import { GRILLA_TURNO } from '../config/reglas.js';
+import { grillaTurnoDeCombo } from '../lib/reglas-turno.js';
 import { EXT } from '../fhir/identifiers.js';
 import { esPlanBW, estadoDeCoverage, planCodigoDeCoverage } from '../fhir/coverage.js';
 import { parsePreferencia, serializarDias, type PreferenciaSemanal } from '../lib/semana-membresia.js';
@@ -72,6 +75,18 @@ export async function handler(
         return {
           ok: false,
           mensaje: `El centro no abre los ${cerrados.map((d) => LABEL_DIA[d]).join(' ni los ')}.`,
+        };
+      }
+      // R-22 · la preferencia es el inicio de un combo: hora en punto.
+      const [hh, mm] = pref.hora.split(':').map(Number);
+      const grilla = planCodigo ? grillaTurnoDeCombo(getCombo(getMembresia(planCodigo).comboBaseCodigo)) : GRILLA_TURNO.defaultMin;
+      if (((hh ?? 0) * 60 + (mm ?? 0)) % grilla !== 0) {
+        return {
+          ok: false,
+          mensaje:
+            grilla === 60
+              ? `Los turnos arrancan a la hora en punto: ${pref.hora} no es un horario válido.`
+              : `Elegí un horario en punto o a la media: ${pref.hora} no es válido.`,
         };
       }
       if (e.activa && frecuencia !== undefined && pref.dias.length !== frecuencia) {

@@ -11,6 +11,7 @@ import {
   validarSaldoMembresia,
   validarContraindicaciones,
   validarConsentimientoTB,
+  validarGrillaTurno,
   validarPrescripcion,
   bannerSeguridad,
   type ReservaRecurso,
@@ -264,5 +265,36 @@ describe('R-03 · Consentimiento informado de Terapias Biológicas (Andrés, 202
       expect(validarConsentimientoTB(s, false).ok).toBe(false);
       expect(validarConsentimientoTB(s, true).ok).toBe(true);
     }
+  });
+});
+
+describe('R-22 · Grilla comercial de inicio (turnos por hora, en punto)', () => {
+  it('HBOT a la hora en punto pasa; a la media bloquea con R-22', () => {
+    const hbot = getServicio('HBOT_MONO');
+    expect(validarGrillaTurno(hbot, h('16:00')).ok).toBe(true);
+    const r = validarGrillaTurno(hbot, h('16:30'));
+    expect(r.ok).toBe(false);
+    expect(r.bloqueos[0]?.regla).toBe('R-22');
+    expect(r.bloqueos[0]?.mensaje).toContain('16:30');
+  });
+
+  it('Recovery Pro es la excepción: en punto o a la media, pero no a los cuartos', () => {
+    const rp = getServicio('RECOVERY_PRO');
+    expect(validarGrillaTurno(rp, h('10:00')).ok).toBe(true);
+    expect(validarGrillaTurno(rp, h('10:30')).ok).toBe(true);
+    expect(validarGrillaTurno(rp, h('10:15')).ok).toBe(false);
+  });
+
+  it('vale para todo el catálogo: ningún servicio fuera de Recovery Pro admite la media', () => {
+    for (const svc of SERVICIOS) {
+      const esperado = svc.categoria === 'RECOVERY_PRO';
+      expect(validarGrillaTurno(svc, h('11:30')).ok, svc.codigo).toBe(esperado);
+      expect(validarGrillaTurno(svc, h('11:00')).ok, svc.codigo).toBe(true);
+    }
+  });
+
+  it('los segundos también cuentan: 16:00:30 no es un inicio válido', () => {
+    const hbot = getServicio('HBOT_MONO');
+    expect(validarGrillaTurno(hbot, new Date('2026-06-22T16:00:30-03:00')).ok).toBe(false);
   });
 });

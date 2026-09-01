@@ -38,6 +38,7 @@ import {
   recomendarHbotPrevio,
   validarBloqueoAdministrativo,
   validarContraindicaciones,
+  validarGrillaTurno,
   validarMinimoGrupal,
   validarAptitudPaciente,
   validarConsentimientoTB,
@@ -121,6 +122,9 @@ export function validarReserva(ctx: ContextoReserva): ResultadoValidacion {
       advertencias: [],
     });
   }
+
+  // R-22 · turnos por hora, en punto (Recovery Pro: en punto o a la media).
+  partes.push(validarGrillaTurno(ctx.servicio, ctx.inicio));
 
   partes.push(validarPrescripcion(ctx.servicio, ctx.prescripcionActiva));
   partes.push(validarConsentimientoTB(ctx.servicio, ctx.consentimientoFirmado));

@@ -1,6 +1,7 @@
 import { Box, Group, Text, Tooltip } from '@mantine/core';
 import type { TimelineData, TurnoTimeline } from '../lib/timeline';
 import { colorEstado, labelEstado } from '../lib/estados';
+import { grillaTurnoMin } from '@bw/config/reglas';
 
 /**
  * Grilla del día ajustada a la pantalla: TODAS las salas y TODO el horario entran
@@ -182,6 +183,9 @@ export function Timeline({
             {/* Franjas clickeables para reservar: libres, o con aforo restante (multiplaza) */}
             {onReservar &&
               cols.map((m, i) => {
+                if (m % grillaTurnoMin(sala.tipo) !== 0) {
+                  return null; // R-22: acá no arranca ningún turno (solo Recovery Pro usa las medias)
+                }
                 const cap = Math.max(1, sala.capacidad);
                 const usadas = ocupacionEn(turnosPorSala.get(sala.codigo) ?? [], m);
                 if (usadas >= cap) {

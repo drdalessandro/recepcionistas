@@ -148,3 +148,29 @@ export const DESCUENTOS = {
   paqueteX10: 0.1,
   paqueteX20: 0.15,
 } as const;
+
+/**
+ * Grilla comercial de inicio de turnos (R-22, decisión del PO 2026-09-01).
+ *
+ * Todos los turnos arrancan a la hora en punto — la visita del cliente ocupa
+ * "su hora" y la recepción piensa en horas, no en medias horas. La única
+ * excepción es Recovery Pro: sus dos gabinetes se desfasan 30 minutos entre sí
+ * porque comparten las tumbonas (R-07), así que arranca en punto o a la media.
+ *
+ * Es la grilla del TURNO (lo que se ofrece y se reserva), no la de los
+ * recursos: por dentro un combo sigue encadenando tramos cada 30 (la tumbona
+ * de un BIO ENERGY entra a la media, `SLOT_GRANULARIDAD_MIN` no cambia).
+ */
+export const GRILLA_TURNO = {
+  /** Inicios válidos para todos los servicios: cada 60 min (en punto). */
+  defaultMin: 60,
+  /** Excepciones por categoría de servicio. */
+  porCategoria: {
+    RECOVERY_PRO: 30,
+  } as Record<string, number>,
+} as const;
+
+/** Grilla de inicio (minutos) que le corresponde a una categoría de servicio (R-22). */
+export function grillaTurnoMin(categoria: string): number {
+  return GRILLA_TURNO.porCategoria[categoria] ?? GRILLA_TURNO.defaultMin;
+}

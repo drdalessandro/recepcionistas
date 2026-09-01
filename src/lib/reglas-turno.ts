@@ -7,11 +7,13 @@
  *  R-02 Contraindicaciones              R-10 Saldo de membresía
  *  R-03 Prescripción médica (IV/TB)     R-13 Ventana de reserva
  *                                       R-14 Cancelación / reagenda
+ *                                       R-22 Grilla comercial (turnos en punto)
  */
-import type { CategoriaServicio, Servicio } from '../domain/types.js';
+import type { CategoriaServicio, Combo, Servicio } from '../domain/types.js';
+import { getServicio } from '../config/catalogo.js';
 import { CONTRAINDICACIONES_POR_CODIGO } from '../config/contraindicaciones.js';
 import { RECURSOS_POR_CODIGO, compartenEquipo } from '../config/recursos.js';
-import { CANCELACION, VENTANA_RESERVA_HORAS, type PerfilReserva } from '../config/reglas.js';
+import { CANCELACION, VENTANA_RESERVA_HORAS, grillaTurnoMin, type PerfilReserva } from '../config/reglas.js';
 
 export type NivelValidacion = 'ok' | 'advertencia' | 'bloqueo';
 
@@ -405,6 +407,53 @@ export function validarVentanaReserva(
     ]);
   }
   return resultado([]);
+}
+
+// --------------------------------------------------------------------------
+// R-22 · Grilla comercial de inicio (turnos por hora, en punto)
+// --------------------------------------------------------------------------
+
+/**
+ * R-22: todos los turnos arrancan a la hora en punto; Recovery Pro es la única
+ * excepción (en punto o a la media, por el desfasaje de gabinetes de R-07).
+ * Para un combo se valida con el servicio del PRIMER componente: la grilla es
+ * del inicio del turno, los tramos internos siguen encadenándose cada 30.
+ */
+export function validarGrillaTurno(servicio: Pick<Servicio, 'nombre' | 'categoria'>, inicio: Date): ResultadoValidacion {
+  const grilla = grillaTurnoMin(servicio.categoria);
+  // Minuto del día en hora de Argentina (UTC-3 fijo, sin DST).
+  const local = new Date(inicio.getTime() - 3 * HORA_MS);
+  const minutoDelDia = local.getUTCHours() * 60 + local.getUTCMinutes();
+  const desalineado =
+    local.getUTCSeconds() !== 0 || local.getUTCMilliseconds() !== 0 || minutoDelDia % grilla !== 0;
+  if (desalineado) {
+    const hh = String(local.getUTCHours()).padStart(2, '0');
+    const mm = String(local.getUTCMinutes()).padStart(2, '0');
+    return resultado([
+      {
+        regla: 'R-22',
+        nivel: 'bloqueo',
+        mensaje:
+          grilla === 60
+            ? `${servicio.nombre} arranca a la hora en punto: ${hh}:${mm} no es un inicio válido.`
+            : `${servicio.nombre} arranca en punto o a la media: ${hh}:${mm} no es un inicio válido.`,
+      },
+    ]);
+  }
+  return resultado([]);
+}
+
+/** Grilla de inicio de un combo (R-22): la de su primer componente. */
+export function grillaTurnoDeCombo(combo: Combo): number {
+  const primero = combo.componentes[0];
+  return grillaTurnoMin(primero ? getServicio(primero.servicioCodigo).categoria : '');
+}
+
+/** R-22 para un combo: se valida el inicio del turno con el mensaje a nombre del combo. */
+export function validarGrillaCombo(combo: Combo, inicio: Date): ResultadoValidacion {
+  const primero = combo.componentes[0];
+  const categoria = primero ? getServicio(primero.servicioCodigo).categoria : ('HBOT' as CategoriaServicio);
+  return validarGrillaTurno({ nombre: combo.nombre, categoria }, inicio);
 }
 
 // --------------------------------------------------------------------------
