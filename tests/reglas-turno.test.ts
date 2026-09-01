@@ -210,7 +210,10 @@ describe('R-02 · Contraindicaciones y banner', () => {
   });
 
   it('Relativa => advertencia, no bloqueo', () => {
-    const r = validarContraindicaciones(['HBOT'], ['HBOT_CLAUSTROFOBIA']);
+    // Claustrofobia pasó a absoluta el 2026-09-01 (doc de admisión): se usa
+    // otra que sigue siendo relativa, para que el caso pruebe la REGLA y no la
+    // severidad de una entrada puntual de la tabla.
+    const r = validarContraindicaciones(['HBOT'], ['HBOT_EPOC_RETENCION_CO2']);
     expect(r.ok).toBe(true);
     expect(r.advertencias).toHaveLength(1);
   });

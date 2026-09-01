@@ -26,13 +26,18 @@ import { INTAKE_QUESTIONNAIRE_URL } from '../fhir/identifiers.js';
  * contestar todo "no" (bug real, 2026-08-28: paciente del portal con dos
  * descalificantes en True y "Paciente apto para atención" en el mostrador).
  *
- * `codigos` referencia la tabla de `contraindicaciones.ts` (validada por el
- * Director Médico): una respuesta afirmativa cuenta para R-02 con la severidad
- * que ÉL definió (absoluta bloquea, relativa advierte). Una entrada con
- * `codigos: []` es una pregunta de riesgo SIN equivalente en la tabla: pinta el
- * banner igual (revisión médica antes de avanzar) pero no inventa una entrada
- * clínica que el Director Médico no aprobó — agregarle el código es decisión
- * suya, como todo cambio de la tabla.
+ * `codigos` referencia la tabla de `contraindicaciones.ts`: una respuesta
+ * afirmativa cuenta para R-02 con la severidad de la tabla (absoluta bloquea,
+ * relativa advierte). Una entrada con `codigos: []` sería una pregunta de
+ * riesgo sin equivalente: pinta el banner igual pero no muerde en la reserva.
+ *
+ * Desde 2026-09-01 **no queda ninguna sin mapear**: el documento de admisión
+ * (Andrés → Dalessandro, 25-ago) asignó bloqueo a las tres que faltaban
+ * —marcapasos, EPOC de IHHT y TVP— y sumó la cirugía de oído/nariz/tórax
+ * reciente, que se preguntaba fuera del screening. Sus códigos entraron a la
+ * tabla como `borradorPendienteRevision` (ver el encabezado de
+ * `contraindicaciones.ts`): el CodeSystem queda en `draft` hasta que el
+ * Director Médico valide.
  */
 export interface RiesgoScreening {
   linkId: string;
@@ -44,20 +49,19 @@ export const SCREENING_RIESGOS: RiesgoScreening[] = [
   // ---- HBOT ----
   { linkId: 'hbot-neumotorax', codigos: ['HBOT_NEUMOTORAX_NO_TRATADO'] },
   { linkId: 'hbot-infeccion-resp', codigos: ['HBOT_INFECCION_VIA_AEREA'] },
-  // Marcapasos/implantes no certificados: la tabla validada no tiene entrada.
-  { linkId: 'hbot-marcapasos', codigos: [] },
+  { linkId: 'hbot-marcapasos', codigos: ['HBOT_IMPLANTE_NO_CERTIFICADO'] },
   { linkId: 'hbot-claustrofobia', codigos: ['HBOT_CLAUSTROFOBIA'] },
   { linkId: 'hbot-convulsiones', codigos: ['HBOT_CONVULSIONES'] },
+  // Estaba FUERA del screening (sección "Cirugías") y no declaraba riesgo; el
+  // doc de admisión la pone como bloqueante de HBOT (A.1 #3).
+  { linkId: 'cirugia-reciente-ont', codigos: ['HBOT_CIRUGIA_ONT_RECIENTE'] },
   // ---- IHHT ----
   // La pregunta junta insuficiencia descompensada E infarto reciente (las dos
   // absolutas de la tabla): un "sí" cuenta por ambas — el efecto es el mismo.
   { linkId: 'ihht-insuf-cardiaca', codigos: ['IHHT_INSUF_CARDIACA_DESCOMP', 'IHHT_SCA_RECIENTE'] },
   { linkId: 'ihht-hta', codigos: ['IHHT_HTA_NO_CONTROLADA'] },
-  // La tabla solo tiene EPOC para HBOT (HBOT_EPOC_RETENCION_CO2); mapearla a
-  // otra categoría es decisión clínica del Director Médico, no nuestra.
-  { linkId: 'ihht-epoc', codigos: [] },
-  // Trombosis venosa profunda activa: sin entrada en la tabla validada.
-  { linkId: 'ihht-tvp', codigos: [] },
+  { linkId: 'ihht-epoc', codigos: ['IHHT_EPOC_SEVERO'] },
+  { linkId: 'ihht-tvp', codigos: ['IHHT_TVP_ACTIVA'] },
   // ---- Generales ----
   // Choice "Sí"/"No"/"No aplica": solo el "Sí" cuenta como afirmativa.
   { linkId: 'embarazo', codigos: ['HBOT_EMBARAZO'] },

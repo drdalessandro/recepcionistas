@@ -99,22 +99,57 @@ describe('Seed — Combos (PlanDefinition)', () => {
   });
 });
 
-describe('Seed — Contraindicaciones (validadas por el Director Médico, 2026-08-09)', () => {
-  it('CodeSystem ACTIVO: la tabla está aprobada para uso real', () => {
-    const cs = seed.contraindicaciones;
-    expect(cs.status).toBe('active');
-    expect(cs.publisher).toContain('Conrado López Alonso');
-    expect((cs.concept?.length ?? 0)).toBeGreaterThan(0);
-    const c0 = cs.concept?.[0];
-    expect(c0?.property?.some((p) => p.code === 'severidad')).toBe(true);
-  });
-
-  it('Ninguna entrada quedó marcada borrador (una sola volvería el CodeSystem a draft)', () => {
-    const cs = seed.contraindicaciones;
-    const conBorrador = (cs.concept ?? []).filter((c) =>
+describe('Seed — Contraindicaciones · gobernanza de la validación médica', () => {
+  const conBorrador = (): unknown[] =>
+    (seed.contraindicaciones.concept ?? []).filter((c) =>
       c.property?.some((p) => p.code === 'borrador' && p.valueBoolean === true),
     );
-    expect(conBorrador).toEqual([]);
+
+  it('El CodeSystem se publica con severidad y autor', () => {
+    const cs = seed.contraindicaciones;
+    expect(cs.publisher).toContain('Conrado López Alonso');
+    expect((cs.concept?.length ?? 0)).toBeGreaterThan(0);
+    expect(cs.concept?.[0]?.property?.some((p) => p.code === 'severidad')).toBe(true);
+  });
+
+  /**
+   * El invariante REAL de esta tabla no es "está siempre validada", sino que el
+   * estado del CodeSystem no puede mentir sobre si lo está. Desde 2026-09-01
+   * hay entradas en revisión (subidas de severidad del doc de admisión), y
+   * mientras las haya el recurso tiene que salir en `draft` y decirlo en el
+   * título — es lo que hace que la validación médica no se olvide.
+   */
+  it('Con entradas en borrador: el CodeSystem sale en draft y lo dice en el título', () => {
+    const cs = seed.contraindicaciones;
+    if (conBorrador().length > 0) {
+      expect(cs.status).toBe('draft');
+      expect(cs.title).toMatch(/BORRADOR/i);
+    } else {
+      expect(cs.status).toBe('active');
+      expect(cs.title).not.toMatch(/BORRADOR/i);
+    }
+  });
+
+  it('Las entradas en borrador son EXACTAMENTE las que el doc de admisión cambió', () => {
+    // Si alguien marca otra entrada como borrador sin registrarlo, este test
+    // avisa: la lista es el acta de qué está esperando firma médica.
+    const codigos = (seed.contraindicaciones.concept ?? [])
+      .filter((c) => c.property?.some((p) => p.code === 'borrador' && p.valueBoolean === true))
+      .map((c) => c.code)
+      .sort();
+    expect(codigos).toEqual(
+      [
+        'HBOT_CIRUGIA_ONT_RECIENTE',
+        'HBOT_CLAUSTROFOBIA',
+        'HBOT_CONVULSIONES',
+        'HBOT_EMBARAZO',
+        'HBOT_IMPLANTE_NO_CERTIFICADO',
+        'HBOT_INFECCION_VIA_AEREA',
+        'IHHT_EPOC_SEVERO',
+        'IHHT_HTA_NO_CONTROLADA',
+        'IHHT_TVP_ACTIVA',
+      ].sort(),
+    );
   });
 });
 
