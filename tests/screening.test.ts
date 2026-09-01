@@ -36,7 +36,7 @@ describe('evaluarScreening — el contenido importa, no la existencia', () => {
       respuestas({ 'hbot-neumotorax': true, 'hbot-infeccion-resp': true, 'hbot-claustrofobia': false }),
     );
     expect(r.declarados).toEqual(['hbot-neumotorax', 'hbot-infeccion-resp']);
-    // Con la severidad que validó el Director Médico: absoluta + relativa.
+    // Las dos bloquean HBOT desde el doc de admisión (2026-09-01).
     expect(r.codigos).toContain('HBOT_NEUMOTORAX_NO_TRATADO');
     expect(r.codigos).toContain('HBOT_INFECCION_VIA_AEREA');
   });
@@ -48,10 +48,19 @@ describe('evaluarScreening — el contenido importa, no la existencia', () => {
     expect(r.codigos).toEqual([]);
   });
 
-  it('una pregunta SIN código en la tabla (marcapasos) igual declara el riesgo', () => {
+  it('marcapasos: desde el doc de admisión (2026-09-01) declara riesgo Y bloquea HBOT', () => {
+    // Antes quedaba sin código en la tabla y solo pintaba el banner. El
+    // documento de admisión le asignó bloqueo y Andrés eligió el criterio más
+    // estricto, así que ahora también muerde en la reserva.
     const r = evaluarScreening(respuestas({ 'hbot-marcapasos': true }));
     expect(r.declarados).toEqual(['hbot-marcapasos']);
-    expect(r.codigos).toEqual([]); // no inventa entradas que el Director Médico no aprobó
+    expect(r.codigos).toEqual(['HBOT_IMPLANTE_NO_CERTIFICADO']);
+  });
+
+  it('ninguna pregunta de riesgo quedó sin código tras el doc de admisión', () => {
+    for (const s of SCREENING_RIESGOS) {
+      expect(s.codigos.length, `${s.linkId} sin mapear`).toBeGreaterThan(0);
+    }
   });
 
   it('embarazo es un choice: "Sí" cuenta, "No aplica" no', () => {
@@ -121,12 +130,15 @@ describe('lo declarado alimenta R-02: la reserva de HBOT del caso real se BLOQUE
     expect(validarContraindicaciones(['HBOT'], codigos, { autorizacionMedica: true }).ok).toBe(true);
   });
 
-  it('infección respiratoria declarada (relativa) → advertencia, no bloqueo', async () => {
+  it('infección respiratoria declarada → BLOQUEA HBOT (doc de admisión B1, criterio más estricto)', async () => {
+    // Era 'relativa' (advertencia) en la tabla validada por el Dr. Conrado. El
+    // documento de admisión la marca como la contraindicación transitoria que
+    // más barotraumas causa, y Andrés eligió el criterio más estricto
+    // (2026-09-01). Queda como borrador hasta la validación médica.
     const { validarContraindicaciones } = await import('../src/lib/reglas-turno.js');
     const codigos = evaluarScreening(respuestas({ 'hbot-infeccion-resp': true })).codigos;
-    const r = validarContraindicaciones(['HBOT'], codigos, {});
-    expect(r.ok).toBe(true);
-    expect(r.advertencias.length).toBeGreaterThan(0);
+    expect(validarContraindicaciones(['HBOT'], codigos, {}).ok).toBe(false);
+    expect(validarContraindicaciones(['HBOT'], codigos, { autorizacionMedica: true }).ok).toBe(true);
   });
 
   it('el riesgo declarado NO afecta terapias de otra categoría (un masaje sigue pasando)', async () => {
