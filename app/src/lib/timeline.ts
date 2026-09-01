@@ -2,6 +2,7 @@ import type { Appointment, Patient, Slot } from '@medplum/fhirtypes';
 import { getDisplayString } from '@medplum/core';
 import { medplum } from '../medplum';
 import { RECURSOS } from '@bw/config/recursos';
+import type { TipoRecurso } from '@bw/domain/types';
 import { HORARIO_SEMANAL } from '@bw/config/horario';
 import { EXT } from '@bw/fhir/identifiers';
 
@@ -22,6 +23,8 @@ export interface TurnoTimeline {
 export interface SalaFila {
   codigo: string;
   nombre: string;
+  /** Tipo de recurso (decide la grilla de inicios reservables, R-22). */
+  tipo: TipoRecurso;
   comparteEquipo: boolean;
   /** Capacidad en personas (multiplaza 6, biplaza 2, resto 1). */
   capacidad: number;
@@ -81,6 +84,7 @@ export async function cargarTimeline(fecha: Date = new Date()): Promise<Timeline
   const salas: SalaFila[] = RECURSOS.map((r) => ({
     codigo: r.codigo,
     nombre: r.nombre,
+    tipo: r.tipo,
     comparteEquipo: Boolean(r.comparteCon?.length),
     capacidad: r.capacidad,
     reservaExclusiva: Boolean(r.reservaExclusiva),

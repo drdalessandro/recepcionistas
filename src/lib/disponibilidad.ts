@@ -13,7 +13,7 @@ import type { IntensidadMembresia, RecursoFisico, Servicio } from '../domain/typ
 import { HORARIO_SEMANAL, SLOT_GRANULARIDAD_MIN, type HorarioDia } from '../config/horario.js';
 import { getServicio } from '../config/catalogo.js';
 import { compartenEquipo, recursosParaCategoria } from '../config/recursos.js';
-import { VENTANA_RESERVA_HORAS, type PerfilReserva } from '../config/reglas.js';
+import { VENTANA_RESERVA_HORAS, grillaTurnoMin, type PerfilReserva } from '../config/reglas.js';
 import { generarSlots } from './slots.js';
 import {
   personasEnFranja,
@@ -180,8 +180,10 @@ export function calcularDisponibilidad(opts: OpcionesDisponibilidad): Disponibil
   }
   let excluidosPorSolicitudes = 0;
 
-  // Grilla de arranques posibles (granularidad 30') por recurso, cubriendo
-  // toda la ventana. `generarSlots` ya respeta el horario semanal del centro.
+  // Grilla de arranques posibles por recurso, cubriendo toda la ventana.
+  // `generarSlots` ya respeta el horario semanal del centro; sale cada 30'
+  // (sub-slots de ocupación) y R-22 filtra después qué arranques se OFRECEN
+  // para este servicio: cada 60 en punto, salvo Recovery Pro (cada 30).
   const nDias = Math.ceil(ventanaHoras / 24) + 1;
   const grilla = generarSlots(candidatos, horario, { desde: ahora, dias: nDias });
   const slotsPorRecurso = new Map<string, Set<string>>();
@@ -198,10 +200,18 @@ export function calcularDisponibilidad(opts: OpcionesDisponibilidad): Disponibil
   const porDia = new Map<string, HorarioDisponible[]>();
   const ocupadosPorDia = new Map<string, HorarioOcupado[]>();
 
+  // R-22 · grilla comercial del servicio. Un arranque desalineado no es parte
+  // de la grilla visible: ni libre ni ocupado (igual que los pegados al cierre).
+  const grillaServicioMin = grillaTurnoMin(servicio.categoria);
+
   for (const inicioISO of [...arranques].sort()) {
     const inicio = new Date(inicioISO);
     if (inicio.getTime() <= ahora.getTime()) {
       continue; // solo a futuro
+    }
+    const minutoDelDia = Number(inicioISO.slice(11, 13)) * 60 + Number(inicioISO.slice(14, 16));
+    if (minutoDelDia % grillaServicioMin !== 0) {
+      continue; // fuera de la grilla comercial del servicio (R-22)
     }
     if (!validarVentanaReserva(perfil, ahora, inicio).ok) {
       continue; // fuera de la ventana del perfil (R-13)

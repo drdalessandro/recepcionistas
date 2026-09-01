@@ -4,7 +4,10 @@ import { IconCalendarTime, IconCheck, IconInfoCircle } from '@tabler/icons-react
 import { guardarPreferenciaSemanal, mensajeError, type ResultadoPreferenciaSemanal } from '../lib/bots';
 import type { PlanPaciente } from '../lib/planes';
 import { MEMBRESIAS_POR_CODIGO } from '@bw/config/membresias';
+import { getServicio } from '@bw/config/catalogo';
+import { getCombo } from '@bw/config/combos';
 import { HORARIO_SEMANAL } from '@bw/config/horario';
+import { grillaTurnoMin } from '@bw/config/reglas';
 import { EXT } from '@bw/fhir/identifiers';
 import { parsePreferencia } from '@bw/lib/semana-membresia';
 import { generarSlots } from '@bw/lib/slots';
@@ -39,14 +42,22 @@ export function AgendaSemanalModal({
   const [resultado, setResultado] = useState<ResultadoPreferenciaSemanal | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  // Horas válidas (grilla de 30 min dentro del horario del centro).
+  // Horas válidas dentro del horario del centro. R-22: la preferencia arranca
+  // el combo base del plan, así que la grilla es la del turno (hora en punto).
   const horas = useMemo(() => {
     const desde = new Date();
     desde.setHours(0, 0, 0, 0);
+    const paso = def
+      ? grillaTurnoMin(getServicio(getCombo(def.comboBaseCodigo).componentes[0].servicioCodigo).categoria)
+      : grillaTurnoMin('');
     const dummy = [{ codigo: '_', nombre: '_', tipo: 'SALA' as const, capacidad: 1 }];
-    const set = new Set(generarSlots(dummy, HORARIO_SEMANAL, { desde, dias: 7 }).map((s) => s.inicio.slice(11, 16)));
+    const set = new Set(
+      generarSlots(dummy, HORARIO_SEMANAL, { desde, dias: 7 })
+        .map((s) => s.inicio.slice(11, 16))
+        .filter((hhmm) => (Number(hhmm.slice(0, 2)) * 60 + Number(hhmm.slice(3, 5))) % paso === 0),
+    );
     return [...set].sort();
-  }, []);
+  }, [def]);
 
   // Al abrir: precargar lo guardado en el Coverage; si no hay nada, sugerir.
   useEffect(() => {

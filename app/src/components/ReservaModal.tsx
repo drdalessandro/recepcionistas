@@ -21,6 +21,7 @@ import { SERVICIOS, nombreServicioRecepcion } from '@bw/config/catalogo';
 import { RECURSOS_POR_CODIGO, recursosParaCategoria } from '@bw/config/recursos';
 import { generarSlots } from '@bw/lib/slots';
 import { HORARIO_SEMANAL } from '@bw/config/horario';
+import { grillaTurnoMin } from '@bw/config/reglas';
 
 export interface PresetReserva {
   recursoCodigo: string;
@@ -97,11 +98,15 @@ export function ReservaModal({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [preset]);
 
+  // R-22: la sala decide qué inicios se ofrecen (60' en punto; Recovery Pro cada 30').
   const horas = useMemo(() => {
     const desde = new Date(`${fecha}T00:00:00-03:00`);
+    const paso = grillaTurnoMin(recurso?.tipo ?? '');
     const dummy = [{ codigo: '_', nombre: '_', tipo: 'SALA' as const, capacidad: 1 }];
-    return generarSlots(dummy, HORARIO_SEMANAL, { desde, dias: 1 }).map((s) => s.inicio.slice(11, 16));
-  }, [fecha]);
+    return generarSlots(dummy, HORARIO_SEMANAL, { desde, dias: 1 })
+      .map((s) => s.inicio.slice(11, 16))
+      .filter((hhmm) => (Number(hhmm.slice(0, 2)) * 60 + Number(hhmm.slice(3, 5))) % paso === 0);
+  }, [fecha, recurso]);
 
   const servicio = servicioCodigo ? SERVICIOS.find((s) => s.codigo === servicioCodigo) : undefined;
 

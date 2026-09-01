@@ -23,6 +23,7 @@ import {
   validarContraindicaciones,
   validarBloqueoAdministrativo,
   validarAptitudPaciente,
+  validarGrillaCombo,
   validarOrdenHBOT,
   validarVentanaReserva,
   type Issue,
@@ -193,6 +194,10 @@ export async function handler(medplum: MedplumClient, event: BotEvent<EntradaCom
     partes.push({ ok: false, bloqueos: [{ regla: 'R-13', nivel: 'bloqueo', mensaje: 'El turno está en el pasado.' }], advertencias: [] });
   }
   partes.push(validarOrdenHBOT(categorias));
+  // R-22 · la grilla es del INICIO del turno (primer componente); los tramos
+  // internos siguen encadenándose cada 30 (la tumbona de un BIO ENERGY entra a
+  // la media, y eso no es un turno: es el mismo turno por dentro).
+  partes.push(validarGrillaCombo(combo, inicio));
   partes.push(validarAptitudPaciente(aptitud));
   partes.push(validarBloqueoAdministrativo(tieneBloqueoPago(flags)));
   partes.push(validarContraindicaciones([...new Set(categorias)], contraindicaciones, { autorizacionMedica: e.autorizacionMedica ?? false }));

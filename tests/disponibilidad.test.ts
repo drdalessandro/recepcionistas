@@ -262,12 +262,9 @@ describe('calcularDisponibilidad — ocupados por día (handoff portal: tachados
     });
     expect(horarios(r.dias)).not.toContain('2026-07-22T15:00:00-03:00');
     const dia = r.dias.find((d) => d.fecha === '2026-07-22')!;
-    // La sesión de 60' choca con la reserva arrancando 14:30, 15:00 y 15:30.
-    expect((dia.ocupados ?? []).map((o) => o.inicio)).toEqual([
-      '2026-07-22T14:30:00-03:00',
-      '2026-07-22T15:00:00-03:00',
-      '2026-07-22T15:30:00-03:00',
-    ]);
+    // R-22: para HBOT solo se ofrecen (y por lo tanto solo se tachan) los
+    // arranques en punto; 14:30 y 15:30 ya no son parte de la grilla visible.
+    expect((dia.ocupados ?? []).map((o) => o.inicio)).toEqual(['2026-07-22T15:00:00-03:00']);
     expect(dia.ocupados?.find((o) => o.inicio === '2026-07-22T15:00:00-03:00')?.fin).toBe('2026-07-22T16:00:00-03:00');
     // Los vecinos libres no se tachan.
     expect(ocupados(r.dias)).not.toContain('2026-07-22T16:00:00-03:00');
@@ -292,9 +289,10 @@ describe('calcularDisponibilidad — ocupados por día (handoff portal: tachados
       reservas: [],
       solicitudes: [{ inicio: new Date('2026-07-22T15:00:00-03:00'), servicioCodigo: 'HBOT_MONO', pedidaEn: AHORA }],
     });
-    // El pedido de 15:00 (60') tacha 14:30, 15:00 y 15:30; 16:00 sigue libre.
+    // El pedido de 15:00 (60') tacha su hora; 16:00 sigue libre. (R-22: las
+    // medias horas ya no existen como chips de HBOT, ni libres ni tachadas.)
     expect(ocupados(r.dias)).toContain('2026-07-22T15:00:00-03:00');
-    expect(ocupados(r.dias)).toContain('2026-07-22T15:30:00-03:00');
+    expect(ocupados(r.dias)).not.toContain('2026-07-22T15:30:00-03:00');
     expect(horarios(r.dias)).toContain('2026-07-22T16:00:00-03:00');
     expect(r.excluidosPorSolicitudes).toBeGreaterThan(0);
   });
@@ -354,10 +352,11 @@ describe('calcularDisponibilidad — ocupados por día (handoff portal: tachados
     const jueves = r.dias.find((d) => d.fecha === '2026-07-23')!;
     expect(jueves).toBeDefined();
     expect(jueves.horarios).toEqual([]);
-    // Todos los arranques del día (08:00 a 21:00, el último donde caben los 60').
+    // Todos los arranques del día (08:00 a 21:00 en punto — R-22; el último
+    // donde caben los 60').
     expect(jueves.ocupados?.[0]?.inicio).toBe('2026-07-23T08:00:00-03:00');
     expect(jueves.ocupados?.[jueves.ocupados.length - 1]?.inicio).toBe('2026-07-23T21:00:00-03:00');
-    expect(jueves.ocupados).toHaveLength(27);
+    expect(jueves.ocupados).toHaveLength(14);
   });
 
   it('sin nada tomado, los días viajan sin la clave ocupados (payload limpio)', () => {
@@ -392,8 +391,8 @@ describe('horarioOfrecido — defensa en profundidad de bw-solicitar-turno (feed
     const disp = calcularDisponibilidad({ servicio, perfil: 'PUBLICO', ahora: AHORA, reservas: [monoOcupada] });
     // Esto NO es un bug: es el mismo criterio que usa Recepción a mano. El
     // horario recién desaparece cuando TODAS las salas de la categoría están
-    // tomadas (caso siguiente).
-    expect(horarioOfrecido(disp.dias, new Date('2026-07-23T08:30:00-03:00'))).toBe(true);
+    // tomadas (caso siguiente). (Era 08:30; desde R-22 HBOT se pide en punto.)
+    expect(horarioOfrecido(disp.dias, new Date('2026-07-23T08:00:00-03:00'))).toBe(true);
   });
 
   it('el caso reportado, con TODAS las salas HBOT tomadas 9:00–10:00: 8:30 (solapa), 9:00 y 9:30 NO se ofrecen; 10:00 sí', () => {
@@ -410,7 +409,7 @@ describe('horarioOfrecido — defensa en profundidad de bw-solicitar-turno (feed
 
   it('sin reservas, el mismo horario SÍ está ofrecido (el chequeo no inventa rechazos)', () => {
     const disp = calcularDisponibilidad({ servicio, perfil: 'PUBLICO', ahora: AHORA, reservas: [] });
-    expect(horarioOfrecido(disp.dias, new Date('2026-07-23T08:30:00-03:00'))).toBe(true);
+    expect(horarioOfrecido(disp.dias, new Date('2026-07-23T08:00:00-03:00'))).toBe(true);
   });
 
   it('fuera de la ventana R-13 o desalineado de la grilla => no ofrecido', () => {
@@ -419,5 +418,42 @@ describe('horarioOfrecido — defensa en profundidad de bw-solicitar-turno (feed
     expect(horarioOfrecido(disp.dias, new Date('2026-07-29T09:00:00-03:00'))).toBe(false);
     // 9:10 no es un arranque de la grilla de 30'.
     expect(horarioOfrecido(disp.dias, new Date('2026-07-23T09:10:00-03:00'))).toBe(false);
+  });
+});
+
+describe('calcularDisponibilidad — grilla comercial R-22 (turnos por hora, en punto)', () => {
+  function ocupados(dias: DiaDisponible[]): string[] {
+    return dias.flatMap((d) => (d.ocupados ?? []).map((o) => o.inicio));
+  }
+
+  it('HBOT: los chips son solo en punto — 16:30 no existe, ni libre ni tachado', () => {
+    const r = calcularDisponibilidad({ servicio: getServicio('HBOT_MONO'), perfil: 'PUBLICO', ahora: AHORA, reservas: [] });
+    const inicios = horarios(r.dias);
+    expect(inicios).toContain('2026-07-22T16:00:00-03:00');
+    expect(inicios).not.toContain('2026-07-22T16:30:00-03:00');
+    expect(inicios.every((i) => i.slice(14, 16) === '00')).toBe(true);
+    expect(ocupados(r.dias)).not.toContain('2026-07-22T16:30:00-03:00');
+  });
+
+  it('las sesiones de 30 (IHHT, Red Light, botas, crio) también se ofrecen por hora', () => {
+    for (const codigo of ['IHHT', 'RED_LIGHT', 'COMPRESION', 'CRIO']) {
+      const r = calcularDisponibilidad({ servicio: getServicio(codigo), perfil: 'PUBLICO', ahora: AHORA, reservas: [] });
+      const inicios = horarios(r.dias);
+      expect(inicios.length, codigo).toBeGreaterThan(0);
+      expect(inicios.every((i) => i.slice(14, 16) === '00'), codigo).toBe(true);
+    }
+  });
+
+  it('Recovery Pro sigue ofreciendo en punto y a la media (es la excepción)', () => {
+    const r = calcularDisponibilidad({ servicio: getServicio('RECOVERY_PRO'), perfil: 'PUBLICO', ahora: AHORA, reservas: [] });
+    const inicios = horarios(r.dias);
+    expect(inicios).toContain('2026-07-22T16:00:00-03:00');
+    expect(inicios).toContain('2026-07-22T16:30:00-03:00');
+  });
+
+  it('el pedido desalineado NO está ofrecido: horarioOfrecido lo rechaza (defensa de bw-solicitar-turno)', () => {
+    const r = calcularDisponibilidad({ servicio: getServicio('HBOT_MONO'), perfil: 'PUBLICO', ahora: AHORA, reservas: [] });
+    expect(horarioOfrecido(r.dias, new Date('2026-07-22T16:30:00-03:00'))).toBe(false);
+    expect(horarioOfrecido(r.dias, new Date('2026-07-22T16:00:00-03:00'))).toBe(true);
   });
 });

@@ -17,11 +17,12 @@
 import type { BotEvent, MedplumClient } from '@medplum/core';
 import type { Coverage } from '@medplum/fhirtypes';
 import { getCombo } from '../config/combos.js';
-import { HORARIO_SEMANAL, SLOT_GRANULARIDAD_MIN, TZ } from '../config/horario.js';
+import { HORARIO_SEMANAL, TZ } from '../config/horario.js';
 import { MEMBRESIAS_POR_CODIGO } from '../config/membresias.js';
 import { EXT, SYSTEM } from '../fhir/identifiers.js';
 import { esPlanBW, estadoDeCoverage, planCodigoDeCoverage } from '../fhir/coverage.js';
 import { perfilDeReserva } from '../lib/disponibilidad.js';
+import { grillaTurnoDeCombo } from '../lib/reglas-turno.js';
 import { saldoPlan } from '../lib/planes.js';
 import {
   candidatosSemana,
@@ -203,7 +204,7 @@ export async function handler(
       }
 
       // R-07 a la hora preferida: probar los horarios más cercanos del mismo día.
-      for (const alt of horariosAlternativos(pref.hora, franjasDelDia(cand.fecha), combo.duracionTotalMin, SLOT_GRANULARIDAD_MIN)) {
+      for (const alt of horariosAlternativos(pref.hora, franjasDelDia(cand.fecha), combo.duracionTotalMin, grillaTurnoDeCombo(combo))) {
         const rAlt = await reservar(inicioTurnoISO(cand.fecha, alt));
         if (rAlt.creado) {
           res.conAlternativa++;
