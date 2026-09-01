@@ -26,7 +26,7 @@ import {
   type ColorSeguridad,
   type EstadoSeguridad,
 } from '../lib/seguridad.js';
-import { leerScreeningCompleto } from './_shared.js';
+import { leerScreening } from './_shared.js';
 
 export interface EntradaSeguridadBot {
   /** "Patient/<id>". */
@@ -72,10 +72,18 @@ export async function handler(
     contraindicacionesActivas = undefined;
   }
 
-  // 2) ¿Completó el cuestionario de ingreso? Es el que incluye el screening de
-  //    contraindicaciones HBOT/IHHT. La lectura la comparte con los bots de
-  //    reserva (R-20) para que el banner y el bloqueo no puedan divergir.
-  const screeningCompleto = await leerScreeningCompleto(medplum, e.pacienteRef);
+  // 2) El cuestionario de ingreso, LEÍDO Y EVALUADO (no solo "¿existe?"): una
+  //    respuesta afirmativa a una pregunta de riesgo pinta el banner de rojo
+  //    aunque nadie la haya cargado como Flag. La lectura la comparte con los
+  //    bots de reserva (R-20/R-02) para que el banner y el bloqueo no diverjan.
+  const screening = await leerScreening(medplum, e.pacienteRef);
 
-  return { ok: true, ...estadoSeguridad({ contraindicacionesActivas, screeningCompleto }) };
+  return {
+    ok: true,
+    ...estadoSeguridad({
+      contraindicacionesActivas,
+      screeningCompleto: screening?.completo,
+      riesgosScreening: screening === undefined ? undefined : screening.riesgosDeclarados.length,
+    }),
+  };
 }

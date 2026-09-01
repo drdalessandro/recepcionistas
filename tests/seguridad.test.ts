@@ -14,11 +14,29 @@ describe('estadoSeguridad — ausencia de datos NO es "apto"', () => {
     expect(r.puedeAvanzar).toBe(false);
   });
 
-  it('con screening completo y sin contraindicaciones: apto', () => {
-    const r = estadoSeguridad({ contraindicacionesActivas: [], screeningCompleto: true });
+  it('con screening completo, EVALUADO sin riesgos y sin contraindicaciones: apto', () => {
+    const r = estadoSeguridad({ contraindicacionesActivas: [], screeningCompleto: true, riesgosScreening: 0 });
     expect(r.estado).toBe('apto');
     expect(r.color).toBe('verde');
     expect(r.puedeAvanzar).toBe(true);
+  });
+
+  it('el bug del 2026-08-28: screening completo PERO con riesgos declarados → ROJO, no apto', () => {
+    // El paciente del portal contestó "sí" a neumotórax e infección respiratoria
+    // y el banner decía "Paciente apto para atención": el screening se daba por
+    // bueno con solo existir. Declarar un riesgo es conocimiento, no ausencia.
+    const r = estadoSeguridad({ contraindicacionesActivas: [], screeningCompleto: true, riesgosScreening: 2 });
+    expect(r.estado).toBe('riesgo-declarado');
+    expect(r.color).toBe('rojo');
+    expect(r.puedeAvanzar).toBe(false);
+  });
+
+  it('screening completo pero SIN evaluar (riesgos undefined) ya no alcanza para apto', () => {
+    // Si un caller viejo no evalúa las respuestas, el resultado es
+    // no-verificable — nunca un apto por omisión.
+    const r = estadoSeguridad({ contraindicacionesActivas: [], screeningCompleto: true });
+    expect(r.estado).toBe('no-verificable');
+    expect(r.puedeAvanzar).toBe(false);
   });
 
   it('con contraindicación activa: rojo, sin importar el screening', () => {
@@ -33,7 +51,7 @@ describe('estadoSeguridad — ausencia de datos NO es "apto"', () => {
 
 describe('estadoSeguridad — falla CERRADO', () => {
   it('si no se pudieron leer las contraindicaciones: no-verificable, nunca apto', () => {
-    const r = estadoSeguridad({ contraindicacionesActivas: undefined, screeningCompleto: true });
+    const r = estadoSeguridad({ contraindicacionesActivas: undefined, screeningCompleto: true, riesgosScreening: 0 });
     expect(r.estado).toBe('no-verificable');
     expect(r.puedeAvanzar).toBe(false);
   });
@@ -58,6 +76,8 @@ describe('estadoSeguridad — falla CERRADO', () => {
       { contraindicacionesActivas: undefined, screeningCompleto: true },
       { contraindicacionesActivas: [], screeningCompleto: undefined },
       { contraindicacionesActivas: [], screeningCompleto: false },
+      { contraindicacionesActivas: [], screeningCompleto: true },
+      { contraindicacionesActivas: [], screeningCompleto: true, riesgosScreening: 1 },
       { contraindicacionesActivas: ['X'], screeningCompleto: undefined },
       { contraindicacionesActivas: ['X'], screeningCompleto: false },
       { contraindicacionesActivas: ['X'], screeningCompleto: true },
@@ -65,13 +85,15 @@ describe('estadoSeguridad — falla CERRADO', () => {
     for (const c of combinaciones) {
       expect(estadoSeguridad(c).puedeAvanzar).toBe(false);
     }
-    expect(estadoSeguridad({ contraindicacionesActivas: [], screeningCompleto: true }).puedeAvanzar).toBe(true);
+    expect(
+      estadoSeguridad({ contraindicacionesActivas: [], screeningCompleto: true, riesgosScreening: 0 }).puedeAvanzar,
+    ).toBe(true);
   });
 });
 
 describe('textos del banner — sin contenido clínico', () => {
   it('cada estado tiene título y acción, y ninguno filtra el detalle clínico', () => {
-    for (const estado of ['contraindicado', 'apto', 'sin-screening', 'no-verificable'] as const) {
+    for (const estado of ['contraindicado', 'riesgo-declarado', 'apto', 'sin-screening', 'no-verificable'] as const) {
       const texto = `${tituloSeguridad(estado)} ${accionSeguridad(estado)}`;
       expect(texto.length).toBeGreaterThan(0);
       // El banner nunca nombra una contraindicación concreta.

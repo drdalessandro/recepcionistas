@@ -17,6 +17,52 @@
 import type { Questionnaire } from '@medplum/fhirtypes';
 import { INTAKE_QUESTIONNAIRE_URL } from '../fhir/identifiers.js';
 
+/**
+ * Mapeo pregunta del screening → contraindicación de la tabla validada.
+ *
+ * Este era el eslabón que faltaba en el camino del "apto": el cuestionario
+ * guardaba las respuestas y NADIE las leía — contestar "sí" a "¿tenés
+ * neumotórax no tratado?" producía exactamente el mismo banner verde que
+ * contestar todo "no" (bug real, 2026-08-28: paciente del portal con dos
+ * descalificantes en True y "Paciente apto para atención" en el mostrador).
+ *
+ * `codigos` referencia la tabla de `contraindicaciones.ts` (validada por el
+ * Director Médico): una respuesta afirmativa cuenta para R-02 con la severidad
+ * que ÉL definió (absoluta bloquea, relativa advierte). Una entrada con
+ * `codigos: []` es una pregunta de riesgo SIN equivalente en la tabla: pinta el
+ * banner igual (revisión médica antes de avanzar) pero no inventa una entrada
+ * clínica que el Director Médico no aprobó — agregarle el código es decisión
+ * suya, como todo cambio de la tabla.
+ */
+export interface RiesgoScreening {
+  linkId: string;
+  /** Códigos de `CONTRAINDICACIONES` equivalentes ([] = sin entrada en la tabla, aún). */
+  codigos: string[];
+}
+
+export const SCREENING_RIESGOS: RiesgoScreening[] = [
+  // ---- HBOT ----
+  { linkId: 'hbot-neumotorax', codigos: ['HBOT_NEUMOTORAX_NO_TRATADO'] },
+  { linkId: 'hbot-infeccion-resp', codigos: ['HBOT_INFECCION_VIA_AEREA'] },
+  // Marcapasos/implantes no certificados: la tabla validada no tiene entrada.
+  { linkId: 'hbot-marcapasos', codigos: [] },
+  { linkId: 'hbot-claustrofobia', codigos: ['HBOT_CLAUSTROFOBIA'] },
+  { linkId: 'hbot-convulsiones', codigos: ['HBOT_CONVULSIONES'] },
+  // ---- IHHT ----
+  // La pregunta junta insuficiencia descompensada E infarto reciente (las dos
+  // absolutas de la tabla): un "sí" cuenta por ambas — el efecto es el mismo.
+  { linkId: 'ihht-insuf-cardiaca', codigos: ['IHHT_INSUF_CARDIACA_DESCOMP', 'IHHT_SCA_RECIENTE'] },
+  { linkId: 'ihht-hta', codigos: ['IHHT_HTA_NO_CONTROLADA'] },
+  // La tabla solo tiene EPOC para HBOT (HBOT_EPOC_RETENCION_CO2); mapearla a
+  // otra categoría es decisión clínica del Director Médico, no nuestra.
+  { linkId: 'ihht-epoc', codigos: [] },
+  // Trombosis venosa profunda activa: sin entrada en la tabla validada.
+  { linkId: 'ihht-tvp', codigos: [] },
+  // ---- Generales ----
+  // Choice "Sí"/"No"/"No aplica": solo el "Sí" cuenta como afirmativa.
+  { linkId: 'embarazo', codigos: ['HBOT_EMBARAZO'] },
+];
+
 export const CUESTIONARIO_INGRESO: Questionnaire = {
   resourceType: 'Questionnaire',
   url: INTAKE_QUESTIONNAIRE_URL,
