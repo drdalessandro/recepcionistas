@@ -175,7 +175,6 @@ export async function handler(
 
   // Contraindicaciones activas del paciente (Flags).
   const flags = await medplum.searchResources('Flag', `subject=${e.pacienteRef}&status=active`);
-  const contraindicacionesActivas = flags.flatMap(extraerCodigos);
 
   // Turnos ocupados de hoy (todos los recursos) para capacidad/desfasaje.
   const reservasExistentes = await cargarReservasDelDia(medplum, inicio);
@@ -184,6 +183,12 @@ export async function handler(
   // no se recibe del input: es una regla de seguridad, no puede depender de lo
   // que afirme quien llama al bot.
   const aptitud = await aptitudDePaciente(medplum, e.pacienteRef);
+
+  // R-02 sobre Flags Y sobre lo DECLARADO en el screening: una respuesta de
+  // riesgo del cuestionario cuenta como contraindicación (con la severidad de
+  // la tabla validada) aunque ningún proceso la haya cargado como Flag. Sin
+  // esto, declarar un neumotórax no tratado dejaba reservar HBOT igual.
+  const contraindicacionesActivas = [...flags.flatMap(extraerCodigos), ...(aptitud.contraindicacionesDeclaradas ?? [])];
 
   const resultado = validarReserva({
     servicio,

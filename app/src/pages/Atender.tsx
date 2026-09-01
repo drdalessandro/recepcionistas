@@ -662,7 +662,14 @@ function BannerSeguridad({ pacienteId, version = 0 }: { pacienteId: string; vers
     return <Loader size="sm" />;
   }
   const colorAlerta = seguridad.color === 'rojo' ? 'red' : seguridad.color === 'verde' ? 'bio' : 'yellow';
-  const Icono = seguridad.estado === 'apto' ? IconShieldCheck : seguridad.estado === 'contraindicado' ? IconShieldX : IconShieldQuestion;
+  // Los dos estados ROJOS (contraindicación activa y riesgo declarado en el
+  // screening) llevan el escudo tachado; los grises, el de interrogación.
+  const Icono =
+    seguridad.estado === 'apto'
+      ? IconShieldCheck
+      : seguridad.estado === 'contraindicado' || seguridad.estado === 'riesgo-declarado'
+        ? IconShieldX
+        : IconShieldQuestion;
   return (
     <>
       <Alert color={colorAlerta} icon={<Icono size={20} />} title={tituloSeguridad(seguridad.estado)} variant="filled">

@@ -177,13 +177,16 @@ export async function handler(medplum: MedplumClient, event: BotEvent<EntradaCom
   const categorias = combo.componentes.map((c) => getServicio(c.servicioCodigo).categoria);
 
   const flags = await medplum.searchResources('Flag', `subject=${e.pacienteRef}&status=active`);
-  const contraindicaciones = flags.flatMap(extraerCodigos);
 
   const reservasExistentes = await cargarReservasDelDia(medplum, inicio);
   const planRes = planificarCombo(combo, inicio, reservasExistentes);
 
   // R-20 · consentimiento general + cuestionario de ingreso, leídos en el server.
   const aptitud = await aptitudDePaciente(medplum, e.pacienteRef);
+
+  // R-02 sobre Flags Y sobre lo declarado en el screening (misma razón que en
+  // bw-reservar-turno: lo declarado cuenta aunque no exista como Flag).
+  const contraindicaciones = [...flags.flatMap(extraerCodigos), ...(aptitud.contraindicacionesDeclaradas ?? [])];
 
   const partes: ResultadoValidacion[] = [];
   if (inicio.getTime() <= ahora.getTime()) {

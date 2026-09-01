@@ -27,6 +27,7 @@ import {
   type HuecoLiberado,
 } from '../lib/lista-espera.js';
 import { estadoConsentimiento, type RegistroConsentimiento } from '../lib/consentimiento.js';
+import { evaluarScreening } from '../lib/screening.js';
 import { indiceSolicitudAResolver } from '../lib/solicitudes.js';
 import { esPlanBW, estadoDeCoverage, planCodigoDeCoverage } from '../fhir/coverage.js';
 import {
@@ -567,23 +568,42 @@ export async function leerRegistrosConsentimiento(
   }
 }
 
+export interface Screening {
+  /** ¿Existe una respuesta completa del cuestionario de ingreso? */
+  completo: boolean;
+  /** linkIds de riesgo contestados afirmativamente (para el banner). */
+  riesgosDeclarados: string[];
+  /** Equivalentes en la tabla de contraindicaciones validada (para R-02). */
+  contraindicacionesDeclaradas: string[];
+}
+
 /**
- * ¿Completó el cuestionario de ingreso (que incluye el screening HBOT/IHHT)?
- * `undefined` = no se pudo averiguar. Solo se mira que EXISTA una respuesta
- * completa: de acá no sale ni una sola respuesta del paciente.
+ * Lee y EVALÚA el cuestionario de ingreso (screening HBOT/IHHT).
+ * `undefined` = no se pudo averiguar.
+ *
+ * Hasta 2026-08-28 esta lectura solo miraba que EXISTIERA una respuesta
+ * completa ("de acá no sale ni una sola respuesta del paciente") — y ese era el
+ * agujero del caso real del portal: declarar un neumotórax no tratado producía
+ * el mismo "apto" y la misma reserva de HBOT que negar todo, porque nadie
+ * abría las respuestas y ningún proceso las convertía en Flag. Ahora se toma la
+ * respuesta más RECIENTE y se evalúa con `evaluarScreening`; de acá sigue sin
+ * salir el detalle clínico — solo linkIds y códigos, nunca texto del paciente.
  */
-export async function leerScreeningCompleto(
-  medplum: MedplumClient,
-  pacienteRef: string,
-): Promise<boolean | undefined> {
+export async function leerScreening(medplum: MedplumClient, pacienteRef: string): Promise<Screening | undefined> {
   try {
     const respuestas = await medplum.searchResources('QuestionnaireResponse', {
       subject: pacienteRef,
       questionnaire: INTAKE_QUESTIONNAIRE_URL,
       status: 'completed',
+      _sort: '-authored',
       _count: 1,
     });
-    return respuestas.length > 0;
+    const qr = respuestas[0];
+    if (!qr) {
+      return { completo: false, riesgosDeclarados: [], contraindicacionesDeclaradas: [] };
+    }
+    const r = evaluarScreening(qr.item);
+    return { completo: true, riesgosDeclarados: r.declarados, contraindicacionesDeclaradas: r.codigos };
   } catch {
     return undefined;
   }
@@ -593,20 +613,31 @@ export async function leerScreeningCompleto(
  * Aptitud del paciente para reservar (R-20): consentimiento general firmado +
  * cuestionario de ingreso completo. Cada campo puede venir `undefined` si no se
  * pudo verificar, y `validarAptitudPaciente` bloquea igual — falla cerrado.
+ * `contraindicacionesDeclaradas` alimenta R-02 junto con los Flags: lo que el
+ * paciente declaró en el screening cuenta como contraindicación aunque nadie
+ * lo haya cargado como Flag.
  */
 export async function aptitudDePaciente(
   medplum: MedplumClient,
   pacienteRef: string,
-): Promise<{ consentimientoGeneralFirmado?: boolean; screeningCompleto?: boolean }> {
-  const [registros, screeningCompleto] = await Promise.all([
+): Promise<{
+  consentimientoGeneralFirmado?: boolean;
+  screeningCompleto?: boolean;
+  contraindicacionesDeclaradas?: string[];
+}> {
+  const [registros, screening] = await Promise.all([
     leerRegistrosConsentimiento(medplum, pacienteRef),
-    leerScreeningCompleto(medplum, pacienteRef),
+    leerScreening(medplum, pacienteRef),
   ]);
   const consentimientoGeneralFirmado =
     registros === undefined
       ? undefined
       : estadoConsentimiento(registros, { codigo: COD_CONSENTIMIENTO.atencion }).estado === 'firmado';
-  return { consentimientoGeneralFirmado, screeningCompleto };
+  return {
+    consentimientoGeneralFirmado,
+    screeningCompleto: screening?.completo,
+    contraindicacionesDeclaradas: screening?.contraindicacionesDeclaradas,
+  };
 }
 
 export async function disponibilidadDePaciente(

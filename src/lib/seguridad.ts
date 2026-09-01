@@ -21,7 +21,12 @@
 export type EstadoSeguridad =
   /** Hay al menos una contraindicación activa. No avanzar sin el equipo médico. */
   | 'contraindicado'
-  /** Completó el screening y no tiene contraindicaciones activas: apto. */
+  /**
+   * El cuestionario de ingreso tiene respuestas de riesgo (declaró una
+   * condición descalificante). Requiere revisión médica antes de HBOT/IHHT.
+   */
+  | 'riesgo-declarado'
+  /** Completó el screening sin riesgos y no tiene contraindicaciones: apto. */
   | 'apto'
   /** Nunca completó el cuestionario de ingreso: NO se sabe si es apto. */
   | 'sin-screening'
@@ -50,6 +55,13 @@ export interface EntradaSeguridad {
    * `undefined` = no se pudo averiguar (→ 'no-verificable').
    */
   screeningCompleto?: boolean;
+  /**
+   * Cuántas preguntas de RIESGO del screening contestó afirmativamente.
+   * `undefined` = no se pudo evaluar (→ 'no-verificable'). El bug que cierra
+   * este campo (2026-08-28): el screening se daba por bueno con solo EXISTIR —
+   * declarar un neumotórax no tratado producía el mismo "apto" que negar todo.
+   */
+  riesgosScreening?: number;
 }
 
 /**
@@ -58,21 +70,31 @@ export interface EntradaSeguridad {
  * El orden de evaluación importa y es deliberado:
  *  1. Una contraindicación conocida manda sobre todo lo demás (aunque falte el
  *     screening: si ya sabemos que hay un problema, no hace falta saber más).
- *  2. Si algo no se pudo leer → 'no-verificable'.
- *  3. Sin screening → 'sin-screening': no afirmamos nada que no sepamos.
- *  4. Recién ahí, 'apto'.
+ *  2. Un riesgo DECLARADO en el screening también manda: es conocimiento, no
+ *     ausencia de datos.
+ *  3. Si algo no se pudo leer → 'no-verificable'.
+ *  4. Sin screening → 'sin-screening': no afirmamos nada que no sepamos.
+ *  5. Recién ahí, 'apto'.
  */
 export function estadoSeguridad(entrada: EntradaSeguridad): ResultadoSeguridad {
-  const { contraindicacionesActivas, screeningCompleto } = entrada;
+  const { contraindicacionesActivas, screeningCompleto, riesgosScreening } = entrada;
 
   if (contraindicacionesActivas && contraindicacionesActivas.length > 0) {
     return { estado: 'contraindicado', color: 'rojo', puedeAvanzar: false };
+  }
+  if (riesgosScreening !== undefined && riesgosScreening > 0) {
+    return { estado: 'riesgo-declarado', color: 'rojo', puedeAvanzar: false };
   }
   if (contraindicacionesActivas === undefined || screeningCompleto === undefined) {
     return { estado: 'no-verificable', color: 'gris', puedeAvanzar: false };
   }
   if (!screeningCompleto) {
     return { estado: 'sin-screening', color: 'gris', puedeAvanzar: false };
+  }
+  // Screening completo pero SIN evaluar: un caller viejo que no mire las
+  // respuestas no puede producir un "apto" por omisión — ese era el bug.
+  if (riesgosScreening === undefined) {
+    return { estado: 'no-verificable', color: 'gris', puedeAvanzar: false };
   }
   return { estado: 'apto', color: 'verde', puedeAvanzar: true };
 }
@@ -82,6 +104,8 @@ export function tituloSeguridad(estado: EstadoSeguridad): string {
   switch (estado) {
     case 'contraindicado':
       return 'Atención: contraindicación activa';
+    case 'riesgo-declarado':
+      return 'Atención: el cuestionario declara riesgos';
     case 'apto':
       return 'Sin contraindicaciones';
     case 'sin-screening':
@@ -101,6 +125,8 @@ export function accionSeguridad(estado: EstadoSeguridad): string {
   switch (estado) {
     case 'contraindicado':
       return 'Consultar con el equipo médico antes de continuar.';
+    case 'riesgo-declarado':
+      return 'En el cuestionario de ingreso el paciente declaró condiciones que requieren revisión médica. No reserves HBOT ni IHHT sin autorización del equipo médico.';
     case 'apto':
       return 'Paciente apto para atención.';
     case 'sin-screening':
