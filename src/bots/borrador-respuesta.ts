@@ -18,18 +18,15 @@
  */
 import Anthropic from '@anthropic-ai/sdk';
 import type { BotEvent, MedplumClient } from '@medplum/core';
-import type { Coverage, Flag, Invoice, Patient } from '@medplum/fhirtypes';
 import { EXT } from '../fhir/identifiers.js';
-import { esPlanBW, estadoDeCoverage, planCodigoDeCoverage } from '../fhir/coverage.js';
 import {
   limpiarBorrador,
   promptBorrador,
   systemBorrador,
-  type ContextoPaciente,
   type MensajeHilo,
   type ResultadoBorrador,
 } from '../lib/borrador.js';
-import { fechaTurnoNotif, tieneBloqueoPago } from './_shared.js';
+import { contextoPacienteResumido } from './_shared.js';
 
 /** Modelo y esfuerzo: un borrador corto de atención al cliente no necesita más. */
 const MODELO = 'claude-opus-5';
@@ -77,7 +74,7 @@ export async function handler(medplum: MedplumClient, event: BotEvent<EntradaBor
     return { motivo: 'El último mensaje es de Recepción: no hay nada pendiente de responder.' };
   }
 
-  const contexto = await armarContexto(medplum, pacienteRef);
+  const contexto = await contextoPacienteResumido(medplum, pacienteRef);
 
   try {
     const anthropic = new Anthropic({ apiKey });
@@ -101,61 +98,4 @@ export async function handler(medplum: MedplumClient, event: BotEvent<EntradaBor
     console.log(`borrador-respuesta: la API falló: ${err instanceof Error ? err.message : err}`);
     return { motivo: 'No pude generar el borrador ahora. Escribí la respuesta a mano.' };
   }
-}
-
-/**
- * Lo que Recepción ya ve del paciente en pantalla, reunido en un solo lugar.
- *
- * Deliberadamente NO incluye nada clínico: ni screening, ni contraindicaciones,
- * ni documentos. Del consentimiento solo viaja la señal binaria, que es lo mismo
- * que ve el banner de Atender.
- */
-async function armarContexto(medplum: MedplumClient, pacienteRef: string): Promise<ContextoPaciente> {
-  const paciente = await medplum.readResource('Patient', pacienteRef.split('/')[1] as string).catch(() => undefined);
-
-  const [appt, coberturas, saldos, flags] = await Promise.all([
-    medplum
-      .searchOne(
-        'Appointment',
-        `patient=${pacienteRef}&status=booked,arrived&date=ge${new Date().toISOString()}&_sort=date&_count=1`,
-      )
-      .catch(() => undefined),
-    medplum.searchResources('Coverage', `beneficiary=${pacienteRef}&status=active&_count=10`).catch(() => [] as Coverage[]),
-    medplum
-      .searchResources('Invoice', `subject=${pacienteRef}&status=issued&_count=20`)
-      .catch(() => [] as Invoice[]),
-    medplum.searchResources('Flag', `subject=${pacienteRef}&status=active&_count=20`).catch(() => [] as Flag[]),
-  ]);
-
-  // `esPlanBW` primero: la obra social del paciente también es un Coverage
-  // activo, y `estadoDeCoverage` la interpretaría como membresía.
-  const plan = coberturas.find((c) => esPlanBW(c));
-  const estado = plan ? estadoDeCoverage(plan) : undefined;
-  const saldoARS = saldos.reduce((acc, i) => acc + (i.totalGross?.value ?? 0), 0);
-  const nombre = nombreDe(paciente);
-
-  return {
-    ...(nombre ? { nombre } : {}),
-    ...(appt?.start
-      ? { proximoTurno: `el ${fechaTurnoNotif(appt.start)}${appt.description ? ` · ${appt.description}` : ''}` }
-      : {}),
-    ...(plan && estado
-      ? {
-          plan: {
-            nombre: planCodigoDeCoverage(plan) ?? estado.tipo,
-            sesionesRestantes: Math.max(0, estado.total - estado.usadas),
-          },
-        }
-      : {}),
-    ...(saldoARS > 0 ? { saldoARS } : {}),
-    ...(tieneBloqueoPago(flags) ? { bloqueadoPorPago: true } : {}),
-  };
-}
-
-function nombreDe(p: Patient | undefined): string | undefined {
-  if (!p) {
-    return undefined;
-  }
-  const armado = [p.name?.[0]?.given?.join(' '), p.name?.[0]?.family].filter(Boolean).join(' ');
-  return p.name?.[0]?.text ?? (armado || undefined);
 }

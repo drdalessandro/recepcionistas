@@ -118,7 +118,7 @@ export interface Disponibilidad {
 }
 
 /** Los recursos donde el portal puede ofrecer el servicio. */
-function candidatosPara(servicio: Servicio): RecursoFisico[] {
+export function candidatosPara(servicio: Servicio): RecursoFisico[] {
   const delTipo = recursosParaCategoria(servicio.categoria);
   if (servicio.codigo === SERVICIO_GRUPAL) {
     // La sesión grupal vive SOLO en la Multiplaza (asientos individuales).
@@ -339,3 +339,34 @@ export function isoHorarioPortal(d: Date): string {
 
 /** Alias interno histórico. */
 const isoArgentina = isoHorarioPortal;
+
+/**
+ * Primera sala de la categoría donde cabe un turno nuevo `[inicio, inicio+dur)`
+ * con `ocupantes` personas, dado lo ya reservado ese día. Es el mismo criterio
+ * con el que `calcularDisponibilidad` decide si ofrece un horario (R-07:
+ * capacidad + desfasaje Recovery), separado para que quien tenga que ELEGIR la
+ * sala —la propuesta de reserva de la cola de Solicitudes— use exactamente el
+ * mismo y no otro. `undefined` si ninguna sala lo admite.
+ */
+export function salaLibrePara(
+  servicio: Servicio,
+  inicio: Date,
+  ocupantes: number,
+  reservas: ReservaRecurso[],
+): RecursoFisico | undefined {
+  const fin = new Date(inicio.getTime() + servicio.duracionMin * 60_000);
+  for (const recurso of candidatosPara(servicio)) {
+    if (ocupantes > recurso.capacidad) {
+      continue;
+    }
+    const candidata: ReservaRecurso = { recursoCodigo: recurso.codigo, inicio, fin, ocupantes };
+    const relevantes = reservas.filter(
+      (r) => r.recursoCodigo === recurso.codigo || compartenEquipo(r.recursoCodigo, recurso.codigo),
+    );
+    const conCandidata = [...relevantes, candidata];
+    if (validarCapacidadRecurso(conCandidata).ok && validarDesfasajeRecovery(conCandidata).ok) {
+      return recurso;
+    }
+  }
+  return undefined;
+}

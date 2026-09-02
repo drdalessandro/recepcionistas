@@ -4,6 +4,7 @@
 import type { BotEvent, MedplumClient } from '@medplum/core';
 import { getDisplayString } from '@medplum/core';
 import type { Appointment, ChargeItem, Communication, Coverage, Encounter, Flag, Invoice, Slot, Task, TaskInput } from '@medplum/fhirtypes';
+import type { ContextoPaciente } from '../lib/borrador.js';
 import { COD,
   COD_CONSENTIMIENTO,
   COD_LOINC_CONSENTIMIENTO,
@@ -2355,4 +2356,57 @@ export async function sesionesDelPlanEnSemana(
   const [y, m, d] = civil.split('-').map(Number);
   const lunesISO = claveSemana(new Date(y!, m! - 1, d!));
   return [...fechas].filter((f) => perteneceASemana(f, lunesISO)).length;
+}
+
+// ============================================================================
+// Ficha resumida del paciente para los asistentes (borrador, propuesta de reserva)
+// ============================================================================
+
+/**
+ * Lo que Recepción ya ve del paciente en pantalla, reunido en un solo lugar.
+ *
+ * Deliberadamente NO incluye nada clínico: ni screening, ni contraindicaciones,
+ * ni documentos. Del consentimiento solo viaja la señal binaria, que es lo mismo
+ * que ve el banner de Atender.
+ */
+export async function contextoPacienteResumido(medplum: MedplumClient, pacienteRef: string): Promise<ContextoPaciente> {
+  const paciente = await medplum.readResource('Patient', pacienteRef.split('/')[1] as string).catch(() => undefined);
+
+  const [appt, coberturas, saldos, flags] = await Promise.all([
+    medplum
+      .searchOne(
+        'Appointment',
+        `patient=${pacienteRef}&status=booked,arrived&date=ge${new Date().toISOString()}&_sort=date&_count=1`,
+      )
+      .catch(() => undefined),
+    medplum.searchResources('Coverage', `beneficiary=${pacienteRef}&status=active&_count=10`).catch(() => [] as Coverage[]),
+    medplum
+      .searchResources('Invoice', `subject=${pacienteRef}&status=issued&_count=20`)
+      .catch(() => [] as Invoice[]),
+    medplum.searchResources('Flag', `subject=${pacienteRef}&status=active&_count=20`).catch(() => [] as Flag[]),
+  ]);
+
+  // `esPlanBW` primero: la obra social del paciente también es un Coverage
+  // activo, y `estadoDeCoverage` la interpretaría como membresía.
+  const plan = coberturas.find((c) => esPlanBW(c));
+  const estado = plan ? estadoDeCoverage(plan) : undefined;
+  const saldoARS = saldos.reduce((acc, i) => acc + (i.totalGross?.value ?? 0), 0);
+  const nombre = paciente ? getDisplayString(paciente) || undefined : undefined;
+
+  return {
+    ...(nombre ? { nombre } : {}),
+    ...(appt?.start
+      ? { proximoTurno: `el ${fechaTurnoNotif(appt.start)}${appt.description ? ` · ${appt.description}` : ''}` }
+      : {}),
+    ...(plan && estado
+      ? {
+          plan: {
+            nombre: planCodigoDeCoverage(plan) ?? estado.tipo,
+            sesionesRestantes: Math.max(0, estado.total - estado.usadas),
+          },
+        }
+      : {}),
+    ...(saldoARS > 0 ? { saldoARS } : {}),
+    ...(tieneBloqueoPago(flags) ? { bloqueadoPorPago: true } : {}),
+  };
 }
