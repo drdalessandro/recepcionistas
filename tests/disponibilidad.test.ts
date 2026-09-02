@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { calcularDisponibilidad, horarioOfrecido, perfilDeReserva, type DiaDisponible } from '../src/lib/disponibilidad.js';
+import { calcularDisponibilidad, horarioOfrecido, perfilDeReserva, salaLibrePara, type DiaDisponible } from '../src/lib/disponibilidad.js';
 import { getServicio } from '../src/config/catalogo.js';
 import type { ReservaRecurso } from '../src/lib/reglas-turno.js';
 
@@ -455,5 +455,38 @@ describe('calcularDisponibilidad — grilla comercial R-22 (turnos por hora, en 
     const r = calcularDisponibilidad({ servicio: getServicio('HBOT_MONO'), perfil: 'PUBLICO', ahora: AHORA, reservas: [] });
     expect(horarioOfrecido(r.dias, new Date('2026-07-22T16:30:00-03:00'))).toBe(false);
     expect(horarioOfrecido(r.dias, new Date('2026-07-22T16:00:00-03:00'))).toBe(true);
+  });
+});
+
+describe('salaLibrePara — la sala que elige la propuesta de reserva (Nivel 4)', () => {
+  it('con todo libre, la primera sala de la categoría', () => {
+    const sala = salaLibrePara(getServicio('HBOT_MONO'), new Date('2026-07-23T09:00:00-03:00'), 1, []);
+    expect(sala?.codigo).toBe('R_HBOT_MONO');
+  });
+
+  it('con la mono tomada, pasa a la biplaza (mismo criterio que el chip ofrecido)', () => {
+    const sala = salaLibrePara(getServicio('HBOT_MONO'), new Date('2026-07-23T09:00:00-03:00'), 1, [
+      reserva('R_HBOT_MONO', '2026-07-23T09:00:00-03:00', '2026-07-23T10:00:00-03:00'),
+    ]);
+    expect(sala?.codigo).toBe('R_HBOT_BIPLAZA');
+  });
+
+  it('con todas las salas tomadas no hay sala: la propuesta se cae en vez de reservar encima', () => {
+    const sala = salaLibrePara(getServicio('HBOT_MONO'), new Date('2026-07-23T09:00:00-03:00'), 1, [
+      reserva('R_HBOT_MONO', '2026-07-23T09:00:00-03:00', '2026-07-23T10:00:00-03:00'),
+      reserva('R_HBOT_BIPLAZA', '2026-07-23T09:00:00-03:00', '2026-07-23T10:00:00-03:00', 2),
+    ]);
+    expect(sala).toBeUndefined();
+  });
+
+  it('2 personas no entran en la mono: va directo a la biplaza', () => {
+    const sala = salaLibrePara(getServicio('HBOT_BIPLAZA'), new Date('2026-07-23T09:00:00-03:00'), 2, []);
+    expect(sala?.codigo).toBe('R_HBOT_BIPLAZA');
+  });
+
+  it('Recovery Pro: el gabinete hermano arrancando a la misma hora manda al otro; a la media no hay ninguno libre', () => {
+    const g1 = reserva('R_RECOVERY_G1', '2026-07-23T15:00:00-03:00', '2026-07-23T16:00:00-03:00');
+    expect(salaLibrePara(getServicio('RECOVERY_PRO'), new Date('2026-07-23T15:30:00-03:00'), 1, [g1])?.codigo).toBe('R_RECOVERY_G2');
+    expect(salaLibrePara(getServicio('RECOVERY_PRO'), new Date('2026-07-23T15:00:00-03:00'), 1, [g1])).toBeUndefined();
   });
 });

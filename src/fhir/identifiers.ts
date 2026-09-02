@@ -134,6 +134,14 @@ export const EXT = {
    * se daría por intuición.
    */
   borradorUsado: `${BASE}/StructureDefinition/borrador-usado`,
+  /**
+   * En la SOLICITUD (Task): qué pasó con la propuesta de reserva del asistente
+   * (Nivel 4): `confirmada` (se reservó tal cual), `alternativa` (se reservó
+   * después de pedir "Otra opción") o `descartada` (Recepción la resolvió a
+   * mano). Gemela de `borrador-usado`: es el dato que decide si algún día una
+   * solicitud puede resolverse sola.
+   */
+  propuestaResultado: `${BASE}/StructureDefinition/propuesta-resultado`,
   // Onboarding / invitación al portal
   /** Canal elegido para invitar al paciente al portal (whatsapp / email / qr). */
   canalInvitacion: `${BASE}/StructureDefinition/canal-invitacion`,

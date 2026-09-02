@@ -180,6 +180,11 @@ con `effort: low` — un borrador corto de atención al cliente no necesita más
 - **Quinta intención: cancelaciones** (política R-14, 24 h).
 - **Respuestas rápidas de un click** en la bandeja, con los datos del paciente
   ya rellenados: útil como red si la API no responde.
-- **Nivel 4 — el agente propone la acción**, no solo el texto: «quiere mover el
-  turno del jueves» → botón *[Reagendar al viernes 15:00]*. Requiere los números
-  del Nivel 3 primero.
+- **Nivel 4 — el agente propone la acción**, no solo el texto. **Primera
+  rebanada implementada (2026-09-02)**, por decisión del PO y en paralelo al
+  número del Nivel 3: en la cola de **Solicitudes**, el botón *Proponer* arma la
+  reserva concreta y Recepción la confirma con *Reservar* (bot
+  `bw-proponer-reserva`, ver [`agente-solicitudes.md`](agente-solicitudes.md)).
+  Lo que sigue dentro del Nivel 4: mover y cancelar por lenguaje natural («quiere
+  mover el turno del jueves» → *[Reagendar al viernes 15:00]*), con los mismos
+  límites: propone, botón, bot.

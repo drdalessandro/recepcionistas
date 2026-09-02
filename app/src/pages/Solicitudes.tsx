@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Badge, Button, Card, Group, Loader, Stack, Text, Title } from '@mantine/core';
+import { Alert, Badge, Button, Card, Group, Loader, Stack, Text, Title } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
-import { IconInbox, IconUserHeart, IconCheck } from '@tabler/icons-react';
+import { IconCalendarCheck, IconCheck, IconInbox, IconSparkles, IconUserHeart } from '@tabler/icons-react';
 import { useMedplum, useSubscription } from '@medplum/react';
 import { getDisplayString } from '@medplum/core';
 import type { Patient, Task } from '@medplum/fhirtypes';
+import { EXT } from '@bw/fhir/identifiers';
+import { mensajeError, proponerReserva, reservarTurno, type IssueValidacion, type ResultadoPropuestaBot } from '../lib/bots';
 import type { ReservaPrefill } from './Atender';
 
 /**
@@ -14,6 +16,14 @@ import type { ReservaPrefill } from './Atender';
  * y luego se marca resuelto. La reserva sigue pasando por los bots (reglas), y al
  * reservar el bot COMPLETA la solicitud solo, así la card desaparece de acá sin
  * tocar nada (tiempo real por WebSocket + polling de respaldo, como la campanita).
+ *
+ * **Proponer** (Nivel 4, `bw-proponer-reserva`): el asistente lee la solicitud y
+ * los horarios reales del paciente y propone la reserva concreta (servicio, sala,
+ * horario, personas). Recepción decide: **Reservar** la manda a `bw-reservar-turno`
+ * con las reglas de siempre; **Otra opción** vuelve a pedir excluyendo lo ya
+ * descartado; **Lo hago a mano** abre Atender prellenado. El asistente nunca
+ * escribe en la agenda. Qué pasó con cada propuesta queda en la solicitud
+ * (`propuesta-resultado`): es la métrica que decide el paso siguiente.
  */
 
 const POLL_MS = 30_000;
@@ -42,6 +52,18 @@ function prefillDeTask(t: Task): ReservaPrefill | undefined {
   return servicioCodigo || inicio ? { servicioCodigo, inicio } : undefined;
 }
 
+type ResultadoPropuesta = 'confirmada' | 'alternativa' | 'descartada';
+
+interface EstadoPropuesta {
+  cargando: boolean;
+  resultado?: ResultadoPropuestaBot;
+  /** Inicios que Recepción ya descartó con "Otra opción". */
+  excluidos: string[];
+  reservando: boolean;
+  /** Bloqueos del último intento de Reservar (la propuesta no pasó las reglas). */
+  bloqueos?: IssueValidacion[];
+}
+
 export function Solicitudes({
   onAtender,
 }: {
@@ -51,6 +73,7 @@ export function Solicitudes({
   const [tasks, setTasks] = useState<Task[]>();
   const [nombres, setNombres] = useState<Map<string, string>>(new Map());
   const [resolviendo, setResolviendo] = useState<string>();
+  const [propuestas, setPropuestas] = useState<Record<string, EstadoPropuesta>>({});
 
   const cargar = useCallback((): void => {
     medplum
@@ -106,6 +129,93 @@ export function Solicitudes({
     }
   };
 
+  const setEstado = (taskId: string, cambio: Partial<EstadoPropuesta>): void =>
+    setPropuestas((prev) => {
+      const base: EstadoPropuesta = prev[taskId] ?? { cargando: false, excluidos: [], reservando: false };
+      return { ...prev, [taskId]: { ...base, ...cambio } };
+    });
+
+  /**
+   * Métrica del Nivel 4 (gemela de `borrador-usado`): qué pasó con la propuesta.
+   * Se lee el Task fresco porque al reservar el bot ya lo completó. Best-effort:
+   * no puede frenar una reserva ya hecha.
+   */
+  const registrarResultado = async (taskId: string, resultado: ResultadoPropuesta): Promise<void> => {
+    try {
+      const fresco = await medplum.readResource('Task', taskId);
+      const ext = (fresco.extension ?? []).filter((x) => x.url !== EXT.propuestaResultado);
+      await medplum.updateResource<Task>({
+        ...fresco,
+        extension: [...ext, { url: EXT.propuestaResultado, valueString: resultado }],
+      });
+    } catch {
+      // la métrica nunca frena la operación
+    }
+  };
+
+  const proponer = async (t: Task, excluir: string[] = []): Promise<void> => {
+    if (!t.id) {
+      return;
+    }
+    setEstado(t.id, { cargando: true, excluidos: excluir, bloqueos: undefined });
+    try {
+      const r = await proponerReserva(t.id, excluir);
+      setEstado(t.id, { cargando: false, resultado: r });
+    } catch (err) {
+      setEstado(t.id, { cargando: false, resultado: { ok: false, motivo: mensajeError(err) } });
+    }
+  };
+
+  const reservar = async (t: Task, estado: EstadoPropuesta): Promise<void> => {
+    const p = estado.resultado?.propuesta;
+    const pacienteRef = estado.resultado?.pacienteRef;
+    if (!t.id || !p || !pacienteRef) {
+      return;
+    }
+    setEstado(t.id, { reservando: true, bloqueos: undefined });
+    try {
+      const r = await reservarTurno({
+        pacienteRef,
+        servicioCodigo: p.servicioCodigo,
+        recursoCodigo: p.recursoCodigo,
+        inicio: p.inicio,
+        ocupantes: p.ocupantes,
+        confirmar: true,
+      });
+      if (r.creado) {
+        await registrarResultado(t.id, estado.excluidos.length > 0 ? 'alternativa' : 'confirmada');
+        notifications.show({
+          color: 'teal',
+          title: 'Turno reservado',
+          message: `${p.servicioNombre} · ${p.cuando} · ${p.recursoNombre}`,
+        });
+        cargar(); // el bot completó la solicitud: la card desaparece
+      } else {
+        setEstado(t.id, { reservando: false, bloqueos: r.bloqueos });
+      }
+    } catch (err) {
+      setEstado(t.id, { reservando: false });
+      notifications.show({ color: 'red', title: 'No se pudo reservar', message: mensajeError(err) });
+    }
+  };
+
+  const otraOpcion = (t: Task, estado: EstadoPropuesta): void => {
+    const actual = estado.resultado?.propuesta?.inicio;
+    void proponer(t, actual ? [...estado.excluidos, actual] : estado.excluidos);
+  };
+
+  const aMano = async (t: Task, estado: EstadoPropuesta): Promise<void> => {
+    const pid = pacienteIdDeTask(t);
+    const p = estado.resultado?.propuesta;
+    if (!pid || !t.id) {
+      return;
+    }
+    if (p) {
+      await registrarResultado(t.id, 'descartada');
+    }
+    onAtender(pid, p ? { servicioCodigo: p.servicioCodigo, inicio: p.inicio } : prefillDeTask(t));
+  };
+
   if (tasks === undefined) {
     return (
       <Group justify="center" py="xl">
@@ -129,6 +239,8 @@ export function Solicitudes({
       ) : (
         tasks.map((t) => {
           const pid = pacienteIdDeTask(t);
+          const estado = t.id ? propuestas[t.id] : undefined;
+          const propuesta = estado?.resultado?.propuesta;
           return (
             <Card key={t.id} withBorder radius="md" p="md">
               <Group justify="space-between" wrap="nowrap" align="flex-start">
@@ -140,6 +252,17 @@ export function Solicitudes({
                   </Text>
                 </div>
                 <Group gap="xs" wrap="nowrap">
+                  {!estado && (
+                    <Button
+                      size="xs"
+                      variant="light"
+                      leftSection={<IconSparkles size={15} />}
+                      disabled={!pid}
+                      onClick={() => void proponer(t)}
+                    >
+                      Proponer
+                    </Button>
+                  )}
                   <Button
                     size="xs"
                     leftSection={<IconUserHeart size={15} />}
@@ -160,6 +283,54 @@ export function Solicitudes({
                   </Button>
                 </Group>
               </Group>
+
+              {estado?.cargando && (
+                <Group gap="xs" mt="sm">
+                  <Loader size="xs" />
+                  <Text size="sm" c="dimmed">
+                    Armando la propuesta…
+                  </Text>
+                </Group>
+              )}
+
+              {estado && !estado.cargando && estado.resultado && !propuesta && (
+                <Alert mt="sm" color="gray" variant="light" icon={<IconSparkles size={16} />}>
+                  {estado.resultado.motivo ?? 'Sin propuesta: mejor resolvela vos.'}
+                </Alert>
+              )}
+
+              {estado && !estado.cargando && propuesta && (
+                <Alert mt="sm" color="teal" variant="light" icon={<IconCalendarCheck size={16} />}>
+                  <Stack gap={6}>
+                    <Text size="sm" fw={600}>
+                      Propuesta: {propuesta.servicioNombre} · {propuesta.cuando} · {propuesta.recursoNombre}
+                      {propuesta.ocupantes > 1 ? ` · ${propuesta.ocupantes} personas` : ''}
+                    </Text>
+                    <Text size="sm">{propuesta.motivo}</Text>
+                    {propuesta.alternativas.length > 0 && (
+                      <Text size="xs" c="dimmed">
+                        También libres: {propuesta.alternativas.map((a) => a.cuando).join(' · ')}
+                      </Text>
+                    )}
+                    {estado.bloqueos && estado.bloqueos.length > 0 && (
+                      <Text size="sm" c="red">
+                        No se pudo reservar: {estado.bloqueos.map((b) => `${b.regla} — ${b.mensaje}`).join(' · ')}
+                      </Text>
+                    )}
+                    <Group gap="xs" mt={4}>
+                      <Button size="xs" loading={estado.reservando} onClick={() => void reservar(t, estado)}>
+                        Reservar
+                      </Button>
+                      <Button size="xs" variant="light" disabled={estado.reservando} onClick={() => otraOpcion(t, estado)}>
+                        Otra opción
+                      </Button>
+                      <Button size="xs" variant="subtle" color="gray" disabled={estado.reservando} onClick={() => void aMano(t, estado)}>
+                        Lo hago a mano
+                      </Button>
+                    </Group>
+                  </Stack>
+                </Alert>
+              )}
             </Card>
           );
         })

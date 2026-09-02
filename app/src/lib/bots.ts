@@ -506,3 +506,40 @@ export async function estadoSeguridadPaciente(pacienteRef: string): Promise<Esta
     return noVerificable(mensajeError(e));
   }
 }
+
+export interface PropuestaReservaBot {
+  servicioCodigo: string;
+  servicioNombre: string;
+  recursoCodigo: string;
+  recursoNombre: string;
+  /** ISO con offset de Argentina, tal como lo espera `reservarTurno`. */
+  inicio: string;
+  fin: string;
+  ocupantes: number;
+  /** "jueves 03/09 · 16:00". */
+  cuando: string;
+  /** Para Recepción: qué pidió, qué se propone y por qué. */
+  motivo: string;
+  alternativas: Array<{ inicio: string; cuando: string }>;
+}
+
+export interface ResultadoPropuestaBot {
+  ok: boolean;
+  pacienteRef?: string;
+  propuesta?: PropuestaReservaBot;
+  /** Por qué no hay propuesta (API apagada, tema para una persona, nada disponible…). */
+  motivo?: string;
+}
+
+/**
+ * Pide la propuesta de reserva para una solicitud del portal (bw-proponer-reserva).
+ *
+ * Solo PROPONE: servicio, sala y horario elegidos entre los disponibles reales.
+ * La reserva la hace `reservarTurno` cuando la recepcionista toca Reservar; el
+ * asistente nunca escribe en la agenda. `excluir` son inicios que Recepción ya
+ * descartó con "Otra opción".
+ */
+export async function proponerReserva(taskId: string, excluir?: string[]): Promise<ResultadoPropuestaBot> {
+  const id = await botIdPorNombre('bw-proponer-reserva');
+  return (await medplum.executeBot(id, { taskId, ...(excluir?.length ? { excluir } : {}) })) as ResultadoPropuestaBot;
+}
