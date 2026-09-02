@@ -1,44 +1,55 @@
 /**
- * Demo de ocupación al 100 % (producción, se autodestruye a las 48 h).
+ * Demo de ocupación (producción; se autodestruye sola).
  *
- *   npm run demo:ocupacion                 → limpia demo previa y llena HOY + MAÑANA
- *   npm run demo:ocupacion -- --dias 3     → llena hoy + 2 días más
- *   npm run demo:ocupacion -- --dry-run    → muestra el plan sin tocar el servidor
- *   npm run demo:ocupacion -- --limpiar    → borra TODOS los datos demo ya
+ *   npm run demo:ocupacion                          → limpia demo previa y llena HOY + MAÑANA al 100 % (vive 48 h)
+ *   npm run demo:ocupacion -- --dias 3              → llena hoy + 2 días más
+ *   npm run demo:ocupacion -- --hasta 2026-09-15    → llena desde hoy hasta esa fecha y la mantiene VIVA hasta ese día
+ *   npm run demo:ocupacion -- --ocupacion 0.6       → 60 % de la agenda: deja huecos reales para probar reservas
+ *   npm run demo:ocupacion -- --dry-run             → muestra el plan sin tocar el servidor
+ *   npm run demo:ocupacion -- --limpiar             → borra TODOS los datos demo ya (vigentes o no)
  *
- * Qué genera: todas las salas llenas el día entero (combos encadenados,
- * Multiplaza grupal, gabinetes Recovery desfasados 30' — la demo respeta R-07,
- * hay test), mensajes entrantes de WhatsApp y del portal (badge de Mensajes),
- * solicitudes de turno como las que crea la web (badge de Solicitudes),
- * avisos del sistema (badge de Avisos) y cobros para que Reportes/Caja se vean
- * vivos. La campanita cuenta todo sola.
+ * Qué genera: las salas ocupadas el día entero (o al porcentaje pedido, con
+ * huecos deterministas: combos encadenados, Multiplaza grupal, gabinetes
+ * Recovery desfasados 30' — la demo respeta R-07 y R-22, hay tests),
+ * mensajes entrantes de WhatsApp y del portal (badge de Mensajes), solicitudes
+ * de turno como las que crea la web (badge de Solicitudes), avisos del sistema
+ * (badge de Avisos) y cobros para que Reportes/Caja se vean vivos. La
+ * campanita cuenta todo sola.
+ *
+ * R-22: los turnos arrancan a la hora en punto (Recovery Pro también a la
+ * media). Una sesión de 30' deja la media hora siguiente libre — exactamente
+ * lo que Recepción va a ver en la agenda real.
  *
  * SEGURIDAD: todo lleva `meta.tag = demo`. Los pacientes demo tienen MODO
  * AVIÓN (ver `pacienteEsDemo` en src/bots/_shared.ts): los crons reales
  * (recordatorios 48 h/2 h, vencimientos, cobros) van a actuar sobre estos
  * turnos y sus mensajes aparecen en el hilo — pero NADA sale por Twilio ni
  * SES. La limpieza (cron `bw-limpiar-demo` o `--limpiar`) borra todo,
- * solicitudes y avisos incluidos.
+ * solicitudes y avisos incluidos. Con `--hasta`, cada recurso lleva además el
+ * tag `demo-hasta` y el cron lo respeta hasta esa fecha (ver src/lib/demo.ts).
  *
  * Correrlo un viernes a la mañana llena viernes + sábado y el domingo (centro
  * cerrado) la limpieza de 48 h se lleva todo: lunes arranca limpio.
  *
- * ⚠️ EFECTO REAL mientras la demo viva: el centro está lleno DE VERDAD para el
- * sistema — un paciente real que entre al portal va a ver todo ocupado y sus
- * solicitudes van a rebotar con "horario ocupado". Reportes y Caja también
- * muestran los números demo. Es el precio de la demo en producción: si hace
- * falta cortarla antes, `npm run demo:ocupacion -- --limpiar` la borra ya.
+ * ⚠️ EFECTO REAL mientras la demo viva: los turnos demo ocupan la agenda DE
+ * VERDAD para el sistema — un paciente real que entre al portal ve esas
+ * franjas tomadas y sus solicitudes sobre ellas rebotan con "horario ocupado".
+ * Al 100 % el centro está lleno; con `--ocupacion` quedan huecos reales.
+ * Reportes y Caja también muestran los números demo. Es el precio de la demo
+ * en producción: si hace falta cortarla antes, `--limpiar` la borra ya.
  */
 import 'dotenv/config';
 import { MedplumClient } from '@medplum/core';
 import type { Appointment, Coverage, Patient, Slot, Task } from '@medplum/fhirtypes';
 import { getServicio } from '../config/catalogo.js';
+import { grillaTurnoMin } from '../config/reglas.js';
 import { HORARIO_SEMANAL } from '../config/horario.js';
 import { MEDICOS, codigoConsulta } from '../config/medicos.js';
 import { COD, EXT, SYSTEM, TIPO_AVISO } from '../fhir/identifiers.js';
 import { clasificacionDeServicio } from '../fhir/appointment.js';
 import { identificadoresDni, nombreLegal } from '../fhir/paciente.js';
-import { META_DEMO, borrarRecursosDemo, conEsperaDeCuota } from '../bots/_shared.js';
+import { borrarRecursosDemo, conEsperaDeCuota } from '../bots/_shared.js';
+import { metaDemo } from '../lib/demo.js';
 
 const TZ = '-03:00';
 
@@ -123,17 +134,47 @@ function diaSemana(fecha: string): number {
   return new Date(`${fecha}T12:00:00Z`).getUTCDay();
 }
 
+export interface OpcionesPlan {
+  /**
+   * Fracción de la agenda que se ocupa (0–1, default 1 = llena). Con menos de
+   * 1, se saltean turnos con un patrón determinista que deja huecos repartidos
+   * en todas las salas y franjas: sirve para probar reservas, propuestas del
+   * asistente y solicitudes del portal contra una agenda con lugar.
+   */
+  ocupacion?: number;
+}
+
+/** R-22: el próximo arranque válido para un servicio, a partir de un instante. */
+function alinearAGrilla(t: Date, grillaMin: number): Date {
+  const minutoDelDia = Math.floor((t.getTime() - 3 * 60 * 60_000) / 60_000) % 1440;
+  const resto = minutoDelDia % grillaMin;
+  return resto === 0 ? t : new Date(t.getTime() + (grillaMin - resto) * 60_000);
+}
+
 /**
- * Plan de ocupación TOTAL de un día: cada sala encadena sesiones del catálogo
- * de punta a punta del horario real. Estados según el reloj (`ahora`): lo que
- * terminó está completado, lo de ahora mismo "llegó", lo futuro confirmado —
- * con algún tentativo suelto para que la leyenda amarilla también se vea.
+ * ¿Este turno entra en la demo con la ocupación pedida? Patrón determinista
+ * (no aleatorio: la demo tiene que ser reproducible y testeable) que reparte
+ * los huecos entre salas y horas en vez de vaciar una punta del día.
  */
-export function planDia(fecha: string, ahora: Date): TurnoPlan[] {
+function entra(ocupacion: number, salaIdx: number, i: number): boolean {
+  const decimas = Math.round(Math.min(1, Math.max(0, ocupacion)) * 10);
+  return (i * 7 + salaIdx * 3) % 10 < decimas;
+}
+
+/**
+ * Plan de ocupación de un día: cada sala encadena sesiones del catálogo de
+ * punta a punta del horario real, arrancando en la grilla comercial de cada
+ * servicio (R-22: en punto; Recovery Pro también a la media). Estados según el
+ * reloj (`ahora`): lo que terminó está completado, lo de ahora mismo "llegó",
+ * lo futuro confirmado — con algún tentativo suelto para que la leyenda
+ * amarilla también se vea. Con `ocupacion` < 1 quedan huecos.
+ */
+export function planDia(fecha: string, ahora: Date, opts: OpcionesPlan = {}): TurnoPlan[] {
   const horario = HORARIO_SEMANAL.find((h) => h.dia === diaSemana(fecha));
   if (!horario?.abierto) {
     return [];
   }
+  const ocupacion = opts.ocupacion ?? 1;
 
   const plan: TurnoPlan[] = [];
   let paciente = 0;
@@ -151,20 +192,25 @@ export function planDia(fecha: string, ahora: Date): TurnoPlan[] {
     return permitePendiente && contadorFuturos % 11 === 0 ? 'pending' : 'booked';
   };
 
-  for (const sala of SALAS) {
+  for (const [salaIdx, sala] of SALAS.entries()) {
     let iServicio = 0;
     let iTanda = 0;
+    let iTurno = 0;
     for (const franja of horario.franjas) {
       let t = new Date(aFecha(fecha, franja.desde).getTime() + (sala.offsetMin ?? 0) * 60_000);
       const cierre = aFecha(fecha, franja.hasta);
       for (;;) {
         const servicioCodigo = sala.servicios[iServicio % sala.servicios.length]!;
         const servicio = getServicio(servicioCodigo);
+        // R-22: cada turno arranca en la grilla comercial de SU servicio. Una
+        // sesión de 30' deja la media hora siguiente libre: así es la agenda real.
+        t = alinearAGrilla(t, grillaTurnoMin(servicio.categoria));
         const fin = new Date(t.getTime() + servicio.duracionMin * 60_000);
         if (fin.getTime() > cierre.getTime()) {
           break;
         }
-        if (sala.grupal) {
+        const incluir = entra(ocupacion, salaIdx, iTurno++);
+        if (incluir && sala.grupal) {
           // Sesión compartida: una reserva POR PERSONA, mismas horas (así la
           // agenda la apila como columna y el aforo se cuenta por personas).
           const personas = sala.grupal[iTanda % sala.grupal.length]!;
@@ -181,7 +227,7 @@ export function planDia(fecha: string, ahora: Date): TurnoPlan[] {
               pacienteIdx: paciente++ % CANTIDAD_PACIENTES,
             });
           }
-        } else {
+        } else if (incluir) {
           plan.push({
             recursoCodigo: sala.recursoCodigo,
             servicioCodigo,
@@ -199,6 +245,7 @@ export function planDia(fecha: string, ahora: Date): TurnoPlan[] {
   }
 
   // Consultorio: solo cuando hay médico publicado (agenda real de config).
+  let iConsulta = 0;
   for (const medico of MEDICOS) {
     const servicioCodigo = codigoConsulta(medico.codigo);
     const duracionMin = getServicio(servicioCodigo).duracionMin;
@@ -207,6 +254,10 @@ export function planDia(fecha: string, ahora: Date): TurnoPlan[] {
       const cierre = aFecha(fecha, franja.hasta);
       while (t.getTime() + duracionMin * 60_000 <= cierre.getTime()) {
         const fin = new Date(t.getTime() + duracionMin * 60_000);
+        if (!entra(ocupacion, SALAS.length, iConsulta++)) {
+          t = fin;
+          continue;
+        }
         plan.push({
           recursoCodigo: 'R_CONSULTORIO',
           servicioCodigo,
@@ -310,8 +361,14 @@ async function enLotes<T>(items: T[], tamano: number, fn: (item: T) => Promise<v
   }
 }
 
-async function generar(medplum: MedplumClient, dias: number): Promise<void> {
+interface OpcionesDemo extends OpcionesPlan {
+  /** Fecha civil AR ("YYYY-MM-DD") hasta la que la demo sigue viva (tag `demo-hasta`). */
+  hasta?: string;
+}
+
+async function generar(medplum: MedplumClient, dias: number, opts: OpcionesDemo = {}): Promise<void> {
   const ahora = new Date();
+  const meta = metaDemo(opts.hasta);
 
   // Cuota FHIR de Medplum: cada escritura cuesta 100 puntos de 50.000/min
   // (500 escrituras/min) y este generador hace ~1.400. TODAS las escrituras
@@ -327,7 +384,7 @@ async function generar(medplum: MedplumClient, dias: number): Promise<void> {
     pacientes.push(
       await crear<Patient>({
         resourceType: 'Patient',
-        meta: META_DEMO,
+        meta,
         active: true,
         name: [nombreLegal({ texto: `${p.nombre} ${p.apellido}`, given: p.nombre, family: p.apellido })],
         identifier: identificadoresDni(p.dni),
@@ -377,7 +434,7 @@ async function generar(medplum: MedplumClient, dias: number): Promise<void> {
     const p = pacientes[plan.idx]!;
     await crear<Coverage>({
       resourceType: 'Coverage',
-      meta: META_DEMO,
+      meta,
       status: 'active',
       beneficiary: { reference: `Patient/${p.id}` },
       subscriber: { reference: `Patient/${p.id}` },
@@ -391,7 +448,7 @@ async function generar(medplum: MedplumClient, dias: number): Promise<void> {
   // Banner de seguridad: una contraindicación activa para mostrar el circuito.
   await crear({
     resourceType: 'Flag',
-    meta: META_DEMO,
+    meta,
     status: 'active',
     category: [{ text: 'Contraindicación' }],
     code: {
@@ -423,14 +480,14 @@ async function generar(medplum: MedplumClient, dias: number): Promise<void> {
   // Ocupación al 100 % por día.
   for (let d = 0; d < dias; d++) {
     const fecha = fechaAR(d);
-    const plan = planDia(fecha, ahora).filter((t) => schedules.has(t.recursoCodigo));
+    const plan = planDia(fecha, ahora, opts).filter((t) => schedules.has(t.recursoCodigo));
     let creados = 0;
     await enLotes(plan, 5, async (t) => {
       const paciente = pacientes[t.pacienteIdx]!;
       const servicio = getServicio(t.servicioCodigo);
       const slot = await crear<Slot>({
         resourceType: 'Slot',
-        meta: META_DEMO,
+        meta,
         status: 'busy',
         schedule: { reference: `Schedule/${schedules.get(t.recursoCodigo)}` },
         start: t.inicio.toISOString(),
@@ -440,7 +497,7 @@ async function generar(medplum: MedplumClient, dias: number): Promise<void> {
       const pract = t.practitionerCodigo ? practitioners.get(t.practitionerCodigo) : undefined;
       await crear<Appointment>({
         resourceType: 'Appointment',
-        meta: META_DEMO,
+        meta,
         status: t.status,
         description: servicio.nombre,
         ...clasificacionDeServicio(t.servicioCodigo),
@@ -473,7 +530,7 @@ async function generar(medplum: MedplumClient, dias: number): Promise<void> {
     const p = pacientes[m.pacienteIdx]!;
     await crear({
       resourceType: 'Communication',
-      meta: META_DEMO,
+      meta,
       status: 'completed',
       // Escalonados hacia atrás para que la bandeja tenga cronología creíble.
       sent: new Date(ahora.getTime() - (i + 1) * 17 * 60_000).toISOString(),
@@ -490,7 +547,7 @@ async function generar(medplum: MedplumClient, dias: number): Promise<void> {
     const p = pacientes[s.pacienteIdx]!;
     await crear<Task>({
       resourceType: 'Task',
-      meta: META_DEMO,
+      meta,
       status: 'requested',
       intent: 'proposal',
       authoredOn: ahora.toISOString(),
@@ -532,7 +589,7 @@ async function generar(medplum: MedplumClient, dias: number): Promise<void> {
   for (const [i, a] of avisos.entries()) {
     await crear<Task>({
       resourceType: 'Task',
-      meta: META_DEMO,
+      meta,
       status: 'requested',
       intent: 'order',
       priority: 'urgent',
@@ -560,7 +617,7 @@ async function generar(medplum: MedplumClient, dias: number): Promise<void> {
   for (const c of cobros) {
     await crear({
       resourceType: 'Invoice',
-      meta: META_DEMO,
+      meta,
       status: 'balanced',
       date: ahora.toISOString(),
       subject: { reference: `Patient/${pacientes[c.idx]!.id}` },
@@ -578,11 +635,11 @@ async function generar(medplum: MedplumClient, dias: number): Promise<void> {
   console.log(`  • Cobros (Invoice): ${cobros.length}`);
 }
 
-function imprimirPlan(dias: number): void {
+function imprimirPlan(dias: number, opts: OpcionesPlan): void {
   const ahora = new Date();
   for (let d = 0; d < dias; d++) {
     const fecha = fechaAR(d);
-    const plan = planDia(fecha, ahora);
+    const plan = planDia(fecha, ahora, opts);
     const porSala = new Map<string, number>();
     for (const t of plan) {
       porSala.set(t.recursoCodigo, (porSala.get(t.recursoCodigo) ?? 0) + 1);
@@ -595,14 +652,34 @@ function imprimirPlan(dias: number): void {
   console.log(`\nAdemás: ${MENSAJES.length} mensajes · ${SOLICITUDES.length} solicitudes · 3 avisos · 6 cobros · ${CANTIDAD_PACIENTES} pacientes`);
 }
 
+/** Días calendario desde hoy (AR) hasta `hastaISO`, ambos incluidos. */
+export function diasHasta(hastaISO: string, desde: Date = new Date()): number {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(hastaISO)) {
+    throw new Error(`--hasta tiene que ser una fecha "YYYY-MM-DD": ${hastaISO}`);
+  }
+  const hoy = new Date(`${fechaAR(0, desde)}T00:00:00Z`).getTime();
+  const hasta = new Date(`${hastaISO}T00:00:00Z`).getTime();
+  return Math.max(1, Math.round((hasta - hoy) / 86_400_000) + 1);
+}
+
 async function main(): Promise<void> {
   const args = process.argv.slice(2);
-  const iDias = args.indexOf('--dias');
-  const dias = iDias >= 0 ? Math.max(1, Number(args[iDias + 1]) || 2) : 2;
+  const valor = (flag: string): string | undefined => {
+    const i = args.indexOf(flag);
+    return i >= 0 ? args[i + 1] : undefined;
+  };
+  const hasta = valor('--hasta');
+  const dias = hasta ? diasHasta(hasta) : Math.max(1, Number(valor('--dias')) || 2);
+  const ocupacionArg = valor('--ocupacion');
+  const ocupacion = ocupacionArg === undefined ? 1 : Number(ocupacionArg);
+  if (!(ocupacion > 0 && ocupacion <= 1)) {
+    throw new Error(`--ocupacion tiene que ser un número entre 0 y 1 (fracción de la agenda): ${ocupacionArg}`);
+  }
+  const opts: OpcionesDemo = { ocupacion, ...(hasta ? { hasta } : {}) };
 
   if (args.includes('--dry-run')) {
-    console.log('Plan de ocupación (sin conectarse al servidor):');
-    imprimirPlan(dias);
+    console.log(`Plan de ocupación al ${Math.round(ocupacion * 100)} % (sin conectarse al servidor):`);
+    imprimirPlan(dias, opts);
     return;
   }
 
@@ -618,9 +695,12 @@ async function main(): Promise<void> {
   console.log('Limpiando datos demo previos…');
   const prev = await borrarRecursosDemo(medplum);
   console.log(`  borrados: ${prev.borrados}`);
-  console.log(`Generando ocupación al 100 % (${dias} día(s), se autodestruye a las 48 h):`);
-  await generar(medplum, dias);
-  console.log('\n✓ Demo de ocupación cargada. Se borra sola a las 48 h (bw-limpiar-demo) o con: npm run demo:ocupacion -- --limpiar');
+  const vida = hasta ? `viva hasta el ${hasta}` : 'se autodestruye a las 48 h';
+  console.log(`Generando ocupación al ${Math.round(ocupacion * 100)} % (${dias} día(s), ${vida}):`);
+  await generar(medplum, dias, opts);
+  console.log(
+    `\n✓ Demo de ocupación cargada. ${hasta ? `bw-limpiar-demo la respeta hasta el ${hasta} y la borra después` : 'Se borra sola a las 48 h (bw-limpiar-demo)'}, o antes con: npm run demo:ocupacion -- --limpiar`,
+  );
 }
 
 // El import de tests no debe ejecutar el CLI.

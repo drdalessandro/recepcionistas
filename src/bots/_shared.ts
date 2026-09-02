@@ -53,6 +53,7 @@ import { lineaComercialDeItem } from '../lib/cobros.js';
 import { cicloMes, motivoNoDisponible, parseClavePlan, saldoPlan } from '../lib/planes.js';
 import { evaluarCancelacion, type ReservaRecurso } from '../lib/reglas-turno.js';
 import { isoArgentina } from '../lib/sena.js';
+import { demoVigente } from '../lib/demo.js';
 import { ventana24h } from '../lib/auto-respuesta.js';
 import { SECRET_CONTENT_SID_GENERICO, aE164Argentino, contentVariables, nombreSecretContentSid } from '../lib/whatsapp.js';
 
@@ -153,6 +154,10 @@ export async function borrarRecursosDemo(
 ): Promise<ResultadoBorradoDemo> {
   const porTipo: Record<string, number> = {};
   let borrados = 0;
+  // Limpieza AUTOMÁTICA (con corte de 48 h): respeta la vigencia declarada con
+  // el tag `demo-hasta` (una demo "hasta el 15/09" vive hasta esa fecha). El
+  // borrado explícito (sin corte) se lleva todo, vigente o no.
+  const hoy = opts.antesDe ? fechaCivilAR(new Date()) : undefined;
   for (const tipo of TIPOS_DEMO) {
     let query = `_tag=${SYSTEM.demo}|demo&_count=1000`;
     if (opts.antesDe) {
@@ -161,6 +166,9 @@ export async function borrarRecursosDemo(
     const recursos = await conEsperaDeCuota(() => medplum.searchResources(tipo, query));
     for (const r of recursos) {
       if (!r.id) {
+        continue;
+      }
+      if (hoy && demoVigente(r.meta, hoy)) {
         continue;
       }
       try {

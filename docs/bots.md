@@ -40,7 +40,7 @@ deployan al runtime **`awslambda`** de Medplum (configurable con la env
 | `bw-alta-paciente` | Alta de cliente: crea/actualiza el `Patient` (dedupe por DNI/email/teléfono). Con `cicloVida:'lead'` registra además la consulta del mostrador (tarjeta en el kanban del CRM + `Provenance` de atribución). Si viene `pedido` —pidió algo que **no ofrecemos**— deja su propio `Basic` de demanda no cubierta, **también cuando el paciente ya existía**: la tarjeta de lead solo se crea para fichas nuevas y ese dato no puede depender de eso. | `executeBot` (Atender → Nuevo paciente / Registrar consulta). |
 | `bw-invitar-paciente` | Invita al paciente al **portal** (invite de Medplum) y entrega el link por WhatsApp/email/QR. **Requiere admin.** | `executeBot` (Atender → Invitar al portal). |
 | `bw-reset-password` | **"¿Olvidaste tu contraseña?" del portal** (endpoint PÚBLICO vía nginx, receta MP/Twilio). El nativo de Medplum arma el link sobre el `appBaseUrl` del server —que es de la **consola de Admin** y no se toca (Andrés, 2026-08-20)—; este bot lo arma sobre `PORTAL_BASE_URL` y manda el email él mismo, en castellano y con marca propia. Valida reCAPTCHA **en el server** (secret `RECAPTCHA_SECRET_KEY` en Project Secrets), responde SIEMPRE igual exista o no la cuenta (anti-enumeración), reusa el link vigente ante doble click, y el `location` de nginx lleva `limit_req`. **Requiere admin** (lee `UserSecurityRequest`). | `POST /webhooks/reset-password` (nginx inyecta el Basic de la ClientApplication) desde la página pública del portal. |
-| `bw-limpiar-demo` | **Cron:** borra los datos demo (tag `demo`) con más de 48 h. | `cronString` del Bot (cada ~1 h). |
+| `bw-limpiar-demo` | **Cron:** borra los datos demo (tag `demo`) con más de 48 h. Respeta el tag `demo-hasta` (una demo generada con `--hasta 2026-09-15` vive hasta ese día y se borra en la corrida siguiente). | `cronString` del Bot (cada ~1 h). |
 | `bw-enviar-whatsapp` | Envía WhatsApp (Twilio) y registra `Communication`. | `executeBot` por evento o manual. |
 | `bw-solicitar-turno` | **Portal:** crea una solicitud de turno (`Task` `code=solicitud-turno`) del paciente y avisa a Recepción por WhatsApp (`RECEPCION_WHATSAPP_TO`). No reserva: Recepción confirma. **Desde 2026-08-12** (feedback de recepción): si la solicitud trae horario exacto + código de servicio, verifica contra la MISMA disponibilidad de `bw-disponibilidad` y un horario tomado se rechaza con `motivo:'horario-ocupado'` + `alternativas` (chips frescos) — defensa en profundidad aunque el portal muestre una grilla vieja (ver `docs/handoff-portal-reservas-notificaciones.md`). Best-effort: si el chequeo falla, la solicitud pasa como siempre. | `executeBot` desde el **portal** del paciente. |
 | `bw-disponibilidad` | **Portal, SOLO LECTURA:** horarios reservables para el paciente (chips de Reservas): ventana por perfil R-13 (`tag-fm` → FM · membresía → intensidad · si no, público), capacidad R-07, desfasaje Recovery y horario del centro. También descuenta las **solicitudes pendientes** (Task sin resolver con horario elegido: individual → el horario no se ofrece; Multiplaza → resta cupo), con vencimiento de 24 h para que un Task olvidado no bloquee. Multiplaza sale como sesión grupal con `lugares`/`ocupantes` (solo confirmados). Cada día trae además sus **`ocupados`** (horarios de la grilla ya tomados por agenda, solicitud pendiente o cupo grupal agotado): el portal los pinta tachados, no elegibles (misma UX que Consulta médica). No crea nada: la reserva sigue siendo solicitud. | `executeBot` desde el **portal** del paciente. |
@@ -359,6 +359,15 @@ toca datos reales.
 **Autodestrucción:** el bot **`bw-limpiar-demo`** (cron, p. ej. `0 * * * *` cada
 hora) borra los demo cuyo `_lastUpdated` supere las 48 h. Configurar su `cronString`
 una vez en Medplum. Sin el cron, igual podés limpiar a mano con `--limpiar`.
+
+**Demo que dura más de 48 h:** `npm run demo:ocupacion -- --hasta 2026-09-15`
+llena la agenda desde hoy hasta esa fecha y etiqueta cada recurso con
+`demo-hasta` (system `https://biowellness.ar/fhir/demo-hasta`, código la fecha):
+el cron lo respeta hasta ese día inclusive y lo borra después (`src/lib/demo.ts`).
+`--limpiar` no mira la vigencia: borra todo. Con `--ocupacion 0.6` la agenda queda
+al 60 % con huecos deterministas repartidos en todas las salas — es lo que sirve
+para probar reservas, solicitudes del portal y la propuesta del asistente contra
+una agenda con lugar. Los turnos demo arrancan en la grilla comercial (R-22).
 
 > El bot que borra necesita permiso de borrado sobre esos tipos (admin de proyecto
 > o una AccessPolicy con delete). La generación se hace por script, no por bot.

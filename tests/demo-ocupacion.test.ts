@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { CANTIDAD_PACIENTES, pacientesDemo, planDia } from '../src/seed/demo-ocupacion.js';
-import { validarRecursos } from '../src/lib/reglas-turno.js';
+import { CANTIDAD_PACIENTES, diasHasta, pacientesDemo, planDia } from '../src/seed/demo-ocupacion.js';
+import { validarGrillaTurno, validarRecursos } from '../src/lib/reglas-turno.js';
+import { getServicio } from '../src/config/catalogo.js';
 
 /**
  * La demo de ocupación tiene una obligación que los datos reales no: NO puede
@@ -32,8 +33,58 @@ describe('demo-ocupacion · planDia', () => {
     expect(plan.filter((t) => t.recursoCodigo === 'R_HBOT_MONO')).toHaveLength(14);
     // Sábado corta 20:00 → 12.
     expect(planDia(SABADO, MEDIODIA).filter((t) => t.recursoCodigo === 'R_HBOT_MONO')).toHaveLength(12);
-    // Cada puesto IHHT: 28 medias horas.
-    expect(plan.filter((t) => t.recursoCodigo === 'R_IHHT_1')).toHaveLength(28);
+    // Cada puesto IHHT: 14 sesiones de 30' arrancando en punto (R-22); la
+    // media hora siguiente queda libre, como en la agenda real.
+    const ihht = plan.filter((t) => t.recursoCodigo === 'R_IHHT_1');
+    expect(ihht).toHaveLength(14);
+    for (const t of ihht) {
+      expect(t.inicio.getUTCMinutes()).toBe(0);
+    }
+  });
+
+  it('R-22: cada turno de la demo arranca en la grilla comercial de su servicio (Recovery Pro a la media también)', () => {
+    for (const fecha of [VIERNES, SABADO]) {
+      for (const t of planDia(fecha, MEDIODIA)) {
+        const r = validarGrillaTurno(getServicio(t.servicioCodigo), t.inicio);
+        expect(r.ok, `${t.recursoCodigo} ${t.inicio.toISOString()}: ${r.bloqueos.map((b) => b.mensaje).join(' | ')}`).toBe(true);
+      }
+    }
+    // El Gabinete 2 sigue arrancando a la media (única excepción de R-22).
+    expect(planDia(VIERNES, MEDIODIA).some((t) => t.recursoCodigo === 'R_RECOVERY_G2' && t.inicio.getUTCMinutes() === 30)).toBe(true);
+  });
+
+  it('ocupación parcial: deja huecos repartidos, sigue legal (R-07 + R-22) y es determinista', () => {
+    const lleno = planDia(VIERNES, MEDIODIA);
+    const parcial = planDia(VIERNES, MEDIODIA, { ocupacion: 0.6 });
+    expect(parcial.length).toBeLessThan(lleno.length);
+    expect(parcial.length).toBeGreaterThan(lleno.length * 0.4);
+    expect(planDia(VIERNES, MEDIODIA, { ocupacion: 0.6 })).toEqual(parcial);
+    // Los huecos no se concentran en una sala: todas siguen teniendo turnos, y todas perdieron alguno.
+    const porSala = (plan: typeof lleno): Map<string, number> => {
+      const m = new Map<string, number>();
+      for (const t of plan) {
+        m.set(t.recursoCodigo, (m.get(t.recursoCodigo) ?? 0) + 1);
+      }
+      return m;
+    };
+    const l = porSala(lleno);
+    const q = porSala(parcial);
+    for (const [sala, n] of l) {
+      expect(q.get(sala) ?? 0, sala).toBeGreaterThan(0);
+      expect(q.get(sala) ?? 0, sala).toBeLessThan(n);
+    }
+    const r = validarRecursos(parcial.map((t) => ({ recursoCodigo: t.recursoCodigo, inicio: t.inicio, fin: t.fin, ocupantes: t.ocupantes })));
+    expect(r.ok).toBe(true);
+    // ocupacion: 1 es exactamente el plan de siempre.
+    expect(planDia(VIERNES, MEDIODIA, { ocupacion: 1 })).toEqual(lleno);
+  });
+
+  it('--hasta: cuenta los días desde hoy (AR) hasta la fecha, ambos incluidos', () => {
+    const hoy = new Date('2026-09-02T15:00:00-03:00');
+    expect(diasHasta('2026-09-15', hoy)).toBe(14);
+    expect(diasHasta('2026-09-02', hoy)).toBe(1);
+    expect(diasHasta('2026-08-30', hoy)).toBe(1); // en el pasado: nunca menos de hoy
+    expect(() => diasHasta('15/09/2026', hoy)).toThrow(/YYYY-MM-DD/);
   });
 
   it('domingo cerrado: plan vacío', () => {
