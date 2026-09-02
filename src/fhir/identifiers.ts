@@ -239,6 +239,12 @@ export const SYSTEM = {
   fm: `${BASE}/Identifier/fm`,
   /** Tag de datos de demostración (se autodestruyen a las 48 h). */
   demo: `${BASE}/demo`,
+  /**
+   * Tag hermano de `demo`: hasta qué fecha civil (AR, "YYYY-MM-DD") la demo
+   * tiene que seguir viva. Mientras no pase esa fecha, la limpieza de 48 h
+   * (`bw-limpiar-demo`) no la toca; `--limpiar` la borra igual.
+   */
+  demoHasta: `${BASE}/demo-hasta`,
   /** Bloqueos administrativos (R-11: pago rechazado → no se reserva). */
   bloqueo: `${BASE}/CodeSystem/bloqueo`,
   config: `${BASE}/Identifier/config`,
