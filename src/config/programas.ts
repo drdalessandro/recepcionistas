@@ -25,6 +25,12 @@ export interface Programa {
   precioUSD: number;
   /** Orden en la góndola del portal (extensión `orden`). */
   orden: number;
+  /**
+   * Vigencia en días del Coverage. Solo la modalidad de pago único la tiene:
+   * el programa entero se vende una vez y termina solo. La mensual no vence —
+   * se renueva mientras la paciente no la cancele.
+   */
+  vigenciaDias?: number;
   /** La bajada que lee la paciente debajo del título (PlanDefinition.description). */
   descripcion: string;
 }
@@ -47,6 +53,7 @@ export const PROGRAMAS: Programa[] = [
     modalidad: '100-dias',
     precioUSD: 300,
     orden: 2,
+    vigenciaDias: 100,
     descripcion:
       'El mismo acompañamiento premium —seguimiento médico y nutricional personalizado, ' +
       'ajustes del protocolo por el médico y atención prioritaria— pagando una sola vez ' +
