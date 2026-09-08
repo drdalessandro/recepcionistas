@@ -26,6 +26,7 @@ import { CATEGORIA_COMERCIAL, SERVICIOS } from '../config/catalogo.js';
 import { COMBOS } from '../config/combos.js';
 import { MEMBRESIAS } from '../config/membresias.js';
 import { PAQUETES } from '../config/paquetes.js';
+import { PROGRAMAS } from '../config/programas.js';
 import { FM } from '../config/reglas.js';
 import { CONTRAINDICACIONES } from '../config/contraindicaciones.js';
 import { CUESTIONARIO_INGRESO } from '../config/cuestionario-ingreso.js';
@@ -174,6 +175,33 @@ export function buildMembresiaPlanDefinition(codigo: string): PlanDefinition {
         code: [{ coding: [{ system: SYSTEM.comboCodigo, code: m.comboBaseCodigo }] }],
         definitionCanonical: canonical('PlanDefinition', m.comboBaseCodigo),
       },
+    ],
+  };
+}
+
+/**
+ * Programa (PB100D): producto por TIEMPO, sin sesiones. `type.text` es
+ * 'programa' A PROPÓSITO (no 'membership'): el portal deriva variantes de
+ * membresía de los sufijos del código y exige `tier` — un programa no tiene
+ * nada de eso, y publicarlo como membership rompería esa derivación
+ * (handoff PB100D §2).
+ */
+export function buildProgramaPlanDefinition(codigo: string): PlanDefinition {
+  const p = PROGRAMAS.find((x) => x.codigo === codigo)!;
+  return {
+    resourceType: 'PlanDefinition',
+    url: canonical('PlanDefinition', codigo),
+    name: codigo,
+    title: p.nombre,
+    status: 'active',
+    type: { text: 'programa' },
+    identifier: [{ system: SYSTEM.programaCodigo, value: codigo }],
+    // La bajada que lee la paciente (qué incluye y si es por mes o por los
+    // 100 días). El portal no deduce la modalidad del código: va en el texto.
+    description: p.descripcion,
+    extension: [
+      { url: EXT.precioUsd, valueDecimal: p.precioUSD },
+      { url: EXT.orden, valueInteger: p.orden },
     ],
   };
 }
@@ -421,6 +449,8 @@ export interface RecursosSeed {
   combos: PlanDefinition[];
   membresias: PlanDefinition[];
   paquetes: PlanDefinition[];
+  /** Programas por tiempo (PB100D): `type.text = 'programa'`, sin sesiones. */
+  programas: PlanDefinition[];
   contraindicaciones: CodeSystem;
   /** Texto del Consentimiento Informado (fuente única para portal y kiosco). */
   consentimiento: Library;
@@ -442,6 +472,7 @@ export function buildSeed(): RecursosSeed {
     combos: COMBOS.map((c) => buildComboPlanDefinition(c.codigo)),
     membresias: MEMBRESIAS.map((m) => buildMembresiaPlanDefinition(m.codigo)),
     paquetes: PAQUETES.map((p) => buildPaquetePlanDefinition(p.codigo)),
+    programas: PROGRAMAS.map((p) => buildProgramaPlanDefinition(p.codigo)),
     contraindicaciones: buildContraindicacionesCodeSystem(),
     consentimiento: buildConsentimientoLibrary(),
     cuestionarioIngreso: CUESTIONARIO_INGRESO,

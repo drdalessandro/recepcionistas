@@ -161,6 +161,13 @@ export interface Paquete {
   totalFMUSD: number;
 }
 
+/**
+ * Modalidad de cobro de un programa (PB100D): 'mensual' es suscripción
+ * renovable cada 30 días y cancelable; '100-dias' es un pago único por el
+ * programa completo. Los programas venden TIEMPO, no sesiones.
+ */
+export type ModalidadPrograma = 'mensual' | '100-dias';
+
 /** Tipo de recurso físico agendable. */
 export type TipoRecurso =
   | 'HBOT'

@@ -126,6 +126,31 @@ Ver [`docs/app-recepcion.md`](app-recepcion.md) y [`docs/bots.md`](bots.md).
   **Después de deployar: correr `npm run seed` para actualizar el catálogo en
   Medplum** (los códigos `IHHT_EXPRESS`/`IHHT_PREMIUM` viejos quedan huérfanos;
   el seed crea `IHHT` y los paquetes `PAQ_IHHT_X*`).
+- **PB100D · cobro del programa premium** (handoff 2026-09-06, aplicado el seed y
+  la policy el 2026-09-08): el catálogo ya publica `PB100D_PREMIUM_MENSUAL` (USD
+  100/mes) y `PB100D_PREMIUM_100D` (USD 300 por única vez), pero **el cobro no
+  está implementado en ninguna de las dos modalidades**:
+  - *Mensual*: el handoff pide "suscripción de Mercado Pago cada 30 días,
+    cancelable". `bw-cobro-membresias` cobra **por ciclo de mes calendario los
+    días 1-5** y filtra `tipo === 'membresia'` — un programa no entra, y su
+    período es de 30 días corridos desde el alta, no del 1 al 30. Hay que
+    decidir si el programa se suma a ese cron (con ciclo propio) o si va por
+    suscripción real de MP (que hoy no existe: ver tokenización, abajo).
+  - *Pago único*: necesita `Invoice` + link, como la seña. `bw-asignar-plan` hoy
+    solo sabe de membresías y paquetes.
+  - No hay bot de **alta de programa**: el `Coverage` con `tipo-cobertura =
+    programa` se crea a mano hasta que exista.
+- **PB100D · desbloqueo del piloto**: la AccessPolicy del portal ya tiene `Goal`,
+  `NutritionOrder`, `Task` escribible (acotada al CodeSystem `biowellness-plan`),
+  `ValueSet` y `CodeSystem`. ⚠️ **El portal tiene que actualizar su espejo**
+  (`docs/medplum/access-policy-paciente-portal.json`) y correr
+  `npm run verificar:policy`, o su chequeo va a marcar diferencia contra el
+  servidor. Y cuando entre la pantalla nueva (Hito 5), `CarePlan` pasa a
+  `readonly: true` en esta policy.
+- **PB100D · lo que NO es de este repo**: `bw-web-push` (título del tipo
+  `plan-listo`) **no existe acá** — vive en el repo del portal/dashboard, igual
+  que el CodeSystem `biowellness-plan` y los bots que crean las tareas de la
+  bandeja. Este repo solo referencia el system para acotar el permiso.
 - **Tokenización MP para cobro recurrente**: el cron cobra con tarjeta guardada si
   el Coverage tiene `mp-customer-id`/`mp-card-id`. Falta el flujo de captura de la
   tarjeta (checkout de suscripción / Customers API) para poblar esas extensiones.
