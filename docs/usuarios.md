@@ -65,6 +65,7 @@ con `GOOGLE_CLIENT_ID`** (Vite lo embebe en el bundle). Checklist completo:
 | Médico Prescriptor — Clínico + prescripción | Dalessandro / Dos Santos | Clínico + autoriza IV/TB |
 | Enfermería — Clínico limitado | Enfermería | Órdenes del día + ejecución |
 | Terapeuta — Propio | Terapeutas | Sus turnos + registrar sesión |
+| Kinesiología — Clínico limitado | Kinesiología (PB100D) | Lee plan y metas; escribe `Observation`, `Task`, `QuestionnaireResponse` |
 | **Paciente — Portal** | Pacientes (portal) | **Solo lo suyo:** su `Patient`, `Appointment`, `Invoice`, `Coverage`, `Communication` (lectura) |
 
 Los médicos/clínicos se invitan igual que la recepcionista, pero con su

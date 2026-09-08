@@ -6,7 +6,13 @@
  *
  * Un plan está "disponible" para reservar si está activo, no vencido y con saldo.
  */
-export type TipoCobertura = 'membresia' | 'paquete';
+/**
+ * `programa` (PB100D) vende TIEMPO, no sesiones: no tiene contador, el portal
+ * lo muestra sin saldo y `saldoPlan` no aplica. Se distingue de los otros dos
+ * para que nada lo trate como una membresía de 0 sesiones — en particular el
+ * cron de cobro, que filtra por `tipo === 'membresia'`.
+ */
+export type TipoCobertura = 'membresia' | 'paquete' | 'programa';
 
 export interface EstadoPlan {
   tipo: TipoCobertura;

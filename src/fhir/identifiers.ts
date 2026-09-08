@@ -208,6 +208,22 @@ export const SYSTEM = {
   comboCodigo: `${BASE}/CodeSystem/combo`,
   membresiaCodigo: `${BASE}/CodeSystem/membresia`,
   paqueteCodigo: `${BASE}/CodeSystem/paquete`,
+  /**
+   * Programas (PB100D y los que vengan): productos por TIEMPO, no por sesiones.
+   * El portal acepta este system o el de membresía (`src/fhir/programa.ts` del
+   * portal, handoff PB100D §2); se usa el propio para que el catálogo no mezcle
+   * familias — las membresías derivan variantes de los sufijos del código y un
+   * programa no tiene tier ni `_INT_`/`_PAR`.
+   */
+  programaCodigo: `${BASE}/CodeSystem/programa`,
+  /**
+   * Acciones del Plan Bienestar 100 Días (Task que la paciente marca "hecho"
+   * desde el portal). El CodeSystem lo emite el DASHBOARD, no este repo: acá
+   * solo se referencia para acotar la entrada escribible de Task en la policy
+   * del portal (handoff PB100D §1) — sin el filtro por code, la paciente podría
+   * editar cualquier Task suya (solicitudes, controles, tareas del equipo).
+   */
+  biowellnessPlan: `${BASE}/CodeSystem/biowellness-plan`,
   recursoCodigo: `${BASE}/CodeSystem/recurso-fisico`,
   /**
    * Namespace PUBLICADO que el portal usa para encontrar agendas de médicos

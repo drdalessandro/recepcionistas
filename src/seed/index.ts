@@ -39,6 +39,7 @@ async function main(): Promise<void> {
     ['PlanDefinition (combos)', seed.combos],
     ['PlanDefinition (membresías)', seed.membresias],
     ['PlanDefinition (paquetes)', seed.paquetes],
+    ['PlanDefinition (programas)', seed.programas],
     ['CodeSystem (contraindicaciones)', [seed.contraindicaciones]],
     ['Library (consentimiento informado)', [seed.consentimiento]],
     ['Questionnaire (cuestionario de ingreso)', [seed.cuestionarioIngreso]],
