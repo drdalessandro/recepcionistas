@@ -1637,7 +1637,8 @@ export async function emitirInvoicePlan(
   opts: {
     coverageId: string;
     pacienteRef?: string;
-    tipo: 'membresia' | 'paquete';
+    /** `programa` (PB100D) se factura igual: el Invoice no lleva sesiones. */
+    tipo: 'membresia' | 'paquete' | 'programa';
     planCodigo: string;
     descripcion: string;
     totalARS: number;
@@ -2396,7 +2397,12 @@ export async function contextoPacienteResumido(medplum: MedplumClient, pacienteR
 
   // `esPlanBW` primero: la obra social del paciente también es un Coverage
   // activo, y `estadoDeCoverage` la interpretaría como membresía.
-  const plan = coberturas.find((c) => esPlanBW(c));
+  //
+  // Y de los planes BW gana el que TIENE sesiones: un programa (PB100D) vende
+  // tiempo y su contador es 0, así que si se elige primero el asistente diría
+  // "le quedan 0 sesiones" y taparía la membresía real del mismo paciente.
+  const planes = coberturas.filter((c) => esPlanBW(c));
+  const plan = planes.find((c) => estadoDeCoverage(c).tipo !== 'programa') ?? planes[0];
   const estado = plan ? estadoDeCoverage(plan) : undefined;
   const saldoARS = saldos.reduce((acc, i) => acc + (i.totalGross?.value ?? 0), 0);
   const nombre = paciente ? getDisplayString(paciente) || undefined : undefined;
@@ -2410,7 +2416,12 @@ export async function contextoPacienteResumido(medplum: MedplumClient, pacienteR
       ? {
           plan: {
             nombre: planCodigoDeCoverage(plan) ?? estado.tipo,
-            sesionesRestantes: Math.max(0, estado.total - estado.usadas),
+            // Un programa no tiene sesiones que contar: `sesionesRestantes` va
+            // sin definir y `textoContexto` omite la línea, en vez de afirmar
+            // un "0" que se leería como plan agotado.
+            ...(estado.tipo === 'programa'
+              ? {}
+              : { sesionesRestantes: Math.max(0, estado.total - estado.usadas) }),
           },
         }
       : {}),

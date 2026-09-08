@@ -11,6 +11,7 @@ import { getServicio } from '../config/catalogo.js';
 import { getCombo } from '../config/combos.js';
 import { getMembresia } from '../config/membresias.js';
 import { getPaquete } from '../config/paquetes.js';
+import { getPrograma } from '../config/programas.js';
 import { CASCADA_TB, FM, MEMBRESIA } from '../config/reglas.js';
 import { resolverTC } from '../config/tipo-cambio.js';
 import { redondearUSD, usdAArs } from './money.js';
@@ -115,7 +116,7 @@ export function calcularSplit(
   }
 }
 
-export type TipoItemCobro = 'servicio' | 'combo' | 'membresia' | 'paquete';
+export type TipoItemCobro = 'servicio' | 'combo' | 'membresia' | 'paquete' | 'programa';
 
 export interface ItemCobro {
   tipo: TipoItemCobro;
@@ -236,6 +237,12 @@ function construirLinea(item: ItemCobro, tc?: number, desc: DescuentosCliente = 
     const m = getMembresia(item.codigo);
     precio = m.precioMesUSD;
     descripcion = `Membresía ${m.tier} ${m.intensidad} ${m.variante}`;
+  } else if (item.tipo === 'programa') {
+    // Programas (PB100D): precio de catálogo, sin descuentos. El 20% de FM es
+    // de sueltas y paquetes (R-09) y el a la carte es de socios: ninguno aplica.
+    const p = getPrograma(item.codigo);
+    precio = p.precioUSD;
+    descripcion = p.nombre;
   } else {
     const p = getPaquete(item.codigo);
     // Paquetes: FM 20% adicional (Manual). El a la carte NO aplica a paquetes.
