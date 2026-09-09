@@ -2,8 +2,8 @@ import { describe, expect, it } from 'vitest';
 import type { BotEvent, MedplumClient } from '@medplum/core';
 import type { QuestionnaireResponseItem } from '@medplum/fhirtypes';
 import { evaluarScreening } from '../src/lib/screening.js';
-import { CUESTIONARIO_INGRESO, SCREENING_RIESGOS } from '../src/config/cuestionario-ingreso.js';
-import { CONTRAINDICACIONES_POR_CODIGO } from '../src/config/contraindicaciones.js';
+import { CUESTIONARIO_INGRESO, SCREENING_RIESGOS, SIN_PREGUNTA_POR_DISENIO } from '../src/config/cuestionario-ingreso.js';
+import { CONTRAINDICACIONES, CONTRAINDICACIONES_POR_CODIGO } from '../src/config/contraindicaciones.js';
 import { handler as estadoSeguridad } from '../src/bots/estado-seguridad.js';
 
 /**
@@ -226,5 +226,62 @@ describe('bw-estado-seguridad — el caso del bug, punta a punta', () => {
   it('sin QR → sin-screening (gris), igual que antes', async () => {
     const r = await estadoSeguridad(fakeMedplum({ sinQR: true }), evento);
     expect(r.estado).toBe('sin-screening');
+  });
+});
+
+describe('ningún código queda sin encender — el invariante que faltaba', () => {
+  /**
+   * El agujero que motivó esto: una contraindicación sólo muerde si algo la
+   * activa. `HBOT_MEDICACION_INCOMPATIBLE` era ABSOLUTA, estaba validada desde el
+   * 9-ago-2026 y no tenía pregunta: una paciente en tratamiento con bleomicina
+   * reservaba HBOT con el banner en verde. No porque se hubiera evaluado — porque
+   * nadie preguntaba. Había cinco así, y nada lo avisaba.
+   *
+   * Este test cierra esa clase entera de bug: todo código tiene que tener
+   * pregunta, o estar en `SIN_PREGUNTA_POR_DISENIO` con el motivo escrito.
+   */
+  it('cada contraindicación tiene pregunta, o una exención con motivo', () => {
+    const conPregunta = new Set(SCREENING_RIESGOS.flatMap((r) => r.codigos));
+    const huerfanas = CONTRAINDICACIONES.map((c) => c.codigo)
+      .filter((c) => !conPregunta.has(c) && !(c in SIN_PREGUNTA_POR_DISENIO))
+      .sort();
+    expect(huerfanas).toEqual([]);
+  });
+
+  it('la exención no tapa una absoluta: lo que bloquea, se pregunta', () => {
+    // Una relativa sin pregunta advierte de menos. Una ABSOLUTA sin pregunta deja
+    // pasar una reserva que tenía que frenar: eso no se exime nunca.
+    const exentasAbsolutas = Object.keys(SIN_PREGUNTA_POR_DISENIO).filter(
+      (c) => CONTRAINDICACIONES_POR_CODIGO.get(c)?.severidad === 'absoluta',
+    );
+    expect(exentasAbsolutas).toEqual([]);
+  });
+
+  it('la exención no acumula códigos muertos', () => {
+    // Si una entrada desaparece de la tabla, su exención tiene que irse con ella.
+    const inexistentes = Object.keys(SIN_PREGUNTA_POR_DISENIO).filter((c) => !CONTRAINDICACIONES_POR_CODIGO.has(c));
+    expect(inexistentes).toEqual([]);
+  });
+
+  it('toda pregunta del mapeo existe en el cuestionario y apunta a códigos reales', () => {
+    const linkIds = new Set<string>();
+    const recorrer = (items: NonNullable<typeof CUESTIONARIO_INGRESO.item>): void => {
+      for (const it of items) {
+        if (it.linkId) {
+          linkIds.add(it.linkId);
+        }
+        if (it.item) {
+          recorrer(it.item);
+        }
+      }
+    };
+    recorrer(CUESTIONARIO_INGRESO.item ?? []);
+
+    for (const r of SCREENING_RIESGOS) {
+      expect(linkIds, `la pregunta ${r.linkId} no está en el cuestionario`).toContain(r.linkId);
+      for (const c of r.codigos) {
+        expect(CONTRAINDICACIONES_POR_CODIGO.has(c), `${r.linkId} apunta a ${c}, que no existe`).toBe(true);
+      }
+    }
   });
 });
