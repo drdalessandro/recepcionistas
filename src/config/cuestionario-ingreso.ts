@@ -52,6 +52,20 @@ export const SCREENING_RIESGOS: RiesgoScreening[] = [
   { linkId: 'hbot-marcapasos', codigos: ['HBOT_IMPLANTE_NO_CERTIFICADO'] },
   { linkId: 'hbot-claustrofobia', codigos: ['HBOT_CLAUSTROFOBIA'] },
   { linkId: 'hbot-convulsiones', codigos: ['HBOT_CONVULSIONES'] },
+  // Dos preguntas de medicación, no una: doxorrubicina y bleomicina son absolutas
+  // y las otras tres relativas. Juntas en una sola pregunta, un "sí" no se podría
+  // desambiguar y todas terminarían con la severidad de la más grave.
+  { linkId: 'hbot-quimio-bloqueante', codigos: ['HBOT_DOXORRUBICINA', 'HBOT_BLEOMICINA'] },
+  { linkId: 'hbot-medicacion-oxigeno', codigos: ['HBOT_CISPLATINO', 'HBOT_DISULFIRAM', 'HBOT_MAFENIDA'] },
+  { linkId: 'hbot-neumotorax-previo', codigos: ['HBOT_NEUMOTORAX_ESPONTANEO_PREVIO'] },
+  // EPOC y bullas van juntas: el riesgo es el mismo (atrapamiento aéreo) y la
+  // severidad también (relativa), así que un "sí" no necesita desambiguarse.
+  { linkId: 'hbot-epoc-bullas', codigos: ['HBOT_EPOC_RETENCION_CO2', 'HBOT_BULLAS_PULMONARES'] },
+  { linkId: 'hbot-barotrauma', codigos: ['HBOT_BAROTRAUMA_PREVIO'] },
+  { linkId: 'hbot-fiebre', codigos: ['HBOT_FIEBRE_ALTA'] },
+  { linkId: 'hbot-esferocitosis', codigos: ['HBOT_ESFEROCITOSIS'] },
+  { linkId: 'hbot-neuritis-optica', codigos: ['HBOT_NEURITIS_OPTICA'] },
+  { linkId: 'hbot-ansiedad', codigos: ['HBOT_ANSIEDAD'] },
   // Estaba FUERA del screening (sección "Cirugías") y no declaraba riesgo; el
   // doc de admisión la pone como bloqueante de HBOT (A.1 #3).
   { linkId: 'cirugia-reciente-ont', codigos: ['HBOT_CIRUGIA_ONT_RECIENTE'] },
@@ -62,6 +76,8 @@ export const SCREENING_RIESGOS: RiesgoScreening[] = [
   { linkId: 'ihht-hta', codigos: ['IHHT_HTA_NO_CONTROLADA'] },
   { linkId: 'ihht-epoc', codigos: ['IHHT_EPOC_SEVERO'] },
   { linkId: 'ihht-tvp', codigos: ['IHHT_TVP_ACTIVA'] },
+  { linkId: 'ihht-htp', codigos: ['IHHT_HTP_SEVERA'] },
+  { linkId: 'ihht-infeccion-resp', codigos: ['IHHT_INFECCION_RESPIRATORIA'] },
   // ---- Generales ----
   // Choice "Sí"/"No"/"No aplica": solo el "Sí" cuenta como afirmativa.
   // Mapea a las DOS entradas: el embarazo se partió por terapia (relativa en HBOT,
@@ -69,10 +85,32 @@ export const SCREENING_RIESGOS: RiesgoScreening[] = [
   { linkId: 'embarazo', codigos: ['HBOT_EMBARAZO', 'IHHT_EMBARAZO'] },
 ];
 
+/**
+ * Contraindicaciones que **a propósito** no se preguntan en el screening: no son
+ * cosas que una paciente pueda contestar con honestidad. Son hallazgos de
+ * laboratorio, de imagen o de examen físico, o estados del momento de la sesión.
+ *
+ * Preguntarlas igual sería peor que no preguntarlas: daría cobertura aparente
+ * sobre respuestas que nadie puede dar bien. La vía correcta para éstas es el
+ * chequeo del técnico hiperbárico antes de la sesión, o leerlas del chart
+ * (`Condition` / `Observation`) — las dos cosas están pendientes de diseño.
+ *
+ * Esta lista NO es un lugar donde esconder trabajo: `screening.test.ts` verifica
+ * que todo código de la tabla esté acá o tenga pregunta. Agregar una entrada acá
+ * es una decisión explícita, con motivo escrito.
+ */
+export const SIN_PREGUNTA_POR_DISENIO: Readonly<Record<string, string>> = {
+  HBOT_HIPOTERMIA: 'Estado del momento de la sesión: se mide, no se autorreporta.',
+  HBOT_PACIENTE_DESCOMPENSADO: 'Es un juicio clínico sobre el estado general, no un dato que la paciente declare.',
+  HBOT_AIRE_ATRAPADO: 'Embolia gaseosa, neumomediastino, neumoperitoneo y enfisema subcutáneo son hallazgos de imagen.',
+  HBOT_NEUMONIA_PNEUMOCYSTIS: 'Diagnóstico microbiológico activo: viene del chart, no del cuestionario de ingreso.',
+  HBOT_ACIDOSIS: 'Hallazgo de laboratorio.',
+};
+
 export const CUESTIONARIO_INGRESO: Questionnaire = {
   resourceType: 'Questionnaire',
   url: INTAKE_QUESTIONNAIRE_URL,
-  version: '1.0.0',
+  version: '1.1.0',
   status: 'active',
   name: 'biowellness-intake-clinico',
   title: 'Cuestionario de ingreso',
@@ -165,6 +203,39 @@ export const CUESTIONARIO_INGRESO: Questionnaire = {
         },
         { linkId: 'hbot-claustrofobia', text: '¿Tenés claustrofobia severa no controlada?', type: 'boolean' },
         { linkId: 'hbot-convulsiones', text: '¿Tenés convulsiones no controladas?', type: 'boolean' },
+        {
+          linkId: 'hbot-quimio-bloqueante',
+          text: '¿Estás en tratamiento con doxorrubicina o bleomicina? (Si no recordás el nombre, mirá la indicación de tu médico.)',
+          type: 'boolean',
+        },
+        {
+          linkId: 'hbot-medicacion-oxigeno',
+          text: '¿Estás tomando cisplatino, disulfiram o acetato de mafenida?',
+          type: 'boolean',
+        },
+        {
+          linkId: 'hbot-neumotorax-previo',
+          text: '¿Alguna vez se te colapsó un pulmón (neumotórax) sin que hubiera un golpe?',
+          type: 'boolean',
+        },
+        {
+          linkId: 'hbot-epoc-bullas',
+          text: '¿Tenés EPOC, enfisema o bullas en los pulmones?',
+          type: 'boolean',
+        },
+        {
+          linkId: 'hbot-barotrauma',
+          text: '¿Alguna vez te lastimaste los oídos o los senos paranasales al volar o al bucear?',
+          type: 'boolean',
+        },
+        { linkId: 'hbot-fiebre', text: '¿Tenés fiebre hoy o tuviste en las últimas 24 horas?', type: 'boolean' },
+        { linkId: 'hbot-esferocitosis', text: '¿Te diagnosticaron esferocitosis?', type: 'boolean' },
+        { linkId: 'hbot-neuritis-optica', text: '¿Te diagnosticaron neuritis óptica?', type: 'boolean' },
+        {
+          linkId: 'hbot-ansiedad',
+          text: '¿Tenés ansiedad que te dificulte quedarte quieto/a o seguir indicaciones durante una sesión?',
+          type: 'boolean',
+        },
       ],
     },
     {
@@ -184,6 +255,12 @@ export const CUESTIONARIO_INGRESO: Questionnaire = {
         },
         { linkId: 'ihht-epoc', text: '¿Tenés EPOC severa (estadio IV)?', type: 'boolean' },
         { linkId: 'ihht-tvp', text: '¿Tenés trombosis venosa profunda activa?', type: 'boolean' },
+        { linkId: 'ihht-htp', text: '¿Te diagnosticaron hipertensión pulmonar?', type: 'boolean' },
+        {
+          linkId: 'ihht-infeccion-resp',
+          text: '¿Estás cursando una infección respiratoria en este momento?',
+          type: 'boolean',
+        },
       ],
     },
     {
