@@ -130,26 +130,60 @@ describe('Seed — Contraindicaciones · gobernanza de la validación médica', 
     }
   });
 
-  it('Las entradas en borrador son EXACTAMENTE las que el doc de admisión cambió', () => {
+  it('Las entradas en borrador son EXACTAMENTE las que esperan la firma conjunta', () => {
     // Si alguien marca otra entrada como borrador sin registrarlo, este test
     // avisa: la lista es el acta de qué está esperando firma médica.
+    //
+    // 9-sep-2026: a las del documento de admisión se suman las doce condiciones
+    // de HBOT que clasificó el Dr. D'Alessandro sobre los consensos UHMS. Las
+    // firman él y el Dr. Conrado López Alonso en una sola pasada.
     const codigos = (seed.contraindicaciones.concept ?? [])
       .filter((c) => c.property?.some((p) => p.code === 'borrador' && p.valueBoolean === true))
       .map((c) => c.code)
       .sort();
     expect(codigos).toEqual(
       [
+        'HBOT_ACIDOSIS',
+        'HBOT_AIRE_ATRAPADO',
+        'HBOT_ANSIEDAD',
+        'HBOT_BAROTRAUMA_PREVIO',
+        'HBOT_BULLAS_PULMONARES',
         'HBOT_CIRUGIA_ONT_RECIENTE',
         'HBOT_CLAUSTROFOBIA',
         'HBOT_CONVULSIONES',
         'HBOT_EMBARAZO',
+        'HBOT_ESFEROCITOSIS',
+        'HBOT_HIPOTERMIA',
         'HBOT_IMPLANTE_NO_CERTIFICADO',
         'HBOT_INFECCION_VIA_AEREA',
+        'HBOT_MAFENIDA',
+        'HBOT_NEUMONIA_PNEUMOCYSTIS',
+        'HBOT_NEUMOTORAX_ESPONTANEO_PREVIO',
+        'HBOT_NEURITIS_OPTICA',
+        'HBOT_PACIENTE_DESCOMPENSADO',
         'IHHT_EPOC_SEVERO',
         'IHHT_HTA_NO_CONTROLADA',
         'IHHT_TVP_ACTIVA',
       ].sort(),
     );
+  });
+
+  it('La ÚNICA absoluta de HBOT es el neumotórax no tratado (resolución UHMS del 9-sep-2026)', () => {
+    // El criterio del Director Médico, escrito como test: si alguien vuelve a
+    // subir una entrada de HBOT a `absoluta` sin registrarlo, esto avisa.
+    // Marcapasos y cirugía de oído/nariz/tórax siguen absolutas porque su
+    // severidad quedó explícitamente pendiente en esa misma resolución.
+    const absolutasHbot = (seed.contraindicaciones.concept ?? [])
+      .filter((c) => c.property?.some((p) => p.code === 'aplicaA' && (p.valueString ?? '').includes('HBOT')))
+      .filter((c) => c.property?.some((p) => p.code === 'severidad' && p.valueString === 'absoluta'))
+      .map((c) => c.code)
+      .sort();
+    expect(absolutasHbot).toEqual([
+      'HBOT_CIRUGIA_ONT_RECIENTE',
+      'HBOT_IMPLANTE_NO_CERTIFICADO',
+      'HBOT_MEDICACION_INCOMPATIBLE',
+      'HBOT_NEUMOTORAX_NO_TRATADO',
+    ]);
   });
 });
 
