@@ -148,10 +148,14 @@ describe('Seed — Contraindicaciones · gobernanza de la validación médica', 
         'HBOT_AIRE_ATRAPADO',
         'HBOT_ANSIEDAD',
         'HBOT_BAROTRAUMA_PREVIO',
+        'HBOT_BLEOMICINA',
         'HBOT_BULLAS_PULMONARES',
         'HBOT_CIRUGIA_ONT_RECIENTE',
+        'HBOT_CISPLATINO',
         'HBOT_CLAUSTROFOBIA',
         'HBOT_CONVULSIONES',
+        'HBOT_DISULFIRAM',
+        'HBOT_DOXORRUBICINA',
         'HBOT_EMBARAZO',
         'HBOT_ESFEROCITOSIS',
         'HBOT_HIPOTERMIA',
@@ -179,10 +183,15 @@ describe('Seed — Contraindicaciones · gobernanza de la validación médica', 
       .filter((c) => c.property?.some((p) => p.code === 'severidad' && p.valueString === 'absoluta'))
       .map((c) => c.code)
       .sort();
+    // Las cuatro que no son el neumotórax son las que el Director Médico dejó
+    // absolutas el 9-sep-2026 "con posibilidad de consulta médica con el
+    // cardiólogo": absoluta acá no es "nunca", es "no sin que lo vea un médico"
+    // — la vía de escape `autorizacionMedica` de R-02.
     expect(absolutasHbot).toEqual([
+      'HBOT_BLEOMICINA',
       'HBOT_CIRUGIA_ONT_RECIENTE',
+      'HBOT_DOXORRUBICINA',
       'HBOT_IMPLANTE_NO_CERTIFICADO',
-      'HBOT_MEDICACION_INCOMPATIBLE',
       'HBOT_NEUMOTORAX_NO_TRATADO',
     ]);
   });

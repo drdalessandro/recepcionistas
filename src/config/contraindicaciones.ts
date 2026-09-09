@@ -41,8 +41,20 @@
  *     absoluta o relativa. Bajar una entrada a relativa NO hace que la sesión
  *     avance sola.
  *
- * Pendiente de la misma resolución (quedan como estaban, en borrador): la
- * severidad de doxorrubicina, bleomicina, marcapasos y cirugía de oído/nariz/tórax.
+ * **Cierre de la resolución (9-sep-2026).** El Director Médico definió las cuatro
+ * que habían quedado abiertas: doxorrubicina, bleomicina, marcapasos/DAI y cirugía
+ * de oído, nariz o tórax reciente van **absolutas**, *"con posibilidad de consulta
+ * médica con el cardiólogo Dr. D'Alessandro Alejandro Sergio"*.
+ *
+ * Esa consulta no necesita nada nuevo: es la vía de escape que R-02 ya tiene.
+ * `validarContraindicaciones(..., { autorizacionMedica: true })` levanta el bloqueo,
+ * y para estas cuatro el camino es la consulta con el cardiólogo. Absoluta acá no
+ * significa "nunca": significa "no sin que lo vea un médico".
+ *
+ * Con eso, la clasificación de HBOT queda completa. `HBOT_MEDICACION_INCOMPATIBLE`
+ * se partió por droga: agrupaba cuatro fármacos que ahora tienen severidades
+ * distintas (doxorrubicina y bleomicina absolutas; cisplatino, disulfiram y
+ * mafenida relativas), y agrupadas no se pueden expresar.
  *
  * ## Revisión 2026-09-01 — mapeo del documento de admisión (Andrés → Dalessandro)
  *
@@ -70,11 +82,38 @@ export const CONTRAINDICACIONES: Contraindicacion[] = [
     descripcion: 'Neumotórax no tratado (contraindicación absoluta de HBOT).',
     severidad: 'absoluta',
   },
+  // Era UNA entrada absoluta con las cuatro drogas juntas. La resolución del
+  // 9-sep-2026 les da severidades distintas, así que se parte por droga: agrupadas
+  // no se pueden expresar. Ninguna tenía pregunta en el screening, así que el
+  // reemplazo no rompe ningún mapeo — pero las cinco la necesitan.
   {
-    codigo: 'HBOT_MEDICACION_INCOMPATIBLE',
+    codigo: 'HBOT_DOXORRUBICINA',
     aplicaA: ['HBOT'],
-    descripcion: 'Tratamiento con bleomicina, cisplatino, doxorrubicina o disulfiram.',
+    descripcion: 'Tratamiento con doxorrubicina (cardiotoxicidad grave / interacción farmacológica severa).',
     severidad: 'absoluta',
+    borradorPendienteRevision: true,
+  },
+  {
+    codigo: 'HBOT_BLEOMICINA',
+    aplicaA: ['HBOT'],
+    descripcion: 'Tratamiento con bleomicina (riesgo de toxicidad pulmonar potenciada por la hiperoxia).',
+    severidad: 'absoluta',
+    borradorPendienteRevision: true,
+  },
+  {
+    codigo: 'HBOT_CISPLATINO',
+    aplicaA: ['HBOT'],
+    descripcion: 'Tratamiento con cisplatino (retraso significativo en la cicatrización de heridas).',
+    severidad: 'relativa',
+    borradorPendienteRevision: true,
+  },
+  {
+    codigo: 'HBOT_DISULFIRAM',
+    aplicaA: ['HBOT'],
+    descripcion:
+      'Tratamiento con disulfiram (bloquea la superóxido dismutasa: disminuye la protección contra la toxicidad por oxígeno).',
+    severidad: 'relativa',
+    borradorPendienteRevision: true,
   },
   {
     codigo: 'HBOT_EPOC_RETENCION_CO2',
