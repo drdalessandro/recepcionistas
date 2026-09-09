@@ -6,6 +6,14 @@
  * (Director Médico) la validó tal cual el 2026-08-09 (OK transmitido por
  * Andrés). Las 13 entradas quedan aprobadas para uso real.
  *
+ * ## FIRMA CONJUNTA — 9-sep-2026
+ *
+ * La tabla entera quedó validada por el **Dr. Alejandro Sergio D'Alessandro
+ * (MN 92179)** y el **Dr. Conrado López Alonso**, Directores Médicos. Cierra las
+ * dos fuentes clínicas que estaban en conflicto —la tabla de Conrado del 9-ago y
+ * el documento de admisión del 25-ago— en una sola revisión, como pedía el propio
+ * archivo. El CodeSystem vuelve a `active` y el seed deja de avisar.
+ *
  * Cambios futuros: toda entrada NUEVA o modificada entra con
  * `borradorPendienteRevision: true` hasta que el Director Médico la apruebe —
  * eso vuelve el CodeSystem a `draft` y reactiva el aviso del seed solo.
@@ -42,7 +50,7 @@
  *     avance sola.
  *
  * **Cierre de la resolución (9-sep-2026).** El Director Médico definió las cuatro
- * que habían quedado abiertas: doxorrubicina, bleomicina, marcapasos/DAI y cirugía
+ * que habían quedado abiertas (ya firmadas): doxorrubicina, bleomicina, marcapasos/DAI y cirugía
  * de oído, nariz o tórax reciente van **absolutas**, *"con posibilidad de consulta
  * médica con el cardiólogo Dr. D'Alessandro Alejandro Sergio"*.
  *
@@ -91,21 +99,18 @@ export const CONTRAINDICACIONES: Contraindicacion[] = [
     aplicaA: ['HBOT'],
     descripcion: 'Tratamiento con doxorrubicina (cardiotoxicidad grave / interacción farmacológica severa).',
     severidad: 'absoluta',
-    borradorPendienteRevision: true,
   },
   {
     codigo: 'HBOT_BLEOMICINA',
     aplicaA: ['HBOT'],
     descripcion: 'Tratamiento con bleomicina (riesgo de toxicidad pulmonar potenciada por la hiperoxia).',
     severidad: 'absoluta',
-    borradorPendienteRevision: true,
   },
   {
     codigo: 'HBOT_CISPLATINO',
     aplicaA: ['HBOT'],
     descripcion: 'Tratamiento con cisplatino (retraso significativo en la cicatrización de heridas).',
     severidad: 'relativa',
-    borradorPendienteRevision: true,
   },
   {
     codigo: 'HBOT_DISULFIRAM',
@@ -113,7 +118,6 @@ export const CONTRAINDICACIONES: Contraindicacion[] = [
     descripcion:
       'Tratamiento con disulfiram (bloquea la superóxido dismutasa: disminuye la protección contra la toxicidad por oxígeno).',
     severidad: 'relativa',
-    borradorPendienteRevision: true,
   },
   {
     codigo: 'HBOT_EPOC_RETENCION_CO2',
@@ -134,7 +138,6 @@ export const CONTRAINDICACIONES: Contraindicacion[] = [
     // Relativa por resolución del Director Médico (9-sep-2026, UHMS): obstrucción de la trompa de Eustaquio; dificulta la
     // equipresión del oído medio, no la impide.
     severidad: 'relativa',
-    borradorPendienteRevision: true,
   },
   {
     codigo: 'HBOT_CONVULSIONES',
@@ -145,7 +148,6 @@ export const CONTRAINDICACIONES: Contraindicacion[] = [
     // Relativa por resolución del Director Médico (9-sep-2026, UHMS): aumento del riesgo de convulsiones inducidas por
     // hiperoxia; se evalúa riesgo/beneficio.
     severidad: 'relativa',
-    borradorPendienteRevision: true,
   },
   {
     codigo: 'HBOT_FIEBRE_ALTA',
@@ -162,7 +164,6 @@ export const CONTRAINDICACIONES: Contraindicacion[] = [
     aplicaA: ['HBOT'],
     descripcion: 'Marcapasos, desfibrilador u otro implante electrónico sin certificación para uso hiperbárico.',
     severidad: 'absoluta',
-    borradorPendienteRevision: true,
   },
   {
     // NUEVA (doc de admisión A.1 #3): `cirugia-reciente-ont` ya se preguntaba
@@ -171,7 +172,6 @@ export const CONTRAINDICACIONES: Contraindicacion[] = [
     aplicaA: ['HBOT'],
     descripcion: 'Cirugía de oído, nariz o tórax en los últimos 30 días.',
     severidad: 'absoluta',
-    borradorPendienteRevision: true,
   },
   {
     codigo: 'HBOT_CLAUSTROFOBIA',
@@ -181,7 +181,6 @@ export const CONTRAINDICACIONES: Contraindicacion[] = [
     // Relativa por resolución del Director Médico (9-sep-2026, UHMS): ansiedad aguda que dificulta la tolerancia al recinto
     // cerrado; no la impide siempre.
     severidad: 'relativa',
-    borradorPendienteRevision: true,
   },
   // El embarazo era UNA entrada compartida por HBOT e IHHT. La resolución del
   // Director Médico les da severidades opuestas, y una entrada sólo lleva una:
@@ -197,7 +196,6 @@ export const CONTRAINDICACIONES: Contraindicacion[] = [
     // criterio del Director Médico.
     descripcion: 'Embarazo (evaluación médica requerida).',
     severidad: 'relativa',
-    borradorPendienteRevision: true,
   },
   {
     codigo: 'IHHT_EMBARAZO',
@@ -207,7 +205,6 @@ export const CONTRAINDICACIONES: Contraindicacion[] = [
     // escenario de emergencia que justifique la exposición.
     descripcion: 'Embarazo: la IHHT no tiene evidencia de seguridad en el embarazo.',
     severidad: 'absoluta',
-    borradorPendienteRevision: true,
   },
 
   // ---- HBOT · resolución del Director Médico, 9-sep-2026 (UHMS) ----
@@ -220,7 +217,6 @@ export const CONTRAINDICACIONES: Contraindicacion[] = [
     descripcion:
       'Esferocitosis congénita o hereditaria (riesgo de hemólisis masiva por estrés oxidativo).',
     severidad: 'relativa',
-    borradorPendienteRevision: true,
   },
   {
     codigo: 'HBOT_HIPOTERMIA',
@@ -228,7 +224,6 @@ export const CONTRAINDICACIONES: Contraindicacion[] = [
     descripcion:
       'Hipotermia (al recalentarse o alterar la respuesta metabólica, incrementa la posibilidad de convulsiones).',
     severidad: 'relativa',
-    borradorPendienteRevision: true,
   },
   {
     codigo: 'HBOT_PACIENTE_DESCOMPENSADO',
@@ -236,7 +231,6 @@ export const CONTRAINDICACIONES: Contraindicacion[] = [
     descripcion:
       'Paciente descompensado con riesgo de complicación que requiera manejo intrahospitalario urgente, no realizable dentro de la cámara.',
     severidad: 'relativa',
-    borradorPendienteRevision: true,
   },
   {
     codigo: 'HBOT_NEUMOTORAX_ESPONTANEO_PREVIO',
@@ -244,7 +238,6 @@ export const CONTRAINDICACIONES: Contraindicacion[] = [
     descripcion:
       'Antecedente de neumotórax espontáneo (mayor riesgo de recurrencia bajo cambios de presión).',
     severidad: 'relativa',
-    borradorPendienteRevision: true,
   },
   {
     codigo: 'HBOT_AIRE_ATRAPADO',
@@ -252,7 +245,6 @@ export const CONTRAINDICACIONES: Contraindicacion[] = [
     descripcion:
       'Embolia gaseosa, neumomediastino, neumoperitoneo o enfisema subcutáneo no drenados (riesgo de expansión gaseosa; el enfisema puede indicar fuga aérea no detectada).',
     severidad: 'relativa',
-    borradorPendienteRevision: true,
   },
   {
     codigo: 'HBOT_BULLAS_PULMONARES',
@@ -260,7 +252,6 @@ export const CONTRAINDICACIONES: Contraindicacion[] = [
     descripcion:
       'Bullas pulmonares (riesgo de ruptura bullosa y neumotórax iatrogénico durante la descompresión).',
     severidad: 'relativa',
-    borradorPendienteRevision: true,
   },
   {
     codigo: 'HBOT_NEUMONIA_PNEUMOCYSTIS',
@@ -268,7 +259,6 @@ export const CONTRAINDICACIONES: Contraindicacion[] = [
     descripcion:
       'Neumonía por Pneumocystis jirovecii (carinii): riesgo elevado de ruptura alveolar y neumotórax.',
     severidad: 'relativa',
-    borradorPendienteRevision: true,
   },
   {
     codigo: 'HBOT_BAROTRAUMA_PREVIO',
@@ -276,7 +266,6 @@ export const CONTRAINDICACIONES: Contraindicacion[] = [
     descripcion:
       'Barotrauma de senos, oído o pulmonar (impedimento para igualar presiones en cavidades aéreas).',
     severidad: 'relativa',
-    borradorPendienteRevision: true,
   },
   {
     codigo: 'HBOT_NEURITIS_OPTICA',
@@ -284,7 +273,6 @@ export const CONTRAINDICACIONES: Contraindicacion[] = [
     descripcion:
       'Neuritis óptica (mayor predisposición a la patología del nervio óptico; cuestionable en la literatura).',
     severidad: 'relativa',
-    borradorPendienteRevision: true,
   },
   {
     codigo: 'HBOT_ACIDOSIS',
@@ -292,7 +280,6 @@ export const CONTRAINDICACIONES: Contraindicacion[] = [
     descripcion:
       'Acidosis (disminuye el umbral de convulsiones inducidas por el oxígeno).',
     severidad: 'relativa',
-    borradorPendienteRevision: true,
   },
   {
     codigo: 'HBOT_ANSIEDAD',
@@ -300,7 +287,6 @@ export const CONTRAINDICACIONES: Contraindicacion[] = [
     descripcion:
       'Ansiedad que dificulta tolerar el entorno o seguir las instrucciones de seguridad.',
     severidad: 'relativa',
-    borradorPendienteRevision: true,
   },
   {
     codigo: 'HBOT_MAFENIDA',
@@ -308,7 +294,6 @@ export const CONTRAINDICACIONES: Contraindicacion[] = [
     descripcion:
       'Tratamiento con acetato de mafenida (inhibidor de la anhidrasa carbónica: causa acidosis y promueve vasodilatación y convulsiones).',
     severidad: 'relativa',
-    borradorPendienteRevision: true,
   },
 
   // ---- IHHT ----
@@ -342,7 +327,6 @@ export const CONTRAINDICACIONES: Contraindicacion[] = [
     descripcion: 'Hipertensión arterial no controlada (>180/110).',
     // Doc de admisión A.2 #7: bloquea IHHT.
     severidad: 'absoluta',
-    borradorPendienteRevision: true,
   },
   {
     // NUEVA (doc de admisión A.2 #8): la tabla solo tenía EPOC para HBOT
@@ -351,7 +335,6 @@ export const CONTRAINDICACIONES: Contraindicacion[] = [
     aplicaA: ['IHHT'],
     descripcion: 'EPOC severo (estadio IV) o enfermedad pulmonar obstructiva avanzada.',
     severidad: 'absoluta',
-    borradorPendienteRevision: true,
   },
   {
     // NUEVA (doc de admisión A.2 #9): bloquea IHHT **y botas de compresión** —
@@ -361,7 +344,6 @@ export const CONTRAINDICACIONES: Contraindicacion[] = [
     aplicaA: ['IHHT', 'COMPRESION'],
     descripcion: 'Trombosis venosa profunda activa o reciente.',
     severidad: 'absoluta',
-    borradorPendienteRevision: true,
   },
 ];
 

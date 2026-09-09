@@ -131,47 +131,24 @@ describe('Seed — Contraindicaciones · gobernanza de la validación médica', 
     }
   });
 
-  it('Las entradas en borrador son EXACTAMENTE las que esperan la firma conjunta', () => {
-    // Si alguien marca otra entrada como borrador sin registrarlo, este test
-    // avisa: la lista es el acta de qué está esperando firma médica.
-    //
-    // 9-sep-2026: a las del documento de admisión se suman las doce condiciones
-    // de HBOT que clasificó el Dr. D'Alessandro sobre los consensos UHMS. Las
-    // firman él y el Dr. Conrado López Alonso en una sola pasada.
-    const codigos = (seed.contraindicaciones.concept ?? [])
+  it('No queda NINGUNA entrada en borrador: la tabla está firmada', () => {
+    // 9-sep-2026: firma conjunta del Dr. D'Alessandro (MN 92179) y el Dr. Conrado
+    // López Alonso. Este test es el acta. Si alguien agrega o modifica una entrada,
+    // tiene que entrar como borrador —y entonces esto falla, el CodeSystem vuelve a
+    // `draft` y el seed avisa— hasta que un Director Médico la firme.
+    const enBorrador = (seed.contraindicaciones.concept ?? [])
       .filter((c) => c.property?.some((p) => p.code === 'borrador' && p.valueBoolean === true))
-      .map((c) => c.code)
-      .sort();
-    expect(codigos).toEqual(
-      [
-        'HBOT_ACIDOSIS',
-        'HBOT_AIRE_ATRAPADO',
-        'HBOT_ANSIEDAD',
-        'HBOT_BAROTRAUMA_PREVIO',
-        'HBOT_BLEOMICINA',
-        'HBOT_BULLAS_PULMONARES',
-        'HBOT_CIRUGIA_ONT_RECIENTE',
-        'HBOT_CISPLATINO',
-        'HBOT_CLAUSTROFOBIA',
-        'HBOT_CONVULSIONES',
-        'HBOT_DISULFIRAM',
-        'HBOT_DOXORRUBICINA',
-        'HBOT_EMBARAZO',
-        'HBOT_ESFEROCITOSIS',
-        'HBOT_HIPOTERMIA',
-        'HBOT_IMPLANTE_NO_CERTIFICADO',
-        'HBOT_INFECCION_VIA_AEREA',
-        'HBOT_MAFENIDA',
-        'HBOT_NEUMONIA_PNEUMOCYSTIS',
-        'HBOT_NEUMOTORAX_ESPONTANEO_PREVIO',
-        'HBOT_NEURITIS_OPTICA',
-        'HBOT_PACIENTE_DESCOMPENSADO',
-        'IHHT_EMBARAZO',
-        'IHHT_EPOC_SEVERO',
-        'IHHT_HTA_NO_CONTROLADA',
-        'IHHT_TVP_ACTIVA',
-      ].sort(),
-    );
+      .map((c) => c.code);
+    expect(enBorrador).toEqual([]);
+  });
+
+  it('El CodeSystem firmado sale `active` y lleva a los dos Directores Médicos', () => {
+    const cs = seed.contraindicaciones;
+    expect(cs.status).toBe('active');
+    expect(cs.title).not.toMatch(/BORRADOR/i);
+    expect(cs.publisher).toContain("D'Alessandro");
+    expect(cs.publisher).toContain('Conrado López Alonso');
+    expect(cs.date).toBe('2026-09-09');
   });
 
   it('La ÚNICA absoluta de HBOT es el neumotórax no tratado (resolución UHMS del 9-sep-2026)', () => {
