@@ -130,15 +130,59 @@ describe('lo declarado alimenta R-02: la reserva de HBOT del caso real se BLOQUE
     expect(validarContraindicaciones(['HBOT'], codigos, { autorizacionMedica: true }).ok).toBe(true);
   });
 
-  it('infección respiratoria declarada → BLOQUEA HBOT (doc de admisión B1, criterio más estricto)', async () => {
-    // Era 'relativa' (advertencia) en la tabla validada por el Dr. Conrado. El
-    // documento de admisión la marca como la contraindicación transitoria que
-    // más barotraumas causa, y Andrés eligió el criterio más estricto
-    // (2026-09-01). Queda como borrador hasta la validación médica.
+  it('infección respiratoria declarada → ADVIERTE en R-02, pero el banner sigue en ROJO', async () => {
+    // Historia de esta entrada: relativa en la tabla del Dr. Conrado; el documento
+    // de admisión la subió a bloqueo (Andrés, criterio más estricto, 2026-09-01);
+    // y el 9-sep-2026 el Dr. D'Alessandro la devolvió a relativa sobre los
+    // consensos UHMS —"no suspender sesiones por esto"—.
+    //
+    // Lo que este test fija es POR QUÉ esa vuelta atrás no desprotege a la
+    // paciente: son dos compuertas distintas y la severidad sólo controla una.
     const { validarContraindicaciones } = await import('../src/lib/reglas-turno.js');
-    const codigos = evaluarScreening(respuestas({ 'hbot-infeccion-resp': true })).codigos;
-    expect(validarContraindicaciones(['HBOT'], codigos, {}).ok).toBe(false);
-    expect(validarContraindicaciones(['HBOT'], codigos, { autorizacionMedica: true }).ok).toBe(true);
+    const { estadoSeguridad } = await import('../src/lib/seguridad.js');
+    const r = evaluarScreening(respuestas({ 'hbot-infeccion-resp': true }));
+
+    // 1) R-02 (bots de reserva): ya no bloquea, advierte.
+    const v = validarContraindicaciones(['HBOT'], r.codigos, {});
+    expect(v.ok).toBe(true);
+    expect(v.advertencias.some((a) => a.regla === 'R-02')).toBe(true);
+    expect(v.bloqueos).toEqual([]);
+
+    // 2) El banner de Atender: NO mira la severidad. Un riesgo declarado lo pinta
+    //    de rojo y deja `puedeAvanzar: false` igual. Si esto se rompiera, bajar
+    //    una entrada a relativa sí dejaría pasar la sesión sin que nadie la mire.
+    expect(
+      estadoSeguridad({
+        contraindicacionesActivas: [],
+        screeningCompleto: true,
+        riesgosScreening: r.declarados.length,
+      }),
+    ).toMatchObject({ color: 'rojo', puedeAvanzar: false });
+  });
+
+  it('embarazo declarado → BLOQUEA IHHT y sólo ADVIERTE en HBOT', async () => {
+    // Resolución del Director Médico (9-sep-2026): en HBOT el embarazo es relativa
+    // —teratógeno cuestionable, y en emergencia por CO se usa—; en IHHT es
+    // absoluta porque no hay evidencia de seguridad. Severidades opuestas, así que
+    // la entrada se partió en dos y la pregunta mapea a las DOS.
+    //
+    // Lo que este test protege: si alguien vuelve a juntarlas, o el mapeo pierde
+    // uno de los dos códigos, una de las terapias se queda sin su severidad y
+    // nadie se entera.
+    const { validarContraindicaciones } = await import('../src/lib/reglas-turno.js');
+    const codigos = evaluarScreening(respuestas({ embarazo: 'Sí' })).codigos;
+    expect(codigos).toContain('HBOT_EMBARAZO');
+    expect(codigos).toContain('IHHT_EMBARAZO');
+
+    // IHHT: bloqueo, con la vía de escape de la autorización médica.
+    const ihht = validarContraindicaciones(['IHHT'], codigos, {});
+    expect(ihht.ok).toBe(false);
+    expect(validarContraindicaciones(['IHHT'], codigos, { autorizacionMedica: true }).ok).toBe(true);
+
+    // HBOT: advertencia, no bloqueo.
+    const hbot = validarContraindicaciones(['HBOT'], codigos, {});
+    expect(hbot.ok).toBe(true);
+    expect(hbot.advertencias.some((a) => a.regla === 'R-02')).toBe(true);
   });
 
   it('el riesgo declarado NO afecta terapias de otra categoría (un masaje sigue pasando)', async () => {

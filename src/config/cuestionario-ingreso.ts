@@ -64,7 +64,9 @@ export const SCREENING_RIESGOS: RiesgoScreening[] = [
   { linkId: 'ihht-tvp', codigos: ['IHHT_TVP_ACTIVA'] },
   // ---- Generales ----
   // Choice "Sí"/"No"/"No aplica": solo el "Sí" cuenta como afirmativa.
-  { linkId: 'embarazo', codigos: ['HBOT_EMBARAZO'] },
+  // Mapea a las DOS entradas: el embarazo se partió por terapia (relativa en HBOT,
+  // absoluta en IHHT) y un "sí" tiene que encender ambas.
+  { linkId: 'embarazo', codigos: ['HBOT_EMBARAZO', 'IHHT_EMBARAZO'] },
 ];
 
 export const CUESTIONARIO_INGRESO: Questionnaire = {

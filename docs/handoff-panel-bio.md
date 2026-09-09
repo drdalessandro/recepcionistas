@@ -274,20 +274,20 @@ La forma del recurso:
 }
 ```
 
-Los 13 códigos vigentes están en
-[`src/config/contraindicaciones.ts`](../src/config/contraindicaciones.ts): 8 de
-HBOT (`HBOT_NEUMOTORAX_NO_TRATADO`, `HBOT_MEDICACION_INCOMPATIBLE`,
-`HBOT_EPOC_RETENCION_CO2`, `HBOT_INFECCION_VIA_AEREA`, `HBOT_CONVULSIONES`,
-`HBOT_FIEBRE_ALTA`, `HBOT_CLAUSTROFOBIA`, `HBOT_EMBARAZO`) y 5 de IHHT
-(`IHHT_SCA_RECIENTE`, `IHHT_INSUF_CARDIACA_DESCOMP`, `IHHT_HTP_SEVERA`,
-`IHHT_INFECCION_RESPIRATORIA`, `IHHT_HTA_NO_CONTROLADA`). Cada uno declara
-`aplicaA` (categorías afectadas) y `severidad` (`absoluta` bloquea la reserva
-sin autorización médica; `relativa` advierte).
+Los códigos vigentes están en
+[`src/config/contraindicaciones.ts`](../src/config/contraindicaciones.ts), que es
+la fuente de verdad. **Este documento ya no los enumera**: la lista cambió dos
+veces (el documento de admisión en septiembre, y la resolución UHMS del Director
+Médico del 9-sep-2026 que partió la entrada de medicación por droga) y la copia
+quedó vieja las dos veces. Cada entrada declara `aplicaA` (categorías afectadas) y
+`severidad` (`absoluta` bloquea la reserva **sin autorización médica registrada**;
+`relativa` advierte).
 
-⚠️ **Esa tabla es un borrador sin aprobación médica** (`borradorPendienteRevision:
-true` en cada entrada): ni el Manual v8 ni el v9 traían tabla de
-contraindicaciones, así que se cargó una lista estándar para que el banner de
-seguridad tuviera datos. Está pendiente la revisión del Director Médico. No la
+⚠️ **La tabla está parcialmente validada.** El grueso lo firmó el Dr. Conrado López
+Alonso el 9-ago-2026; las entradas con `borradorPendienteRevision: true` esperan la
+firma conjunta del Dr. D'Alessandro y el Dr. Conrado. El estado real no se lee acá:
+lo dice el `status` del CodeSystem (`draft` mientras quede una en borrador) y el
+aviso que imprime el seed. No la
 usen como referencia clínica del Panel Bio sin ese visto bueno.
 
 ### Sobre reconciliar `Flag` con `Condition`

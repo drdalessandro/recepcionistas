@@ -131,26 +131,47 @@ describe('Seed — Contraindicaciones · gobernanza de la validación médica', 
     }
   });
 
-  it('Las entradas en borrador son EXACTAMENTE las que el doc de admisión cambió', () => {
-    // Si alguien marca otra entrada como borrador sin registrarlo, este test
-    // avisa: la lista es el acta de qué está esperando firma médica.
-    const codigos = (seed.contraindicaciones.concept ?? [])
+  it('No queda NINGUNA entrada en borrador: la tabla está firmada', () => {
+    // 9-sep-2026: firma conjunta del Dr. D'Alessandro (MN 92179) y el Dr. Conrado
+    // López Alonso. Este test es el acta. Si alguien agrega o modifica una entrada,
+    // tiene que entrar como borrador —y entonces esto falla, el CodeSystem vuelve a
+    // `draft` y el seed avisa— hasta que un Director Médico la firme.
+    const enBorrador = (seed.contraindicaciones.concept ?? [])
       .filter((c) => c.property?.some((p) => p.code === 'borrador' && p.valueBoolean === true))
+      .map((c) => c.code);
+    expect(enBorrador).toEqual([]);
+  });
+
+  it('El CodeSystem firmado sale `active` y lleva a los dos Directores Médicos', () => {
+    const cs = seed.contraindicaciones;
+    expect(cs.status).toBe('active');
+    expect(cs.title).not.toMatch(/BORRADOR/i);
+    expect(cs.publisher).toContain("D'Alessandro");
+    expect(cs.publisher).toContain('Conrado López Alonso');
+    expect(cs.date).toBe('2026-09-09');
+  });
+
+  it('La ÚNICA absoluta de HBOT es el neumotórax no tratado (resolución UHMS del 9-sep-2026)', () => {
+    // El criterio del Director Médico, escrito como test: si alguien vuelve a
+    // subir una entrada de HBOT a `absoluta` sin registrarlo, esto avisa.
+    // Marcapasos y cirugía de oído/nariz/tórax siguen absolutas porque su
+    // severidad quedó explícitamente pendiente en esa misma resolución.
+    const absolutasHbot = (seed.contraindicaciones.concept ?? [])
+      .filter((c) => c.property?.some((p) => p.code === 'aplicaA' && (p.valueString ?? '').includes('HBOT')))
+      .filter((c) => c.property?.some((p) => p.code === 'severidad' && p.valueString === 'absoluta'))
       .map((c) => c.code)
       .sort();
-    expect(codigos).toEqual(
-      [
-        'HBOT_CIRUGIA_ONT_RECIENTE',
-        'HBOT_CLAUSTROFOBIA',
-        'HBOT_CONVULSIONES',
-        'HBOT_EMBARAZO',
-        'HBOT_IMPLANTE_NO_CERTIFICADO',
-        'HBOT_INFECCION_VIA_AEREA',
-        'IHHT_EPOC_SEVERO',
-        'IHHT_HTA_NO_CONTROLADA',
-        'IHHT_TVP_ACTIVA',
-      ].sort(),
-    );
+    // Las cuatro que no son el neumotórax son las que el Director Médico dejó
+    // absolutas el 9-sep-2026 "con posibilidad de consulta médica con el
+    // cardiólogo": absoluta acá no es "nunca", es "no sin que lo vea un médico"
+    // — la vía de escape `autorizacionMedica` de R-02.
+    expect(absolutasHbot).toEqual([
+      'HBOT_BLEOMICINA',
+      'HBOT_CIRUGIA_ONT_RECIENTE',
+      'HBOT_DOXORRUBICINA',
+      'HBOT_IMPLANTE_NO_CERTIFICADO',
+      'HBOT_NEUMOTORAX_NO_TRATADO',
+    ]);
   });
 });
 
