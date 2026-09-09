@@ -4,6 +4,7 @@ import { esPlanBW, estadoDeCoverage, planCodigoDeCoverage } from '@bw/fhir/cover
 import { saldoPlan, type EstadoPlan, type SaldoPlan } from '@bw/lib/planes';
 import { MEMBRESIAS_POR_CODIGO } from '@bw/config/membresias';
 import { PAQUETES_POR_CODIGO } from '@bw/config/paquetes';
+import { PROGRAMAS_POR_CODIGO } from '@bw/config/programas';
 
 /** Plan activo de un paciente con su saldo ya calculado (para mostrar/usar). */
 export interface PlanPaciente {
@@ -20,6 +21,12 @@ export interface PlanPaciente {
 }
 
 export function nombreYBase(tipo: EstadoPlan['tipo'], planCodigo: string): { nombre: string; base: string } {
+  // Un programa (PB100D) no tiene base: vende tiempo, no sesiones de un
+  // servicio. Sin esta rama caía en el lookup de paquetes, no lo encontraba y
+  // mostraba el código crudo (`PB100D_PREMIUM_MENSUAL`) en la ficha.
+  if (tipo === 'programa') {
+    return { nombre: PROGRAMAS_POR_CODIGO.get(planCodigo)?.nombre ?? planCodigo, base: '' };
+  }
   if (tipo === 'membresia') {
     const m = MEMBRESIAS_POR_CODIGO.get(planCodigo);
     return {

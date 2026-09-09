@@ -12,11 +12,12 @@ const seed = buildSeed();
 describe('Seed — composición', () => {
   it('Construye los grupos de recursos esperados', () => {
     expect(seed.structureDefinitions.length).toBeGreaterThanOrEqual(28);
-    expect(seed.accessPolicies.length).toBe(6); // 5 roles internos + Paciente — Portal
+    expect(seed.accessPolicies.length).toBe(7); // 6 roles internos (+ Kinesiología, PB100D) + Paciente — Portal
     expect(seed.activityDefinitions.length).toBe(36); // 32 + 3 consultas médicas + Chequeo BW (v9: IHHT única)
     expect(seed.combos.length).toBe(9);
     expect(seed.membresias.length).toBe(10);
     expect(seed.paquetes.length).toBe(24); // 8 servicios base × 3 tramos (Multiplaza y Recovery Pro sumados 2026-08-15)
+    expect(seed.programas.length).toBe(2); // PB100D premium: mensual + 100 días
     expect(seed.locations.length).toBe(14); // 13 + Puesto IV 2 (handoff v9)
     // 14 salas + las 3 agendas médicas publicadas (Conrado, D'Alessandro, Dos Santos).
     expect(seed.schedules.length).toBe(17);

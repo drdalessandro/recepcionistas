@@ -126,6 +126,13 @@ export async function cargarPanelPlanes(ahora: Date = new Date()): Promise<Panel
       continue;
     }
     const estado = estadoDeCoverage(c);
+    // Este tablero mide SALDO DE SESIONES. Un programa (PB100D) vende tiempo y
+    // no tiene contador: entraría como 0/0, se contaría como "agotado" y
+    // ensuciaría el número de clientes en riesgo, que es lo único que este
+    // panel existe para vigilar.
+    if (estado.tipo === 'programa') {
+      continue;
+    }
     const saldo = saldoPlan(estado, ahora);
     const { nombre } = nombreYBase(estado.tipo, planCodigo);
 

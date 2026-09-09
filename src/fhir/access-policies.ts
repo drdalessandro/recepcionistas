@@ -113,6 +113,28 @@ export const POLICY_TERAPEUTA: AccessPolicy = {
   ],
 };
 
+/**
+ * Kinesiología (handoff PB100D §4): no existía rol ni policy en ningún repo.
+ * El PB100D deriva a kinesiología pelviperineal (acción A02) y en los niveles
+ * 3 y 4 kinesiología lleva el entrenamiento. Lee el plan y las metas (no los
+ * edita: eso es del médico/nutrición) y escribe lo suyo: observaciones,
+ * tareas y cuestionarios. El PractitionerRole del usuario se asigna a mano
+ * desde el admin, como enfermería y terapeutas (docs/usuarios.md).
+ */
+export const POLICY_KINESIOLOGIA: AccessPolicy = {
+  resourceType: 'AccessPolicy',
+  name: 'Kinesiología — Clínico limitado',
+  resource: [
+    { resourceType: 'Appointment', readonly: true },
+    { resourceType: 'Patient', readonly: true },
+    { resourceType: 'CarePlan', readonly: true },
+    { resourceType: 'Goal', readonly: true },
+    { resourceType: 'Observation' },
+    { resourceType: 'Task' },
+    { resourceType: 'QuestionnaireResponse' },
+  ],
+};
+
 /** Nombre canónico de la policy del portal del paciente (lo usa el bot de invitación). */
 export const NOMBRE_POLICY_PACIENTE = 'Paciente — Portal';
 
@@ -212,12 +234,25 @@ export const POLICY_PACIENTE_PORTAL: AccessPolicy = {
     { resourceType: 'Consent', criteria: 'Consent?patient=%patient' },
     // CarePlan escribible: "Mi plan" del portal marca acciones (Empezar/Lograda)
     // con updateResource (portal/src/pages/care-plan/ActionItems.tsx).
+    // ⏳ Handoff PB100D §1: cuando entre la pantalla nueva (Hito 5) esta entrada
+    // pasa a readonly — la paciente marcará Task, no editará el plan.
     { resourceType: 'CarePlan', criteria: 'CarePlan?subject=%patient' },
+    // Plan Bienestar 100 Días (handoff PB100D §1, visto en producción
+    // 2026-09-08: sin estas entradas el portal recibía 403 y el programa no
+    // funciona — marcar un día es la ÚNICA escritura del programa).
+    //  - Goal / NutritionOrder: la paciente VE sus metas y su plan nutricional.
+    { resourceType: 'Goal', readonly: true, criteria: 'Goal?subject=%patient' },
+    { resourceType: 'NutritionOrder', readonly: true, criteria: 'NutritionOrder?patient=%patient' },
     { resourceType: 'MedicationRequest', readonly: true, criteria: 'MedicationRequest?patient=%patient' },
     { resourceType: 'Immunization', readonly: true, criteria: 'Immunization?patient=%patient' },
     // Solicitudes de turno propias (las crea el bot; el paciente solo las lee).
     // `patient` mapea a Task.for (que el bot setea al paciente).
     { resourceType: 'Task', readonly: true, criteria: 'Task?patient=%patient' },
+    // …y ESCRITURA acotada por code: SOLO las acciones del PB100D (marcar
+    // "hecho" escribe Task.status/output). Las tareas del equipo (alertas,
+    // bandeja) llevan otro code y quedan fuera; las solicitudes también.
+    // Convive con la readonly amplia de arriba, igual que Coverage HIP.
+    { resourceType: 'Task', criteria: `Task?patient=%patient&code=${SYSTEM.biowellnessPlan}|` },
     // Catálogo, agenda y profesionales — sólo lectura (para mostrar la oferta).
     // ActivityDefinition (servicios) y PlanDefinition (combos/membresías/paquetes)
     // son el catálogo v9 que seedea este repo: el portal los lee para que su lista
@@ -226,6 +261,10 @@ export const POLICY_PACIENTE_PORTAL: AccessPolicy = {
     { resourceType: 'PlanDefinition', readonly: true },
     { resourceType: 'ObservationDefinition', readonly: true },
     { resourceType: 'Questionnaire', readonly: true },
+    // Terminología para el renderer de cuestionarios del portal (ADR-037 del
+    // portal / handoff PB100D §1): sin esto usa una copia local de las opciones.
+    { resourceType: 'ValueSet', readonly: true },
+    { resourceType: 'CodeSystem', readonly: true },
     // Texto legal del consentimiento, publicado por el seed: el portal y el
     // kiosco leen la MISMA versión (no puede haber dos textos firmados).
     { resourceType: 'Library', readonly: true },
@@ -262,5 +301,6 @@ export const ACCESS_POLICIES: AccessPolicy[] = [
   POLICY_MEDICO_PRESCRIPTOR,
   POLICY_ENFERMERA,
   POLICY_TERAPEUTA,
+  POLICY_KINESIOLOGIA,
   POLICY_PACIENTE_PORTAL,
 ];

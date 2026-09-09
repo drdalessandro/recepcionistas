@@ -1,5 +1,5 @@
 /**
- * Bot · Asignar plan (membresía o paquete) a un paciente.
+ * Bot · Asignar plan (membresía, paquete o programa) a un paciente.
  *
  * Dos flujos según el medio de pago del cobro inicial:
  *
@@ -20,6 +20,7 @@ import type { BotEvent, MedplumClient } from '@medplum/core';
 import type { Coverage } from '@medplum/fhirtypes';
 import { getMembresia } from '../config/membresias.js';
 import { getPaquete } from '../config/paquetes.js';
+import { getPrograma } from '../config/programas.js';
 import { calcularCobro } from '../lib/pricing.js';
 import { cicloMes } from '../lib/planes.js';
 import { EXT, SYSTEM, esMedioPago } from '../fhir/identifiers.js';
@@ -27,7 +28,12 @@ import { crearPreferenciaMP, emitirInvoicePlan, enviarWhatsApp, leerTcVigente, n
 
 export interface EntradaAsignarPlan {
   pacienteRef: string; // "Patient/123"
-  tipo: 'membresia' | 'paquete';
+  /**
+   * `programa` (PB100D) vende TIEMPO, no sesiones: su Coverage no lleva
+   * contador y el portal lo muestra sin saldo. Los dos flujos de cobro
+   * (presencial y MercadoPago) son los mismos que los de membresía/paquete.
+   */
+  tipo: 'membresia' | 'paquete' | 'programa';
   planCodigo: string;
   /** Founding Member: aplica el 20% adicional en paquetes. */
   fm?: boolean;
@@ -90,6 +96,22 @@ export async function handler(
       extension.push({ url: EXT.sesionesMes, valueInteger: sesiones });
       extension.push({ url: EXT.cicloMes, valueString: cicloExt });
       // Las membresías no vencen: se renuevan por ciclo. Sin period.end.
+    } else if (e.tipo === 'programa') {
+      const p = getPrograma(e.planCodigo);
+      // Un programa NO vende sesiones: sin `sesiones-mes` ni `sesiones-total`.
+      // `estadoDeCoverage` devuelve total 0 y el portal lo muestra sin contador.
+      sesiones = 0;
+      descripcion = p.nombre;
+      if (p.vigenciaDias) {
+        // Pago único: la vigencia es el programa entero y termina sola.
+        const fin = new Date(desde.getTime() + p.vigenciaDias * 24 * 60 * 60 * 1000);
+        periodEnd = fin.toISOString();
+      }
+      // El mensual NO lleva period.end ni ciclo: hoy se cobra el primer mes al
+      // dar de alta y la RENOVACIÓN todavía no existe (`bw-cobro-membresias`
+      // filtra por tipo 'membresia'). Ver docs/decisiones-pendientes.md: falta
+      // definir la cadencia (mes calendario como las membresías vs. cada 30
+      // días desde el alta, que es lo que implicaría una suscripción de MP).
     } else {
       const p = getPaquete(e.planCodigo);
       sesiones = p.tamano;

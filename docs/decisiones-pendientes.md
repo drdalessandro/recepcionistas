@@ -114,6 +114,15 @@ Ver [`docs/app-recepcion.md`](app-recepcion.md) y [`docs/bots.md`](bots.md).
 | Medplum Cloud → self-hosted | Arrancamos en Cloud; migrar a self-hosted (Docker, datos en Argentina) cuando esté estable. Diseñado para no acoplarse a features propietarias. | Decidido (Cloud para arrancar) |
 
 
+## Plan Bienestar 100 Días (PB100D)
+
+| Tema | Detalle | Estado |
+|---|---|---|
+| **Cadencia del cobro mensual** | El handoff dice dos cosas incompatibles: "suscripción de Mercado Pago **cada 30 días**" y "lo cobra **`bw-cobro-membresias`**", que corre los días 1-5 del **mes calendario**. No es lo mismo para quien se da de alta el 20. Hoy el alta cobra el PRIMER mes y la **renovación no existe**: el cron filtra por `tipo === 'membresia'` y saltea los programas (hay test que lo fija como deliberado). Decidir: (a) mes calendario, igual que las membresías —consistente y ya construido—, o (b) cada 30 días desde el alta, que además implica la **suscripción (preapproval) de MP**, una integración que no tenemos (ver `docs/mercadopago.md`: el débito automático sigue sin captura de tarjeta). | ⚠️ Andrés |
+| Cancelación del programa | El handoff dice "la paciente pide desde el portal (`Task`) y Recepción cierra". Falta definir qué pasa con el Coverage (`cancelled` al toque o al fin del período pago) y si se devuelve algo del pago único de 100 días. | ⚠️ Definir |
+| Tareas del equipo (§3) | Los bots del dashboard crean `Task` con `code` del CodeSystem `tarea` (`pb100d-silencio`, `pb100d-adherencia`, …). La vista **Avisos de Recepción lista solo `code=aviso-recepcion`**, así que hoy no los vería. Dos de los seis códigos enrutan a Recepción (`pb100d-silencio` → llamar; `pb100d-adherencia` → llamar). Definir si esas dos llegan a Avisos de Recepción o quedan solo en la bandeja del dashboard. | ⚠️ Definir |
+| Copy de los programas | La bajada de cada ítem (`PlanDefinition.description`, en `src/config/programas.ts`) es la referencia del brief §6.10 y está **pendiente de validación del Director Médico**, igual que el resto del copy clínico. | ⚠️ Dr. D'Alessandro |
+
 ## Pagos (Manual v9 / contrato Administración)
 
 - **Descuento a la carte de miembros (Std 10% / Int 15%) vs FM 20%**: implementado
@@ -126,6 +135,31 @@ Ver [`docs/app-recepcion.md`](app-recepcion.md) y [`docs/bots.md`](bots.md).
   **Después de deployar: correr `npm run seed` para actualizar el catálogo en
   Medplum** (los códigos `IHHT_EXPRESS`/`IHHT_PREMIUM` viejos quedan huérfanos;
   el seed crea `IHHT` y los paquetes `PAQ_IHHT_X*`).
+- **PB100D · cobro del programa premium** (handoff 2026-09-06, aplicado el seed y
+  la policy el 2026-09-08): el catálogo ya publica `PB100D_PREMIUM_MENSUAL` (USD
+  100/mes) y `PB100D_PREMIUM_100D` (USD 300 por única vez), pero **el cobro no
+  está implementado en ninguna de las dos modalidades**:
+  - *Mensual*: el handoff pide "suscripción de Mercado Pago cada 30 días,
+    cancelable". `bw-cobro-membresias` cobra **por ciclo de mes calendario los
+    días 1-5** y filtra `tipo === 'membresia'` — un programa no entra, y su
+    período es de 30 días corridos desde el alta, no del 1 al 30. Hay que
+    decidir si el programa se suma a ese cron (con ciclo propio) o si va por
+    suscripción real de MP (que hoy no existe: ver tokenización, abajo).
+  - *Pago único*: necesita `Invoice` + link, como la seña. `bw-asignar-plan` hoy
+    solo sabe de membresías y paquetes.
+  - No hay bot de **alta de programa**: el `Coverage` con `tipo-cobertura =
+    programa` se crea a mano hasta que exista.
+- **PB100D · desbloqueo del piloto**: la AccessPolicy del portal ya tiene `Goal`,
+  `NutritionOrder`, `Task` escribible (acotada al CodeSystem `biowellness-plan`),
+  `ValueSet` y `CodeSystem`. ⚠️ **El portal tiene que actualizar su espejo**
+  (`docs/medplum/access-policy-paciente-portal.json`) y correr
+  `npm run verificar:policy`, o su chequeo va a marcar diferencia contra el
+  servidor. Y cuando entre la pantalla nueva (Hito 5), `CarePlan` pasa a
+  `readonly: true` en esta policy.
+- **PB100D · lo que NO es de este repo**: `bw-web-push` (título del tipo
+  `plan-listo`) **no existe acá** — vive en el repo del portal/dashboard, igual
+  que el CodeSystem `biowellness-plan` y los bots que crean las tareas de la
+  bandeja. Este repo solo referencia el system para acotar el permiso.
 - **Tokenización MP para cobro recurrente**: el cron cobra con tarjeta guardada si
   el Coverage tiene `mp-customer-id`/`mp-card-id`. Falta el flujo de captura de la
   tarjeta (checkout de suscripción / Customers API) para poblar esas extensiones.
