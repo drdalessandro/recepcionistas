@@ -183,15 +183,30 @@ export const CONTRAINDICACIONES: Contraindicacion[] = [
     severidad: 'relativa',
     borradorPendienteRevision: true,
   },
+  // El embarazo era UNA entrada compartida por HBOT e IHHT. La resolución del
+  // Director Médico les da severidades opuestas, y una entrada sólo lleva una:
+  // se parte en dos. La pregunta `embarazo` del screening mapea a las DOS, así
+  // que un "sí" sigue encendiendo ambas — si mapeara sólo a una, la otra terapia
+  // se quedaría sin protección en silencio.
   {
     codigo: 'HBOT_EMBARAZO',
-    aplicaA: ['HBOT', 'IHHT'],
+    aplicaA: ['HBOT'],
+    // Relativa por resolución del Director Médico (9-sep-2026, UHMS): teratógeno
+    // fetal cuestionable. De rutina se evita; en emergencia por intoxicación con
+    // CO se usa. El doc de admisión B2 la quería bloqueante: prevalece el
+    // criterio del Director Médico.
     descripcion: 'Embarazo (evaluación médica requerida).',
-    // Doc de admisión B2: bloquea HBOT, IHHT y contraste, y deriva a consulta.
-    // Relativa por resolución del Director Médico (9-sep-2026, UHMS): teratógeno fetal cuestionable. De rutina se evita; en
-    // emergencia por intoxicación con CO se usa. NOTA: esta entrada también
-    // aplica a IHHT, y la resolución del 9-sep cubre HBOT — confirmar IHHT.
     severidad: 'relativa',
+    borradorPendienteRevision: true,
+  },
+  {
+    codigo: 'IHHT_EMBARAZO',
+    aplicaA: ['IHHT'],
+    // Absoluta por resolución del Director Médico (9-sep-2026): "IHHT no tiene
+    // evidencia de seguridad en embarazo". A diferencia de HBOT, acá no hay un
+    // escenario de emergencia que justifique la exposición.
+    descripcion: 'Embarazo: la IHHT no tiene evidencia de seguridad en el embarazo.',
+    severidad: 'absoluta',
     borradorPendienteRevision: true,
   },
 

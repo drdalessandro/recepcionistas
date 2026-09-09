@@ -160,6 +160,31 @@ describe('lo declarado alimenta R-02: la reserva de HBOT del caso real se BLOQUE
     ).toMatchObject({ color: 'rojo', puedeAvanzar: false });
   });
 
+  it('embarazo declarado → BLOQUEA IHHT y sólo ADVIERTE en HBOT', async () => {
+    // Resolución del Director Médico (9-sep-2026): en HBOT el embarazo es relativa
+    // —teratógeno cuestionable, y en emergencia por CO se usa—; en IHHT es
+    // absoluta porque no hay evidencia de seguridad. Severidades opuestas, así que
+    // la entrada se partió en dos y la pregunta mapea a las DOS.
+    //
+    // Lo que este test protege: si alguien vuelve a juntarlas, o el mapeo pierde
+    // uno de los dos códigos, una de las terapias se queda sin su severidad y
+    // nadie se entera.
+    const { validarContraindicaciones } = await import('../src/lib/reglas-turno.js');
+    const codigos = evaluarScreening(respuestas({ embarazo: 'Sí' })).codigos;
+    expect(codigos).toContain('HBOT_EMBARAZO');
+    expect(codigos).toContain('IHHT_EMBARAZO');
+
+    // IHHT: bloqueo, con la vía de escape de la autorización médica.
+    const ihht = validarContraindicaciones(['IHHT'], codigos, {});
+    expect(ihht.ok).toBe(false);
+    expect(validarContraindicaciones(['IHHT'], codigos, { autorizacionMedica: true }).ok).toBe(true);
+
+    // HBOT: advertencia, no bloqueo.
+    const hbot = validarContraindicaciones(['HBOT'], codigos, {});
+    expect(hbot.ok).toBe(true);
+    expect(hbot.advertencias.some((a) => a.regla === 'R-02')).toBe(true);
+  });
+
   it('el riesgo declarado NO afecta terapias de otra categoría (un masaje sigue pasando)', async () => {
     const { validarContraindicaciones } = await import('../src/lib/reglas-turno.js');
     const codigos = evaluarScreening(respuestas({ 'hbot-neumotorax': true })).codigos;
