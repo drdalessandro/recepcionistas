@@ -112,6 +112,19 @@ export const EXT = {
   mpCustomerId: `${BASE}/StructureDefinition/mp-customer-id`,
   /** Id de la tarjeta guardada en MercadoPago (token del lado de MP). */
   mpCardId: `${BASE}/StructureDefinition/mp-card-id`,
+  /**
+   * Id de la SUSCRIPCIÓN de MercadoPago (`preapproval`) que debita este plan.
+   *
+   * La arma Recepción desde el panel de MP —el sistema no crea suscripciones
+   * (D16: sin checkout propio)— y pega acá el id. Es lo único que permite
+   * atribuir un débito recurrente a esta cobertura: el pago llega como
+   * `subscription_authorized_payment`, que trae el `preapproval_id` y no un
+   * `external_reference` por ciclo.
+   *
+   * Sin este id el programa igual se factura, pero nadie lo debita solo: el cron
+   * deja un aviso a Recepción en vez de dar por cobrada una plata que no entró.
+   */
+  mpSuscripcion: `${BASE}/StructureDefinition/mp-suscripcion`,
   // Communication
   canal: `${BASE}/StructureDefinition/canal`,
   templateUsado: `${BASE}/StructureDefinition/template-usado`,

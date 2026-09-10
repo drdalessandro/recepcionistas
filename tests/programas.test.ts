@@ -315,11 +315,14 @@ describe('bw-asignar-plan — alta de un programa', () => {
   });
 });
 
-describe('el cron de membresías NO toca los programas (todavía)', () => {
-  it('un Coverage de programa se saltea: la renovación mensual no existe', async () => {
-    // Comportamiento DELIBERADO, no un olvido: falta decidir la cadencia (mes
-    // calendario vs. cada 30 días desde el alta). Si algún día el cron los
-    // cobra, este test tiene que cambiar A PROPÓSITO — no en silencio.
+describe('el cron de membresías NO toca los programas', () => {
+  it('un Coverage de programa se saltea: lo cobra su propio cron', async () => {
+    // La cadencia ya se decidió (brief §6.10): cada 30 días desde el alta, no el
+    // mes calendario. Por eso los programas NO pasaron a este cron sino que
+    // tienen el suyo, `bw-cobro-programas` — ver tests/cobro-programas.test.ts.
+    // Este test sigue siendo el que impide que alguien los mezcle: acá se
+    // facturarían contra el catálogo de membresías y `getMembresia` cortaría la
+    // corrida del mes para todo el mundo.
     const { handler } = await import('../src/bots/cobro-membresias.js');
     const covPrograma: Coverage = {
       resourceType: 'Coverage',

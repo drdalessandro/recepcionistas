@@ -30,7 +30,9 @@
  * Requiere el secret MERCADOPAGO_ACCESS_TOKEN.
  */
 import type { BotEvent, MedplumClient } from '@medplum/core';
+import type { Coverage } from '@medplum/fhirtypes';
 import { validarFirmaMercadoPago } from '../lib/mercadopago.js';
+import { EXT, SYSTEM } from '../fhir/identifiers.js';
 import { confirmarReserva, crearAlertaRecepcion, resolverInvoicePlan } from './_shared.js';
 
 interface NotificacionMP {
@@ -49,10 +51,163 @@ export interface ResultadoWebhook {
   appointmentId?: string;
 }
 
+/** Los eventos de suscripción que este bot entiende (el resto se ignora igual que antes). */
+const DE_SUSCRIPCION = ['subscription_authorized_payment', 'subscription_preapproval'];
+
+/** Estados de un débito de suscripción que valen como PLATA ACREDITADA. */
+const ACREDITADO = ['approved', 'accredited'];
+
+/** Estados que son un rechazo con nombre y apellido: alguien tiene que mirarlos. */
+const RECHAZADO = ['rejected', 'cancelled'];
+
+/**
+ * Un débito recurrente de una suscripción de MercadoPago.
+ *
+ * A diferencia de un pago suelto, esto NO trae un `external_reference` por
+ * ciclo: la suscripción lleva uno solo y no cambia. Lo que sí trae es el
+ * `preapproval_id`, y con eso se llega a la cobertura (extensión
+ * `mp-suscripcion`, que carga Recepción cuando arma la suscripción).
+ *
+ * De ahí, la cuota que paga es **la más vieja sin pagar** de esa cobertura, que
+ * es como funciona cualquier cuenta corriente. Sin cuota abierta no se inventa
+ * ninguna: queda un aviso, porque plata que entra sin deuda que la explique es
+ * exactamente lo que hay que mirar a mano.
+ */
+async function debitoDeSuscripcion(medplum: MedplumClient, token: string, id: string): Promise<ResultadoWebhook> {
+  const resp = await fetch(`https://api.mercadopago.com/authorized_payments/${id}`, {
+    headers: { Authorization: `Bearer ${token}` },
+    signal: AbortSignal.timeout(15_000),
+  });
+  if (resp.status === 404) {
+    return { ok: true, confirmado: false, motivo: 'débito inexistente en esta cuenta (¿otro entorno?): ignorado' };
+  }
+  if (!resp.ok) {
+    throw new Error(`MP authorized_payments respondió ${resp.status}: se responde error para que MercadoPago reintente.`);
+  }
+  const debito = (await resp.json()) as {
+    preapproval_id?: string;
+    status?: string;
+    payment?: { id?: string | number; status?: string };
+  };
+  const preapproval = debito.preapproval_id;
+  if (!preapproval) {
+    return { ok: true, confirmado: false, motivo: 'el débito no trae preapproval_id: no se puede atribuir' };
+  }
+
+  const cobertura = await coberturaDeSuscripcion(medplum, preapproval);
+  if (!cobertura?.id) {
+    await crearAlertaRecepcion(medplum, {
+      titulo: 'Débito de una suscripción que no está en ninguna cobertura',
+      detalle: `Entró un débito de la suscripción ${preapproval} y ninguna cobertura la tiene cargada. Cargá el id de la suscripción en la cobertura que corresponda.`,
+      clave: `suscripcion-huerfana-${preapproval}`,
+    });
+    return { ok: true, confirmado: false, motivo: 'suscripción sin cobertura: alerta a Recepción' };
+  }
+
+  const estado = (debito.payment?.status ?? debito.status ?? '').toLowerCase();
+  const clave = await claveDeLaCuotaMasVieja(medplum, cobertura);
+  if (!clave) {
+    await crearAlertaRecepcion(medplum, {
+      titulo: 'Débito de suscripción sin cuota que lo explique',
+      detalle: `La suscripción ${preapproval} debitó (${estado || 'sin estado'}) y la cobertura ${cobertura.id} no tiene ninguna cuota abierta. Revisalo a mano.`,
+      pacienteRef: cobertura.beneficiary?.reference,
+      focusRef: `Coverage/${cobertura.id}`,
+      clave: `debito-sin-cuota-${id}`,
+    });
+    return { ok: true, confirmado: false, motivo: 'sin cuota abierta: alerta a Recepción' };
+  }
+
+  if (ACREDITADO.includes(estado)) {
+    await resolverInvoicePlan(medplum, {
+      clave,
+      resultado: 'pagado',
+      detalle: `Débito automático de la suscripción ${preapproval}.`,
+      medio: 'mercadopago',
+      ...(debito.payment?.id ? { mpPaymentId: String(debito.payment.id) } : {}),
+    });
+    return { ok: true, confirmado: true, status: estado };
+  }
+
+  if (RECHAZADO.includes(estado)) {
+    await resolverInvoicePlan(medplum, { clave, resultado: 'rechazado', detalle: `La suscripción ${preapproval} no pudo debitar (${estado}).` });
+    return { ok: true, confirmado: false, status: estado, motivo: 'débito rechazado' };
+  }
+
+  // Ni acreditado ni rechazado (programado, en reintento): NO se toca la cuota.
+  // Dar por pagada una plata que todavía no entró es peor que esperar el aviso
+  // siguiente, y MercadoPago manda uno por cada cambio de estado.
+  return { ok: true, confirmado: false, status: estado, motivo: 'débito todavía sin resolver: se espera el aviso siguiente' };
+}
+
+/**
+ * Un cambio en la suscripción misma: la cancelaron, la pausaron, cambió el monto.
+ *
+ * No se toca la cobertura desde acá. Que la paciente cancele en MercadoPago no
+ * es lo mismo que darla de baja del programa —puede haber deuda, puede querer
+ * seguir pagando de otra forma— y esa decisión es de Recepción, no del webhook.
+ * Lo que sí se hace es que no pase en silencio.
+ */
+async function cambioDeSuscripcion(medplum: MedplumClient, token: string, id: string): Promise<ResultadoWebhook> {
+  const resp = await fetch(`https://api.mercadopago.com/preapproval/${id}`, {
+    headers: { Authorization: `Bearer ${token}` },
+    signal: AbortSignal.timeout(15_000),
+  });
+  if (resp.status === 404) {
+    return { ok: true, confirmado: false, motivo: 'suscripción inexistente en esta cuenta: ignorada' };
+  }
+  if (!resp.ok) {
+    throw new Error(`MP preapproval respondió ${resp.status}: se responde error para que MercadoPago reintente.`);
+  }
+  const suscripcion = (await resp.json()) as { status?: string };
+  const estado = (suscripcion.status ?? '').toLowerCase();
+  if (estado !== 'cancelled' && estado !== 'paused') {
+    return { ok: true, confirmado: false, status: estado, motivo: 'cambio de suscripción sin efecto sobre el cobro' };
+  }
+
+  const cobertura = await coberturaDeSuscripcion(medplum, id);
+  await crearAlertaRecepcion(medplum, {
+    titulo: estado === 'cancelled' ? 'Cancelaron una suscripción de MercadoPago' : 'Pausaron una suscripción de MercadoPago',
+    detalle:
+      `La suscripción ${id} quedó "${estado}"${cobertura?.id ? ` (cobertura ${cobertura.id})` : ' y no está cargada en ninguna cobertura'}. ` +
+      'El plan sigue activo hasta que lo des de baja: decidí si se da de baja, se cobra de otra forma o queda deuda.',
+    ...(cobertura?.beneficiary?.reference ? { pacienteRef: cobertura.beneficiary.reference } : {}),
+    ...(cobertura?.id ? { focusRef: `Coverage/${cobertura.id}` } : {}),
+    clave: `suscripcion-${estado}-${id}`,
+  });
+  return { ok: true, confirmado: false, status: estado, motivo: 'alerta a Recepción' };
+}
+
+/** La cobertura que declara esta suscripción de MercadoPago en `mp-suscripcion`. */
+async function coberturaDeSuscripcion(medplum: MedplumClient, preapproval: string): Promise<Coverage | undefined> {
+  const coberturas = await medplum.searchResources('Coverage', { _count: 500 });
+  return coberturas.find((c) => c.extension?.some((x) => x.url === EXT.mpSuscripcion && x.valueString === preapproval));
+}
+
+/**
+ * La clave del Invoice de la cuota más vieja sin pagar de una cobertura.
+ *
+ * La más vieja y no la última: si quedaron dos meses abiertos, el débito de hoy
+ * paga el que se debe desde hace más tiempo. Al revés, la deuda vieja no se
+ * salda nunca y queda un mes fantasma que nadie va a reclamar.
+ */
+async function claveDeLaCuotaMasVieja(medplum: MedplumClient, cobertura: Coverage): Promise<string | undefined> {
+  const abiertas = await medplum.searchResources('Invoice', { status: 'issued', _sort: 'date', _count: 100 });
+  const prefijo = `plan-${cobertura.id}`;
+  const suya = abiertas.find((i) =>
+    (i.identifier ?? []).some((x) => x.system === SYSTEM.invoice && (x.value ?? '').startsWith(`${prefijo}-`)),
+  );
+  return suya?.identifier?.find((x) => x.system === SYSTEM.invoice)?.value;
+}
+
 export async function handler(medplum: MedplumClient, event: BotEvent): Promise<ResultadoWebhook> {
   const body = (event.input ?? {}) as NotificacionMP;
   const tipo = body.type ?? body.topic;
-  if (tipo && tipo !== 'payment') {
+  // Los débitos de una SUSCRIPCIÓN no llegan como `payment`: MercadoPago los
+  // manda como `subscription_authorized_payment`, y los cambios de la
+  // suscripción (cancelada, pausada) como `subscription_preapproval`. Hasta acá
+  // los dos caían en el "evento ignorado" de abajo, así que un programa mensual
+  // debitado por suscripción cobraba la plata y el sistema no se enteraba nunca.
+  if (tipo && tipo !== 'payment' && !DE_SUSCRIPCION.includes(tipo)) {
     return { ok: true, confirmado: false, motivo: `evento ignorado (${tipo})` };
   }
   const paymentId = body.data?.id ?? body.id;
@@ -85,6 +240,13 @@ export async function handler(medplum: MedplumClient, event: BotEvent): Promise<
     // Transitorio (config incompleta): lanzar para que MP reintente hasta que
     // el secret esté cargado — antes esto respondía 200 y el pago se perdía.
     throw new Error('Falta el Project Secret MERCADOPAGO_ACCESS_TOKEN: se responde error para que MercadoPago reintente.');
+  }
+
+  if (tipo === 'subscription_authorized_payment') {
+    return debitoDeSuscripcion(medplum, token, String(paymentId));
+  }
+  if (tipo === 'subscription_preapproval') {
+    return cambioDeSuscripcion(medplum, token, String(paymentId));
   }
 
   // Verificación autoritativa contra MP.
