@@ -121,6 +121,36 @@ export const POLICY_TERAPEUTA: AccessPolicy = {
  * tareas y cuestionarios. El PractitionerRole del usuario se asigna a mano
  * desde el admin, como enfermería y terapeutas (docs/usuarios.md).
  */
+/**
+ * Nutrición (handoff PB100D §4): no existía rol ni policy en ningún repo, igual que
+ * pasaba con kinesiología.
+ *
+ * La bandeja del equipo tiene solapa de nutrición —le tocan la cintura que no baja,
+ * la tolerancia digestiva al GLP-1 y la dificultad con la ingesta (`roles.ts`)— y
+ * hasta acá no había ninguna policy con la que abrirla. La nutricionista entraba con
+ * la del Director Médico, que es todo, o no entraba.
+ *
+ * Lee el plan y las metas y no las edita: las metas las fija el médico (6.1 del
+ * brief). Escribe lo suyo: la antropometría (`Observation`), el plan nutricional
+ * (`NutritionOrder`), las tareas que toma de la bandeja y los cuestionarios. El
+ * PractitionerRole se asigna a mano desde el admin, como enfermería, terapeutas y
+ * kinesiología (docs/usuarios.md).
+ */
+export const POLICY_NUTRICION: AccessPolicy = {
+  resourceType: 'AccessPolicy',
+  name: 'Nutrición — Clínico limitado',
+  resource: [
+    { resourceType: 'Appointment', readonly: true },
+    { resourceType: 'Patient', readonly: true },
+    { resourceType: 'CarePlan', readonly: true },
+    { resourceType: 'Goal', readonly: true },
+    { resourceType: 'Observation' },
+    { resourceType: 'NutritionOrder' },
+    { resourceType: 'Task' },
+    { resourceType: 'QuestionnaireResponse' },
+  ],
+};
+
 export const POLICY_KINESIOLOGIA: AccessPolicy = {
   resourceType: 'AccessPolicy',
   name: 'Kinesiología — Clínico limitado',
@@ -257,10 +287,22 @@ export const POLICY_PACIENTE_PORTAL: AccessPolicy = {
     // `patient` mapea a Task.for (que el bot setea al paciente).
     { resourceType: 'Task', readonly: true, criteria: 'Task?patient=%patient' },
     // …y ESCRITURA acotada por code: SOLO las acciones del PB100D (marcar
-    // "hecho" escribe Task.status/output). Las tareas del equipo (alertas,
-    // bandeja) llevan otro code y quedan fuera; las solicitudes también.
-    // Convive con la readonly amplia de arriba, igual que Coverage HIP.
-    { resourceType: 'Task', criteria: `Task?patient=%patient&code=${SYSTEM.biowellnessPlan}|` },
+    // "hecho" escribe Task.status/output). Convive con la readonly amplia de
+    // arriba, igual que Coverage HIP.
+    //
+    // El filtro estuvo puesto sobre `biowellness-plan|` —el sistema de CONCEPTOS
+    // del programa— y no alcanzaba: las señales al equipo llevan un coding de ese
+    // mismo sistema (`biowellness-plan|sintoma-esfuerzo`), así que entraban en el
+    // criterio. La paciente podía escribir sus propias señales: cerrar un
+    // «síntoma con el esfuerzo» y hacerlo desaparecer de la bandeja del equipo,
+    // que es exactamente lo que el comentario de acá decía que no pasaba.
+    //
+    // El sistema correcto es el del TIPO de tarea, que sí separa lo suyo de lo del
+    // equipo, y con el código exacto: `accion`, no el sistema abierto. Verificado
+    // en el portal antes de acotarlo: marcar y desmarcar un día (`Hoy.tsx`) es la
+    // ÚNICA Task que escribe, y siempre es de tipo `accion`; el check-in crea un
+    // QuestionnaireResponse y no toca ninguna Task.
+    { resourceType: 'Task', criteria: `Task?patient=%patient&code=${SYSTEM.pb100dTarea}|accion` },
     // Catálogo, agenda y profesionales — sólo lectura (para mostrar la oferta).
     // ActivityDefinition (servicios) y PlanDefinition (combos/membresías/paquetes)
     // son el catálogo v9 que seedea este repo: el portal los lee para que su lista
@@ -310,5 +352,6 @@ export const ACCESS_POLICIES: AccessPolicy[] = [
   POLICY_ENFERMERA,
   POLICY_TERAPEUTA,
   POLICY_KINESIOLOGIA,
+  POLICY_NUTRICION,
   POLICY_PACIENTE_PORTAL,
 ];

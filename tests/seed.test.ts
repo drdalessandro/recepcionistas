@@ -12,7 +12,7 @@ const seed = buildSeed();
 describe('Seed — composición', () => {
   it('Construye los grupos de recursos esperados', () => {
     expect(seed.structureDefinitions.length).toBeGreaterThanOrEqual(28);
-    expect(seed.accessPolicies.length).toBe(7); // 6 roles internos (+ Kinesiología, PB100D) + Paciente — Portal
+    expect(seed.accessPolicies.length).toBe(8); // 7 roles internos (+ Kinesiología y Nutrición, PB100D) + Paciente — Portal
     expect(seed.activityDefinitions.length).toBe(36); // 32 + 3 consultas médicas + Chequeo BW (v9: IHHT única)
     expect(seed.combos.length).toBe(9);
     expect(seed.membresias.length).toBe(10);

@@ -19,17 +19,61 @@ import { estadoDeCoverage, esPlanBW } from '../src/fhir/coverage.js';
 const policyPortal = ACCESS_POLICIES.find((p) => p.name === 'Paciente — Portal')!;
 const entradas = (tipo: string) => (policyPortal.resource ?? []).filter((r) => r.resourceType === tipo);
 
+/**
+ * ¿El `code=` de un criterio alcanza a estos codings?
+ *
+ * Es el pedacito de búsqueda FHIR por token que decide si la paciente puede escribir
+ * una tarea: `sistema|codigo` pide los dos, `sistema|` cualquier código de ese
+ * sistema. Chiquito a propósito: sin esto el test sólo compara strings, y comparar
+ * strings no habría encontrado que el criterio viejo dejaba entrar las señales.
+ */
+function alcanza(criteria: string, codings: { system: string; code: string }[]): boolean {
+  const token = new URLSearchParams(criteria.split('?')[1] ?? '').get('code');
+  if (token === null) {
+    return true;
+  }
+  const [system, code] = token.split('|');
+  return codings.some((c) => c.system === system && (code === undefined || code === '' || c.code === code));
+}
+
 describe('AccessPolicy del portal — lo que desbloquea el PB100D', () => {
-  it('Task: lectura amplia MÁS una entrada escribible acotada al CodeSystem del programa', () => {
+  it('Task: lectura amplia MÁS una entrada escribible acotada al TIPO de tarea', () => {
     const tasks = entradas('Task');
     // La readonly amplia se conserva: solicitudes, controles, etc.
     expect(tasks.some((t) => t.readonly === true && t.criteria === 'Task?patient=%patient')).toBe(true);
-    // Y la escribible, acotada por code. Sin `code`, la paciente podría editar
-    // CUALQUIER Task suya, incluidas las que el equipo usa como bandeja.
     const escribible = tasks.find((t) => !t.readonly);
     expect(escribible, 'falta la entrada Task escribible: sin ella no se puede marcar un día').toBeDefined();
-    expect(escribible!.criteria).toContain(`code=${SYSTEM.biowellnessPlan}|`);
     expect(escribible!.criteria).toContain('patient=%patient');
+    // El código EXACTO, no el sistema abierto: ver el test de abajo.
+    expect(escribible!.criteria).toContain(`code=${SYSTEM.pb100dTarea}|accion`);
+  });
+
+  // El filtro estuvo puesto sobre `biowellness-plan|`, el sistema de CONCEPTOS del
+  // programa, y no alcanzaba: las señales al equipo llevan un coding de ESE MISMO
+  // sistema, así que caían dentro del criterio. La paciente podía cerrar su propia
+  // señal de «síntoma con el esfuerzo» y hacerla desaparecer de la bandeja.
+  it('lo escribible por la paciente NO alcanza a las tareas del equipo', () => {
+    const escribible = entradas('Task').find((t) => !t.readonly)!;
+    // Las tareas del PB100D tal como las escribe el dashboard.
+    const accion = [
+      { system: SYSTEM.pb100dTarea, code: 'accion' },
+      { system: SYSTEM.biowellnessPlan, code: 'n01' },
+    ];
+    const senal = [
+      { system: SYSTEM.pb100dTarea, code: 'senal' },
+      { system: SYSTEM.biowellnessPlan, code: 'sintoma-esfuerzo' },
+    ];
+    const medicion = [{ system: SYSTEM.pb100dTarea, code: 'medicion' }];
+    const cierre = [{ system: SYSTEM.pb100dTarea, code: 'cierre' }];
+
+    expect(alcanza(escribible.criteria!, accion), 'sin esto la paciente no puede marcar un día').toBe(true);
+    expect(alcanza(escribible.criteria!, senal), 'la paciente NO puede tocar una señal del equipo').toBe(false);
+    expect(alcanza(escribible.criteria!, medicion)).toBe(false);
+    expect(alcanza(escribible.criteria!, cierre)).toBe(false);
+
+    // Y la prueba de por qué el filtro viejo fallaba: señal y acción comparten sistema.
+    const criterioViejo = `Task?patient=%patient&code=${SYSTEM.biowellnessPlan}|`;
+    expect(alcanza(criterioViejo, senal), 'el criterio viejo sí alcanzaba a la señal').toBe(true);
   });
 
   it('Goal y NutritionOrder: lectura de lo propio (hoy daban 403)', () => {
@@ -81,6 +125,30 @@ describe('AccessPolicy del portal — lo que desbloquea el PB100D', () => {
     // conocida y preexistente (adjuntos de mensajes/consentimientos).
     const abiertas = (policyPortal.resource ?? []).filter((r) => !r.readonly && !r.criteria);
     expect(abiertas.map((r) => r.resourceType)).toEqual(['Binary']);
+  });
+
+  // Mismo agujero que kinesiología, un rol más allá: la bandeja tiene solapa de
+  // nutrición y no había ninguna policy con la que abrirla.
+  it('existe la policy de Nutrición y no puede editar el plan ni las metas', () => {
+    const nutri = ACCESS_POLICIES.find((p) => p.name === 'Nutrición — Clínico limitado');
+    expect(nutri, 'falta la policy de nutrición: la solapa de la bandeja no se puede abrir').toBeDefined();
+    const porTipo = new Map((nutri!.resource ?? []).map((r) => [r.resourceType, r]));
+    expect(porTipo.get('CarePlan')?.readonly).toBe(true);
+    expect(porTipo.get('Goal')?.readonly, 'las metas las fija el médico').toBe(true);
+    // Y sí escribe lo suyo, incluido el plan nutricional.
+    for (const tipo of ['Observation', 'NutritionOrder', 'Task', 'QuestionnaireResponse']) {
+      expect(porTipo.get(tipo)?.readonly, tipo).toBeUndefined();
+    }
+  });
+
+  // Los tres roles de la bandeja tienen que poder leer las Task del equipo.
+  it('los tres roles del reparto por rol llegan a las Task', () => {
+    for (const nombre of ['Director Médico — Clínico completo', 'Nutrición — Clínico limitado', 'Kinesiología — Clínico limitado']) {
+      const p = ACCESS_POLICIES.find((x) => x.name === nombre);
+      expect(p, `falta la policy ${nombre}`).toBeDefined();
+      const alcanzaTask = (p!.resource ?? []).some((r) => r.resourceType === 'Task' || r.resourceType === '*');
+      expect(alcanzaTask, `${nombre} no llega a las Task de la bandeja`).toBe(true);
+    }
   });
 
   it('existe la policy de Kinesiología y no puede editar el plan ni las metas', () => {
