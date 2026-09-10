@@ -217,13 +217,24 @@ export const SYSTEM = {
    */
   programaCodigo: `${BASE}/CodeSystem/programa`,
   /**
-   * Acciones del Plan Bienestar 100 Días (Task que la paciente marca "hecho"
-   * desde el portal). El CodeSystem lo emite el DASHBOARD, no este repo: acá
-   * solo se referencia para acotar la entrada escribible de Task en la policy
-   * del portal (handoff PB100D §1) — sin el filtro por code, la paciente podría
-   * editar cualquier Task suya (solicitudes, controles, tareas del equipo).
+   * Conceptos del Plan Bienestar 100 Días: niveles, etapas, acciones, señales.
+   * El CodeSystem lo emite el DASHBOARD, no este repo.
+   *
+   * OJO: **no sirve para acotar lo que escribe la paciente.** Las señales al
+   * equipo también llevan un coding de este sistema (`biowellness-plan|
+   * sintoma-esfuerzo`), así que un criterio `code=<este sistema>|` las incluye.
+   * Para eso está `pb100dTarea`, que distingue acción de señal.
    */
   biowellnessPlan: `${BASE}/CodeSystem/biowellness-plan`,
+  /**
+   * TIPO de tarea del Plan Bienestar 100 Días: `accion`, `checkin`, `medicion`,
+   * `funcional`, `senal`, `cierre`, `apertura`. También lo emite el dashboard.
+   *
+   * Es el que separa lo de la paciente de lo del equipo, y por eso es el que acota
+   * la entrada escribible de Task en la policy del portal: la paciente escribe
+   * `accion` y nada más.
+   */
+  pb100dTarea: `${BASE}/CodeSystem/pb100d-tarea`,
   recursoCodigo: `${BASE}/CodeSystem/recurso-fisico`,
   /**
    * Namespace PUBLICADO que el portal usa para encontrar agendas de médicos
