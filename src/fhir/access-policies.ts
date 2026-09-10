@@ -232,11 +232,19 @@ export const POLICY_PACIENTE_PORTAL: AccessPolicy = {
     // contra el recurso real del servidor (2026-08-14).
     { resourceType: 'Consent', readonly: true, criteria: 'Consent?patient=%patient' },
     { resourceType: 'Consent', criteria: 'Consent?patient=%patient' },
-    // CarePlan escribible: "Mi plan" del portal marca acciones (Empezar/Lograda)
-    // con updateResource (portal/src/pages/care-plan/ActionItems.tsx).
-    // ⏳ Handoff PB100D §1: cuando entre la pantalla nueva (Hito 5) esta entrada
-    // pasa a readonly — la paciente marcará Task, no editará el plan.
-    { resourceType: 'CarePlan', criteria: 'CarePlan?subject=%patient' },
+    // CarePlan de SOLO LECTURA. Estuvo escribible mientras "Mi plan" v1 marcaba
+    // acciones editando el propio CarePlan (`ActionItems.tsx`), y el comentario
+    // que había acá anunciaba el cambio "cuando entre la pantalla nueva".
+    //
+    // Esa pantalla entró: el Hito 5 del PB100D reemplazó "Mi plan" y
+    // `ActionItems.tsx` se borró en portal#210. Hoy la paciente marca `Task`
+    // —la entrada acotada por `code` de más abajo— y no toca el plan.
+    //
+    // Por qué importa que sea readonly: con la escritura abierta, la paciente
+    // podía editar CUALQUIER campo de su propio CarePlan, incluidas las metas
+    // enlazadas, el nivel y el `period` del que sale el día del programa.
+    // Verificado antes de cerrar: el portal ya no escribe ningún CarePlan.
+    { resourceType: 'CarePlan', readonly: true, criteria: 'CarePlan?subject=%patient' },
     // Plan Bienestar 100 Días (handoff PB100D §1, visto en producción
     // 2026-09-08: sin estas entradas el portal recibía 403 y el programa no
     // funciona — marcar un día es la ÚNICA escritura del programa).

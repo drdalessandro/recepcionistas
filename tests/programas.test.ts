@@ -44,6 +44,29 @@ describe('AccessPolicy del portal — lo que desbloquea el PB100D', () => {
     }
   });
 
+  // Estuvo escribible mientras "Mi plan" v1 marcaba acciones editando el propio
+  // CarePlan. Esa pantalla ya no existe (Hito 5 · portal#210): con la escritura
+  // abierta la paciente podía cambiar su nivel, sus metas enlazadas y el
+  // `period` del que sale el día del programa.
+  it('CarePlan: la paciente lo LEE pero no lo edita', () => {
+    const e = entradas('CarePlan');
+    expect(e, 'falta CarePlan en la policy del portal').toHaveLength(1);
+    expect(e[0]!.readonly, 'la paciente no debe poder editar su plan').toBe(true);
+    expect(e[0]!.criteria).toBe('CarePlan?subject=%patient');
+  });
+
+  // La contracara: si esta entrada se rompe, la paciente no puede marcar un día
+  // y el programa deja de funcionar. Las dos van juntas.
+  it('lo único escribible del programa sigue siendo la Task de la acción', () => {
+    const escribibles = (policyPortal.resource ?? []).filter(
+      (r) => !r.readonly && (r.criteria ?? '').includes('%patient')
+    );
+    const tipos = new Set(escribibles.map((r) => r.resourceType));
+    expect(tipos.has('Task')).toBe(true);
+    expect(tipos.has('CarePlan')).toBe(false);
+    expect(tipos.has('Goal')).toBe(false);
+  });
+
   it('ValueSet y CodeSystem: terminología en solo lectura para el renderer', () => {
     for (const tipo of ['ValueSet', 'CodeSystem'] as const) {
       const e = entradas(tipo);
