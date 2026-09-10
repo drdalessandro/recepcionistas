@@ -84,6 +84,49 @@ El email se envía con `medplum.sendEmail()` (proveedor AWS SES configurado en e
 servidor Medplum). MercadoPago tokeniza tarjetas: **nunca** almacenar números de
 tarjeta.
 
+## Plan Bienestar 100 Días (PB100D)
+
+El programa vive en `portal` (lo que ve la paciente) y `dashboard` (el dominio, los bots y
+la ficha del equipo). **De este repo son los handoffs**, y las decisiones arquitectónicas
+están en el **ADR-038** (`biowellness-fhir/docs/architecture-decisions.md`).
+
+Lo que es nuestro:
+
+- **Las AccessPolicy de todo el mundo** (`src/fhir/access-policies.ts`), incluidas las de
+  Nutrición y Kinesiología, que no existían en ningún repo hasta el Hito 7. El seed es
+  dueño de estas policies y **reemplaza la policy entera**: un cambio a mano en el admin se
+  pierde en la próxima corrida.
+- **El catálogo del producto premium**: `PB100D_PREMIUM_MENSUAL` y `PB100D_PREMIUM_100D` en
+  `src/config/programas.ts`, publicados como `PlanDefinition` con `type.text = 'programa'`.
+  **No confundirlos** con las cuatro `PlanDefinition` `pb100d-nivel-N` de `biowellness-fhir`,
+  que son las plantillas clínicas: éstas son el producto que se vende.
+- **El cobro recurrente**: `bw-cobro-programas` y el manejo de suscripciones del webhook de
+  MercadoPago.
+- **Web Push**: `bw-web-push`.
+
+Tres cosas que se prestan a error:
+
+1. **Un programa no es una membresía.** Vende tiempo, no sesiones: su `Coverage` no lleva
+   contador. `bw-cobro-membresias` los saltea a propósito y tiene un test que lo fija; si
+   cayeran ahí, `getMembresia` lanzaría y cortaría la corrida del mes **para todos**.
+2. **La cadencia es cada 30 días desde el alta**, no el mes calendario (brief §6.10). Quien
+   compra un 28 pagaría el segundo mes a los tres días.
+3. **Los débitos de una suscripción de MercadoPago no llegan como `payment`**: llegan como
+   `subscription_authorized_payment`, y los cambios de la suscripción como
+   `subscription_preapproval`. Antes del Hito 7 el webhook los ignoraba, así que la plata
+   entraba y el sistema no se enteraba. La atribución va por `preapproval_id` contra la
+   extensión `mp-suscripcion` del `Coverage`, que **carga Recepción a mano** cuando arma la
+   suscripción en el panel de MP (D16: sin checkout propio).
+
+**Lo que la paciente puede escribir** es una sola cosa: la `Task` de tipo
+`pb100d-tarea|accion` (marcar un día como hecho). El filtro estuvo puesto sobre el sistema
+de *conceptos* del programa y no alcanzaba —las señales al equipo llevan un coding de ese
+mismo sistema y quedaban escribibles—: si tocás ese criterio, acotá por **tipo** de tarea.
+
+**La bandeja de los `Task` clínicos del equipo está en el dashboard, no acá**, y es por el
+principio 3: son señales clínicas —síntoma con el esfuerzo, intolerancia digestiva— y
+Recepción no ve la historia clínica. De este repo salen los permisos que la habilitan.
+
 ## Pendientes
 
 Ver [`docs/decisiones-pendientes.md`](docs/decisiones-pendientes.md). Horario y
