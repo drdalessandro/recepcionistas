@@ -33,18 +33,23 @@ export interface SaldoPlan {
   disponible: boolean;
 }
 
-/** Componentes de una clave de Invoice de plan (`plan-{coverageId}[-{YYYY-MM}]`). */
+/** Componentes de una clave de Invoice de plan (`plan-{coverageId}[-{ciclo}]`). */
 export interface ClavePlan {
   coverageId: string;
-  /** Ciclo YYYY-MM (solo cuotas de membresía). */
+  /** `YYYY-MM` en las cuotas de membresía; `cN` en los ciclos de programa. */
   ciclo?: string;
 }
 
 /**
- * Parsea la clave de un Invoice de plan: `plan-{coverageId}` (alta inicial /
- * paquete) o `plan-{coverageId}-{YYYY-MM}` (cuota mensual de membresía).
- * Los UUID de Medplum terminan en un grupo de 12 hex, así que el sufijo
- * `-YYYY-MM` nunca es ambiguo. Devuelve undefined si no es clave de plan.
+ * Parsea la clave de un Invoice de plan:
+ *  - `plan-{coverageId}` — alta inicial o paquete;
+ *  - `plan-{coverageId}-{YYYY-MM}` — cuota mensual de membresía;
+ *  - `plan-{coverageId}-c{N}` — ciclo de 30 días de un programa (PB100D).
+ *
+ * Los UUID de Medplum terminan en un grupo de 12 hex, así que ninguno de los dos
+ * sufijos es ambiguo: uno son dígitos con guión, el otro empieza con `c` y sigue
+ * con dígitos, y un hex de 12 nunca termina en `-c<dígitos>`.
+ * Devuelve undefined si no es clave de plan.
  */
 export function parseClavePlan(clave: string): ClavePlan | undefined {
   if (!clave.startsWith('plan-')) {
@@ -52,7 +57,7 @@ export function parseClavePlan(clave: string): ClavePlan | undefined {
   }
   let resto = clave.slice('plan-'.length);
   let ciclo: string | undefined;
-  const m = resto.match(/-(\d{4}-\d{2})$/);
+  const m = resto.match(/-(\d{4}-\d{2}|c\d+)$/);
   if (m) {
     ciclo = m[1];
     resto = resto.slice(0, -m[0].length);
