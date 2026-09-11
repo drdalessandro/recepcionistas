@@ -81,6 +81,24 @@ export interface Servicio {
    * "Consulta Evaluación" vs. "Consulta Director Médico").
    */
   categoriaComercial?: string;
+  /**
+   * Familia comercial dentro de la sección: la viñeta bajo la que el portal
+   * agrupa varios servicios (feedback de Andrés 2026-09-11 — "Terapias
+   * Biológicas" mostraba 18 tarjetas repitiendo el mismo texto; va como título
+   * con seis viñetas debajo). Viaja en las extensiones `familia` y
+   * `familia-orden`. Sin familia, el servicio se muestra suelto como siempre.
+   */
+  familia?: string;
+  /**
+   * Retirado del catálogo: NO se ofrece más (ni en el portal ni en el
+   * mostrador), pero el código sigue resolviendo para los turnos, cobros y
+   * reportes que ya lo referencian. Se publica como `status: 'retired'`.
+   *
+   * Es a propósito que no se borre la entrada: `getServicio` tira si el código
+   * no existe, y se llama sin `try` en los cobros y la clasificación de turnos.
+   * Borrarlo rompería el histórico.
+   */
+  retirado?: boolean;
 }
 
 export type VarianteCombo = 'INDIVIDUAL' | 'PAREJA';

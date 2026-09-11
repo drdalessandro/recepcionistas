@@ -22,7 +22,7 @@ import type {
 } from '@medplum/fhirtypes';
 import type { Servicio } from '../domain/types.js';
 import { MEDICOS, type Medico } from '../config/medicos.js';
-import { CATEGORIA_COMERCIAL, SERVICIOS } from '../config/catalogo.js';
+import { CATEGORIA_COMERCIAL, ORDEN_FAMILIA, TODOS_LOS_SERVICIOS } from '../config/catalogo.js';
 import { COMBOS } from '../config/combos.js';
 import { MEMBRESIAS } from '../config/membresias.js';
 import { PAQUETES } from '../config/paquetes.js';
@@ -67,6 +67,15 @@ export function buildActivityDefinition(s: Servicio): ActivityDefinition {
   if (s.orden != null) {
     ext.push({ url: EXT.orden, valueInteger: s.orden });
   }
+  // Viñeta que agrupa varios servicios dentro de la sección, con su orden: el
+  // portal no importa nuestro código, así que el orden tiene que viajar.
+  if (s.familia) {
+    ext.push({ url: EXT.familia, valueString: s.familia });
+    const orden = ORDEN_FAMILIA.get(s.familia);
+    if (orden != null) {
+      ext.push({ url: EXT.familiaOrden, valueInteger: orden });
+    }
+  }
   const ad: ActivityDefinition = {
     resourceType: 'ActivityDefinition',
     url: canonical('ActivityDefinition', s.codigo),
@@ -74,7 +83,10 @@ export function buildActivityDefinition(s: Servicio): ActivityDefinition {
     title: s.nombre,
     // Voz de paciente: el portal la muestra tal cual en su lista de servicios.
     ...(s.descripcion ? { description: s.descripcion } : {}),
-    status: 'active',
+    // Un servicio retirado se publica igual, pero como `retired`: el seed hace
+    // upsert y no borra, así que sacarlo del archivo lo dejaría `active` en el
+    // servidor y el portal lo seguiría ofreciendo. El portal filtra por status.
+    status: s.retirado ? 'retired' : 'active',
     kind: 'ServiceRequest',
     identifier: [{ system: SYSTEM.servicioCodigo, value: s.codigo }],
     // Sección COMERCIAL de la góndola (el código interno de categoría no viaja:
@@ -470,7 +482,10 @@ export function buildSeed(): RecursosSeed {
     searchParameters: SEARCH_PARAMETERS,
     accessPolicies: ACCESS_POLICIES,
     tcConfig: buildTcConfig(),
-    activityDefinitions: SERVICIOS.map(buildActivityDefinition),
+    // Los RETIRADOS también: el seed hace upsert y no borra, así que si no los
+    // publicara quedarían `active` en el servidor y el portal los seguiría
+    // ofreciendo. Van con `status: 'retired'`.
+    activityDefinitions: TODOS_LOS_SERVICIOS.map(buildActivityDefinition),
     combos: COMBOS.map((c) => buildComboPlanDefinition(c.codigo)),
     membresias: MEMBRESIAS.map((m) => buildMembresiaPlanDefinition(m.codigo)),
     paquetes: PAQUETES.map((p) => buildPaquetePlanDefinition(p.codigo)),

@@ -41,6 +41,8 @@ export const EXT = {
   precioArs: `${BASE}/StructureDefinition/precio-ars`,
   /** Posición del servicio en la góndola del portal (menor = más arriba). */
   orden: `${BASE}/StructureDefinition/orden`,
+  familia: `${BASE}/StructureDefinition/familia`,
+  familiaOrden: `${BASE}/StructureDefinition/familia-orden`,
   /**
    * Precio de lista: lo que costaría comprando las sesiones sueltas. Es el
    * ancla del descuento en combos y paquetes ("sueltas te costarían X"). El
