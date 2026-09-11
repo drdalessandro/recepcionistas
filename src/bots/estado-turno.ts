@@ -8,7 +8,7 @@
  */
 import type { BotEvent, MedplumClient } from '@medplum/core';
 import type { Appointment, Encounter } from '@medplum/fhirtypes';
-import { cancelarTurnoYLiberar, cerrarEncounterDeTurno } from './_shared.js';
+import { cancelarTurnoYLiberar, cerrarEncounterDeTurno, liberarSalasDeTurno } from './_shared.js';
 
 export type EstadoTurno = 'arrived' | 'checked-in' | 'fulfilled' | 'cancelled';
 
@@ -46,6 +46,12 @@ export async function handler(medplum: MedplumClient, event: BotEvent<EntradaEst
 
   const actualizado = await medplum.updateResource<Appointment>({ ...appt, status: estado });
 
+  // Liberar la(s) sala(s) ANTES del Encounter, no después: si el Encounter
+  // falla, el turno ya quedó terminado y la sala tiene que quedar libre igual.
+  // Al revés la sala se queda tomada para siempre y no se nota en ninguna
+  // pantalla (recepción dibuja Appointments, no Slots).
+  const salasNoLiberadas = ESTADOS_QUE_LIBERAN.has(estado) ? await liberarSalasDeTurno(medplum, appt) : [];
+
   // Encounter de la visita.
   if (estado === 'arrived' || estado === 'checked-in') {
     await asegurarEncounter(medplum, appointmentId, pacienteRef);
@@ -53,17 +59,10 @@ export async function handler(medplum: MedplumClient, event: BotEvent<EntradaEst
     await cerrarEncounterDeTurno(medplum, appointmentId, 'finished');
   }
 
-  // Liberar la(s) sala(s) al terminar.
-  if (ESTADOS_QUE_LIBERAN.has(estado)) {
-    for (const s of appt.slot ?? []) {
-      const id = s.reference?.split('/')[1];
-      if (!id) {
-        continue;
-      }
-      const slot = await medplum.readResource('Slot', id);
-      slot.status = 'free';
-      await medplum.updateResource(slot);
-    }
+  if (salasNoLiberadas.length > 0) {
+    console.error(
+      `bw-estado-turno: ${appointmentId} pasó a ${estado} pero NO se liberó la sala: ${salasNoLiberadas.join(' · ')}`,
+    );
   }
 
   return actualizado;
