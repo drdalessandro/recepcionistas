@@ -12,7 +12,7 @@
 import type { IntensidadMembresia, RecursoFisico, Servicio } from '../domain/types.js';
 import { HORARIO_SEMANAL, SLOT_GRANULARIDAD_MIN, type HorarioDia } from '../config/horario.js';
 import { getServicio } from '../config/catalogo.js';
-import { compartenEquipo, recursosParaCategoria } from '../config/recursos.js';
+import { recursosParaCategoria } from '../config/recursos.js';
 import { VENTANA_RESERVA_HORAS, grillaTurnoMin, type PerfilReserva } from '../config/reglas.js';
 import { generarSlots } from './slots.js';
 import {
@@ -20,6 +20,7 @@ import {
   validarCapacidadRecurso,
   validarDesfasajeRecovery,
   validarVentanaReserva,
+  reservasRelevantes,
   type ReservaRecurso,
 } from './reglas-turno.js';
 
@@ -261,9 +262,7 @@ export function calcularDisponibilidad(opts: OpcionesDisponibilidad): Disponibil
       // gabinete Recovery hermano): un problema preexistente en otra sala no
       // debe envenenar los horarios de esta.
       const candidata: ReservaRecurso = { recursoCodigo: recurso.codigo, inicio, fin, ocupantes: 1 };
-      const relevantes = opts.reservas.filter(
-        (r) => r.recursoCodigo === recurso.codigo || compartenEquipo(r.recursoCodigo, recurso.codigo),
-      );
+      const relevantes = reservasRelevantes(opts.reservas, recurso.codigo);
       const conCandidata = [...relevantes, candidata];
       if (!validarCapacidadRecurso(conCandidata).ok || !validarDesfasajeRecovery(conCandidata).ok) {
         continue;
@@ -360,9 +359,7 @@ export function salaLibrePara(
       continue;
     }
     const candidata: ReservaRecurso = { recursoCodigo: recurso.codigo, inicio, fin, ocupantes };
-    const relevantes = reservas.filter(
-      (r) => r.recursoCodigo === recurso.codigo || compartenEquipo(r.recursoCodigo, recurso.codigo),
-    );
+    const relevantes = reservasRelevantes(reservas, recurso.codigo);
     const conCandidata = [...relevantes, candidata];
     if (validarCapacidadRecurso(conCandidata).ok && validarDesfasajeRecovery(conCandidata).ok) {
       return recurso;

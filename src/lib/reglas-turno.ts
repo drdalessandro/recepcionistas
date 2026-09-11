@@ -383,6 +383,25 @@ export function validarRecursos(reservas: ReservaRecurso[]): ResultadoValidacion
   return combinar(validarCapacidadRecurso(reservas), validarDesfasajeRecovery(reservas));
 }
 
+/**
+ * Las reservas que pueden afectar a una reserva EN `recursoCodigo`: las de esa
+ * misma sala y las de las salas que comparten equipo (los gabinetes Recovery
+ * comparten las tumbonas Red Light).
+ *
+ * Filtrar es obligatorio antes de `validarRecursos`, porque valida TODO lo que
+ * se le pasa: con la agenda entera del día, un problema preexistente en otra
+ * sala bloquea una reserva que no tiene nada que ver. Pasó en producción
+ * (2026-09-11): reservar la Multiplaza fallaba con "[R-07] Se excede la
+ * capacidad del recurso R_IHHT_1", una sala distinta, mientras el portal
+ * ofrecía ese mismo horario con 6 lugares. Las dos pantallas tenían razón
+ * cada una por su lado: la disponibilidad ya filtraba y la reserva no.
+ */
+export function reservasRelevantes(reservas: ReservaRecurso[], recursoCodigo: string): ReservaRecurso[] {
+  return reservas.filter(
+    (r) => r.recursoCodigo === recursoCodigo || compartenEquipo(r.recursoCodigo, recursoCodigo),
+  );
+}
+
 // --------------------------------------------------------------------------
 // R-13 · Ventana de reserva (anticipación máxima)
 // --------------------------------------------------------------------------
