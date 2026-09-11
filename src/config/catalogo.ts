@@ -245,39 +245,24 @@ export const SERVICIOS: Servicio[] = [
   },
 
   // ---------------------- 07 · TERAPIAS BIOLÓGICAS (requieren prescripción) ----------------------
-  ...tb('PRP', 'PRP — Plasma Rico en Plaquetas', 45, 400),
-  ...tb('PEPTIDOS_G1', 'Péptidos Bioactivos G1 (36 péptidos)', 30, 480),
-  ...tb('PEPTIDOS_G2', 'Péptidos Bioactivos G2 (13 péptidos)', 30, 800),
-  ...tb('PEPTIDOS_G3', 'Péptidos Bioactivos G3 (5 productos)', 30, 910),
-  ...tb('EXOSOMAS', 'Exosomas — paquete 3 ampollas', 45, 450),
-  ...tb('LISADO_PLAQUETARIO', 'Lisado Plaquetario', 45, 900),
-  ...tb('AC_HIALURONICO_APM', 'Ácido Hialurónico APM', 45, 600),
-  ...tb('COLIRIO_PLASMA', 'Colirio de Plasma', 30, 365),
-  ...tb('PRP_BIOFILLER_ESTETICO', 'PRP Biofiller estético', 45, 900),
-  ...tb('CREMA_DERMATO', 'Crema Dermato (por frasco)', 0, 150),
-  ...tb('CELULAS_MADRE', 'Células Madre (Concentrado Celular)', 60, 2500),
-  ...tb('COLIRIO_PLASMA_COAGULO', 'Colirio de Plasma Coágulo', 30, 480),
-  ...tb('EXPANSION_10MM', 'Expansión Celular 10MM (1 aplicación)', 60, 1900),
-  ...tb('EXPANSION_20MM', 'Expansión Celular 20MM (1 aplicación)', 60, 2700),
-  ...tb('EXPANSION_30MM', 'Expansión Celular 30MM (3 aplicaciones)', 60, 2900),
-  ...tb('EXPANSION_60MM', 'Expansión Celular 60MM (3 aplicaciones)', 60, 3350),
-  ...tb('AC_HIALURONICO_BPM', 'Ácido Hialurónico BPM', 45, 220),
-  ...tb('PRP_BIOFILLER_TRAUMATICO', 'PRP Biofiller Traumático', 45, 365),
+  // Agrupadas en las seis viñetas de FAMILIAS_TB (Andrés, 2026-09-11).
+  ...tb('PRP', 'PRP — Plasma Rico en Plaquetas', 45, 400, { familia: 'PRP' }),
+  ...tb('PEPTIDOS_G1', 'Péptidos Bioactivos G1 (36 péptidos)', 30, 480, { familia: 'Péptidos' }),
+  ...tb('PEPTIDOS_G2', 'Péptidos Bioactivos G2 (13 péptidos)', 30, 800, { familia: 'Péptidos' }),
+  ...tb('PEPTIDOS_G3', 'Péptidos Bioactivos G3 (5 productos)', 30, 910, { familia: 'Péptidos' }),
+  ...tb('EXOSOMAS', 'Exosomas — paquete 3 ampollas', 45, 450, { familia: 'Exosomas' }),
+  ...tb('LISADO_PLAQUETARIO', 'Lisado Plaquetario', 45, 900, { familia: 'Lisado Plaquetario' }),
+  ...tb('AC_HIALURONICO_APM', 'Ácido Hialurónico APM', 45, 600, { familia: 'Ácido Hialurónico' }),
+  ...tb('PRP_BIOFILLER_ESTETICO', 'PRP Biofiller estético', 45, 900, { familia: 'PRP' }),
+  ...tb('CELULAS_MADRE', 'Células Madre (Concentrado Celular)', 60, 2500, { familia: 'Células Madre' }),
+  ...tb('EXPANSION_10MM', 'Expansión Celular 10MM (1 aplicación)', 60, 1900, { familia: 'Células Madre' }),
+  ...tb('EXPANSION_20MM', 'Expansión Celular 20MM (1 aplicación)', 60, 2700, { familia: 'Células Madre' }),
+  ...tb('EXPANSION_30MM', 'Expansión Celular 30MM (3 aplicaciones)', 60, 2900, { familia: 'Células Madre' }),
+  ...tb('EXPANSION_60MM', 'Expansión Celular 60MM (3 aplicaciones)', 60, 3350, { familia: 'Células Madre' }),
+  ...tb('AC_HIALURONICO_BPM', 'Ácido Hialurónico BPM', 45, 220, { familia: 'Ácido Hialurónico' }),
+  ...tb('PRP_BIOFILLER_TRAUMATICO', 'PRP Biofiller Traumático', 45, 365, { familia: 'PRP' }),
 
   // ---------------------- 08 · MASAJES Y OSTEOPATÍA (add-ons, split 50/50) ----------------------
-  {
-    codigo: 'MASAJE_DESCONTRACTURANTE',
-    nombre: 'Masaje Descontracturante',
-    categoria: 'MASAJE_OSTEOPATIA',
-    duracionMin: 60,
-    precioUSD: 80,
-    requierePrescripcion: false,
-    reglaPricing: 'POR_SESION',
-    split: MASAJE,
-    fmAplica: false, // confirmar si FM aplica a masajes
-    orden: 80,
-    descripcion: DESC_MASAJES,
-  },
   {
     codigo: 'MASAJE_DEPORTIVO',
     nombre: 'Masaje Deportivo',
@@ -361,8 +346,38 @@ function consultasDeMedicos(): Servicio[] {
   });
 }
 
+/**
+ * Familias de Terapias Biológicas, EN EL ORDEN en que las pidió Andrés
+ * (2026-09-11). Son las viñetas que el portal muestra bajo el título
+ * "Terapias Biológicas": antes eran 18 tarjetas sueltas repitiendo la misma
+ * bajada — "lo de Regenerar es eteeeerno".
+ *
+ * El orden viaja al servidor en la extensión `familia-orden` porque el portal
+ * no importa este archivo: si solo mandáramos el nombre, tendría que decidir
+ * él en qué orden mostrarlas, y no es su decisión.
+ */
+export const FAMILIAS_TB = [
+  'Células Madre',
+  'Exosomas',
+  'Péptidos',
+  'Lisado Plaquetario',
+  'PRP',
+  'Ácido Hialurónico',
+] as const;
+
+export type FamiliaTB = (typeof FAMILIAS_TB)[number];
+
+/** Posición de cada familia en la lista de viñetas (1-based). */
+export const ORDEN_FAMILIA: ReadonlyMap<string, number> = new Map(FAMILIAS_TB.map((f, i) => [f, i + 1]));
+
 /** Helper para Terapias Biológicas (todas comparten split, regla y flags). */
-function tb(codigo: string, nombre: string, duracionMin: number, precioUSD: number): Servicio[] {
+function tb(
+  codigo: string,
+  nombre: string,
+  duracionMin: number,
+  precioUSD: number,
+  opts: { familia?: FamiliaTB; retirado?: true } = {},
+): Servicio[] {
   return [
     {
       codigo,
@@ -378,13 +393,63 @@ function tb(codigo: string, nombre: string, duracionMin: number, precioUSD: numb
       // consulta médica" son el final aspiracional del catálogo, no un descarte.
       orden: 95,
       descripcion: DESC_TB,
+      ...(opts.familia ? { familia: opts.familia } : {}),
+      ...(opts.retirado ? { retirado: true as const } : {}),
     },
   ];
 }
 
-/** Índice por código para lookups O(1). */
+/**
+ * Servicios RETIRADOS (Andrés, 2026-09-11): ya no se ofrecen, ni en el portal
+ * ni en el mostrador. Siguen acá a propósito.
+ *
+ * Por qué no se borran: `getServicio` tira si el código no existe, y se llama
+ * sin `try` en los cobros, la clasificación de turnos y los reportes. Borrar la
+ * entrada rompería cualquier turno histórico que la referencie — y hay turnos
+ * de masaje descontracturante dados.
+ *
+ * Están FUERA de `SERVICIOS` para que todo lo que lista el catálogo los
+ * excluya solo, sin tocar un solo call site: los selectores de recepción, la
+ * lista de espera y la góndola arman sus opciones desde `SERVICIOS`.
+ *
+ * El seed SÍ los publica, con `status: 'retired'` — si no los publicara, el
+ * ActivityDefinition viejo se quedaría `active` en el servidor y el portal los
+ * seguiría mostrando. El seed hace upsert: no borra lo que se le saca.
+ */
+export const SERVICIOS_RETIRADOS: Servicio[] = [
+  {
+    codigo: 'MASAJE_DESCONTRACTURANTE',
+    nombre: 'Masaje Descontracturante',
+    categoria: 'MASAJE_OSTEOPATIA',
+    duracionMin: 60,
+    precioUSD: 80,
+    requierePrescripcion: false,
+    reglaPricing: 'POR_SESION',
+    split: MASAJE,
+    fmAplica: false,
+    orden: 80,
+    descripcion: DESC_MASAJES,
+    retirado: true,
+  },
+  // Terapias Biológicas que no entran en ninguna de las seis viñetas.
+  ...tb('COLIRIO_PLASMA', 'Colirio de Plasma', 30, 365, { retirado: true }),
+  ...tb('COLIRIO_PLASMA_COAGULO', 'Colirio de Plasma Coágulo', 30, 480, { retirado: true }),
+  ...tb('CREMA_DERMATO', 'Crema Dermato (por frasco)', 0, 150, { retirado: true }),
+];
+
+/**
+ * Catálogo COMPLETO: lo que se ofrece + lo retirado. Lo usan el seed (que tiene
+ * que publicar los retirados para que el servidor los marque como tales) y el
+ * índice por código (que tiene que resolver lo histórico).
+ */
+export const TODOS_LOS_SERVICIOS: Servicio[] = [...SERVICIOS, ...SERVICIOS_RETIRADOS];
+
+/**
+ * Índice por código para lookups O(1). Incluye los RETIRADOS: un turno viejo
+ * tiene que seguir resolviendo su servicio para cobrarse y reportarse.
+ */
 export const SERVICIOS_POR_CODIGO: ReadonlyMap<string, Servicio> = new Map(
-  SERVICIOS.map((s) => [s.codigo, s]),
+  TODOS_LOS_SERVICIOS.map((s) => [s.codigo, s]),
 );
 
 export function getServicio(codigo: string): Servicio {

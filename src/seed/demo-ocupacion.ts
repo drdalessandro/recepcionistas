@@ -118,7 +118,7 @@ const SALAS: EspecSala[] = [
   { recursoCodigo: 'R_RED_LIGHT', servicios: ['RED_LIGHT'] },
   { recursoCodigo: 'R_IPC06', servicios: ['COMPRESION'] },
   { recursoCodigo: 'R_COT03', servicios: ['CRIO'] },
-  { recursoCodigo: 'R_CAMILLA_MASAJES', servicios: ['MASAJE_DESCONTRACTURANTE', 'MASAJE_DEPORTIVO', 'OSTEOPATIA'] },
+  { recursoCodigo: 'R_CAMILLA_MASAJES', servicios: ['MASAJE_DEPORTIVO', 'OSTEOPATIA'] },
   { recursoCodigo: 'R_SALA_TB', servicios: ['IV_HIDRATACION', 'IV_NAD', 'IV_PERFORMANCE'] },
   { recursoCodigo: 'R_IV_2', servicios: ['IV_HIDRATACION', 'IV_PERFORMANCE'] },
 ];
