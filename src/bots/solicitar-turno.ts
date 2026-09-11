@@ -75,8 +75,16 @@ export async function handler(medplum: MedplumClient, event: BotEvent<SolicitudT
             ...(chequeo.alternativas ? { alternativas: chequeo.alternativas } : {}),
           };
         }
-      } catch {
-        // chequeo caído: no bloqueamos al paciente por un error nuestro
+      } catch (err) {
+        // Chequeo caído: NO bloqueamos al paciente por un error nuestro (la
+        // última palabra la tiene Recepción igual). Pero que no sea mudo: este
+        // es el único camino por el que una solicitud entra SIN verificar que
+        // el horario esté libre, y un `catch {}` vacío lo haría invisible.
+        // Queda en el AuditEvent de la ejecución del bot.
+        console.error(
+          `bw-solicitar-turno: no se pudo verificar el horario ${e.preferenciaInicio} de ${e.terapiaCodigo}; ` +
+            `la solicitud pasa sin chequeo. Causa: ${(err as Error).message}`,
+        );
       }
     }
   }

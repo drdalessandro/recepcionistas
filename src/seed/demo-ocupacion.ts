@@ -492,7 +492,14 @@ async function generar(medplum: MedplumClient, dias: number, opts: OpcionesDemo 
         schedule: { reference: `Schedule/${schedules.get(t.recursoCodigo)}` },
         start: t.inicio.toISOString(),
         end: t.fin.toISOString(),
-        extension: [{ url: EXT.recursoFisico, valueString: t.recursoCodigo }],
+        // Las MISMAS extensiones que escriben los bots de reserva: la
+        // disponibilidad del portal lee los ocupantes del Slot, no del
+        // Appointment. Sin `ocupantes` toda reserva pesa 1 persona y una sala
+        // compartida se ofrecería con lugares que no tiene.
+        extension: [
+          { url: EXT.recursoFisico, valueString: t.recursoCodigo },
+          { url: EXT.ocupantes, valueInteger: t.ocupantes },
+        ],
       });
       const pract = t.practitionerCodigo ? practitioners.get(t.practitionerCodigo) : undefined;
       await crear<Appointment>({

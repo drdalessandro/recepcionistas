@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { CANTIDAD_PACIENTES, diasHasta, pacientesDemo, planDia } from '../src/seed/demo-ocupacion.js';
-import { validarGrillaTurno, validarRecursos } from '../src/lib/reglas-turno.js';
+import { validarGrillaTurno, validarRecursos, type ReservaRecurso } from '../src/lib/reglas-turno.js';
+import { calcularDisponibilidad, horarioOfrecido } from '../src/lib/disponibilidad.js';
 import { getServicio } from '../src/config/catalogo.js';
 
 /**
@@ -136,6 +137,49 @@ describe('demo-ocupacion · planDia', () => {
     }
     // Sábado no atiende nadie: consultorio vacío (100 % de lo OFERTABLE).
     expect(planDia(SABADO, MEDIODIA).filter((t) => t.recursoCodigo === 'R_CONSULTORIO')).toHaveLength(0);
+  });
+});
+
+/**
+ * 2026-09-11: con la demo al 100 %, el portal seguía ofreciendo TODOS los
+ * horarios. La sospecha era nuestra (`bw-disponibilidad`), así que se verificó
+ * corriendo la lógica real contra el plan real: da CERO horarios libres. Este
+ * test fija esa conclusión — si mañana la demo llena la agenda y la
+ * disponibilidad igual ofrece algo, el problema SÍ es nuestro y salta acá.
+ *
+ * Ojo con el matiz del handoff 2026-08-12: un horario se sigue ofreciendo
+ * mientras quede UNA sala de la categoría libre (la HBOT individual entra en
+ * monoplaza o en biplaza). Por eso se exige agenda llena, no una sala ocupada.
+ */
+describe('demo-ocupacion · el portal no puede ofrecer una agenda llena', () => {
+  const reservasDe = (fechas: string[]): ReservaRecurso[] =>
+    fechas
+      .flatMap((f) => planDia(f, MEDIODIA))
+      .map((t) => ({ recursoCodigo: t.recursoCodigo, inicio: t.inicio, fin: t.fin, ocupantes: t.ocupantes }));
+
+  it.each(['HBOT_MONO', 'IHHT', 'RECOVERY_PRO'])('%s: 0 horarios libres, y los tomados van en `ocupados`', (codigo) => {
+    const r = calcularDisponibilidad({
+      servicio: getServicio(codigo),
+      perfil: 'PUBLICO',
+      ahora: MEDIODIA,
+      reservas: reservasDe([VIERNES, SABADO]),
+    });
+    expect(r.dias.flatMap((d) => d.horarios)).toHaveLength(0);
+    // No desaparecen: el portal los pinta tachados (si los deja elegir, es del portal).
+    expect(r.dias.flatMap((d) => d.ocupados ?? []).length).toBeGreaterThan(0);
+  });
+
+  it('los `ocupados` NO son elegibles: horarioOfrecido los rechaza uno por uno', () => {
+    const r = calcularDisponibilidad({
+      servicio: getServicio('HBOT_MONO'),
+      perfil: 'PUBLICO',
+      ahora: MEDIODIA,
+      reservas: reservasDe([VIERNES, SABADO]),
+    });
+    // Es el mismo chequeo con el que bw-solicitar-turno rechaza el pedido.
+    for (const h of r.dias.flatMap((d) => d.ocupados ?? [])) {
+      expect(horarioOfrecido(r.dias, new Date(h.inicio))).toBe(false);
+    }
   });
 });
 
