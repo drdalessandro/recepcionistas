@@ -125,6 +125,18 @@ Ver [`docs/app-recepcion.md`](app-recepcion.md) y [`docs/bots.md`](bots.md).
 
 ## Pagos (Manual v9 / contrato Administración)
 
+- **Multiplaza: ¿piso de facturación de 3 personas, o USD 80 desde uno?**
+  ⚠️ **Andrés** — comercial. `src/lib/pricing.ts` cobra
+  `precioUSD * max(ocupantes, 3)`, así que una persona sola paga USD 240;
+  `src/motor-agenda/comercial/precios.ts` documenta "USD 80 por persona desde
+  uno, sin piso de sesión". **Ya salió con plata real** (2026-09-11: seña de
+  $174.000 por una reserva de UNA persona) y el portal, en esa misma pantalla,
+  muestra "Valor de referencia: USD 80" — la paciente ve 80 y le cobran sobre
+  240. Ojo con el matiz: el mínimo de 3 de la agenda es **operativo**
+  (`validarMinimoGrupal` advierte, no bloquea), no un piso de cobro; hoy el
+  código trata lo mismo de dos maneras. Si gana el piso, el portal tiene que
+  decirlo ANTES de reservar. Ver [`mercadopago.md`](mercadopago.md) y
+  [`motor-agenda-fhir.md`](motor-agenda-fhir.md) §713.
 - **Descuento a la carte de miembros (Std 10% / Int 15%) vs FM 20%**: implementado
   PROVISORIO como "se aplica el MAYOR, no acumulan" (`src/lib/pricing.ts`).
   ⚠️ Confirmar con Andrés si acumulan o se aplica el mayor.
