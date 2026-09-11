@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Appointment, Slot } from '@medplum/fhirtypes';
-import { planDeReparacion } from '../src/seed/reparar-slots.js';
+import { planDeReparacion, slotsHuerfanos } from '../src/seed/reparar-slots.js';
 import { EXT, SYSTEM } from '../src/fhir/identifiers.js';
 
 /**
@@ -86,5 +86,42 @@ describe('planDeReparacion', () => {
       { system: SYSTEM.demo, code: 'demo' },
     ]);
     expect(planDeReparacion([cita('a2')], [])[0]?.tags).toEqual([]);
+  });
+});
+
+/**
+ * El problema INVERSO, que no se ve en ninguna pantalla: un Slot busy que
+ * ningún turno reclama bloquea la sala para nadie. Recepción dibuja
+ * Appointments, así que ahí es invisible; solo se nota como un horario que
+ * nunca aparece libre en el portal.
+ */
+describe('slotsHuerfanos', () => {
+  function slotDe(id: string, recurso = 'R_CAMILLA_MASAJES'): Slot {
+    return {
+      resourceType: 'Slot',
+      id,
+      status: 'busy',
+      start: INICIO,
+      end: FIN,
+      extension: [{ url: EXT.recursoFisico, valueString: recurso }],
+    } as Slot;
+  }
+
+  it('encuentra el Slot que ningún turno reclama', () => {
+    const r = slotsHuerfanos([cita('a1', { slotIds: ['s1'] })], [slotDe('s1'), slotDe('s-suelto')]);
+    expect(r.map((s) => s.id)).toEqual(['s-suelto']);
+  });
+
+  it('un Slot reclamado por un turno CANCELADO sí es huérfano: la sala quedó trabada', () => {
+    expect(slotsHuerfanos([cita('a1', { status: 'cancelled', slotIds: ['s1'] })], [slotDe('s1')])).toHaveLength(1);
+  });
+
+  it('los Slots de la agenda de médicos no cuentan: viven en otro Schedule y no llevan sala', () => {
+    const delMedico = { resourceType: 'Slot', id: 'm1', status: 'busy', start: INICIO, end: FIN } as Slot;
+    expect(slotsHuerfanos([], [delMedico])).toHaveLength(0);
+  });
+
+  it('sin huérfanos no reporta nada', () => {
+    expect(slotsHuerfanos([cita('a1', { slotIds: ['s1'] })], [slotDe('s1')])).toHaveLength(0);
   });
 });
