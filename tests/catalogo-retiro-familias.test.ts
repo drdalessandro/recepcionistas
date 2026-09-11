@@ -30,6 +30,11 @@ const CODIGOS_RETIRADOS = [
   'COLIRIO_PLASMA',
   'COLIRIO_PLASMA_COAGULO',
   'CREMA_DERMATO',
+  // Huérfanos desde julio: el Manual v9 volvió a una única sesión de IHHT y
+  // estas dos variantes se sacaron del catálogo, pero siguieron `active` en
+  // Medplum. El portal las ofrecía y al elegirlas tiraba "Servicio desconocido".
+  'IHHT_EXPRESS',
+  'IHHT_PREMIUM',
 ];
 
 describe('catálogo · servicios retirados', () => {
@@ -115,5 +120,29 @@ describe('catálogo · familias de Terapias Biológicas', () => {
 
   it('ORDEN_FAMILIA cubre las seis, 1-based', () => {
     expect([...ORDEN_FAMILIA.values()].sort((a, b) => a - b)).toEqual([1, 2, 3, 4, 5, 6]);
+  });
+});
+
+/**
+ * El IHHT que SÍ se ofrece es uno solo. Las variantes Express/Premium
+ * vivieron dos meses huérfanas en Medplum —ofrecidas por el portal, rotas al
+ * elegirlas— porque el seed no borra lo que se le saca del archivo. El test
+ * fija las dos mitades: que quede una sola vigente, y que las otras dos sigan
+ * publicándose (retiradas) en vez de desaparecer del seed.
+ */
+describe('catálogo · IHHT es una sola sesión (Manual v9)', () => {
+  it('solo IHHT se ofrece', () => {
+    expect(SERVICIOS.filter((s) => s.categoria === 'IHHT').map((s) => s.codigo)).toEqual(['IHHT']);
+  });
+
+  it('la sesión vigente es 30 min / USD 90', () => {
+    const ihht = getServicio('IHHT');
+    expect(ihht.duracionMin).toBe(30);
+    expect(ihht.precioUSD).toBe(90);
+  });
+
+  it('las variantes viejas siguen resolviendo con lo que el servidor publicaba', () => {
+    expect(getServicio('IHHT_EXPRESS').precioUSD).toBe(60);
+    expect(getServicio('IHHT_PREMIUM').precioUSD).toBe(120);
   });
 });

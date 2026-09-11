@@ -133,8 +133,14 @@ Ver [`docs/app-recepcion.md`](app-recepcion.md) y [`docs/bots.md`](bots.md).
   paquetes Starter/Core/Pro con nombre comercial, Puesto IV 2 en agenda.
   Queda la prioridad de reserva Pareja (ver Catálogo v9: preguntar a Andrés).
   **Después de deployar: correr `npm run seed` para actualizar el catálogo en
-  Medplum** (los códigos `IHHT_EXPRESS`/`IHHT_PREMIUM` viejos quedan huérfanos;
-  el seed crea `IHHT` y los paquetes `PAQ_IHHT_X*`).
+  Medplum** (el seed crea `IHHT` y los paquetes `PAQ_IHHT_X*`).
+  - Los códigos `IHHT_EXPRESS`/`IHHT_PREMIUM` viejos quedaban **huérfanos**:
+    ✅ RESUELTO (2026-09-11). Sacarlos del archivo no alcanzaba —el seed hace
+    upsert y no borra—, así que siguieron `active` en Medplum **dos meses**: el
+    portal los ofrecía y al elegirlos devolvía "Servicio desconocido". Ahora
+    están en `SERVICIOS_RETIRADOS` y el seed los publica con `status:
+    'retired'`. **Requiere `npm run seed`** para que el servidor se entere, y
+    que el portal filtre por status (handoff-portal-catalogo-familias.md).
 - **PB100D · cobro del programa premium** (handoff 2026-09-06, aplicado el seed y
   la policy el 2026-09-08): el catálogo ya publica `PB100D_PREMIUM_MENSUAL` (USD
   100/mes) y `PB100D_PREMIUM_100D` (USD 300 por única vez), pero **el cobro no

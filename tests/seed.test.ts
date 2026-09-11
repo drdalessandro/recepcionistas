@@ -13,7 +13,12 @@ describe('Seed — composición', () => {
   it('Construye los grupos de recursos esperados', () => {
     expect(seed.structureDefinitions.length).toBeGreaterThanOrEqual(28);
     expect(seed.accessPolicies.length).toBe(8); // 7 roles internos (+ Kinesiología y Nutrición, PB100D) + Paciente — Portal
-    expect(seed.activityDefinitions.length).toBe(36); // 32 + 3 consultas médicas + Chequeo BW (v9: IHHT única)
+    // 32 que se ofrecen + 6 RETIRADOS. Los retirados se publican a propósito
+    // (con `status: 'retired'`): el seed hace upsert y no borra, así que
+    // omitirlos los dejaría `active` en el servidor y el portal los seguiría
+    // ofreciendo — que es lo que pasó dos meses con IHHT_EXPRESS/IHHT_PREMIUM.
+    expect(seed.activityDefinitions.length).toBe(38);
+    expect(seed.activityDefinitions.filter((a) => a.status === 'retired')).toHaveLength(6);
     expect(seed.combos.length).toBe(9);
     expect(seed.membresias.length).toBe(10);
     expect(seed.paquetes.length).toBe(24); // 8 servicios base × 3 tramos (Multiplaza y Recovery Pro sumados 2026-08-15)
