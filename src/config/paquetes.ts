@@ -78,8 +78,39 @@ export const PAQUETES: Paquete[] = BASES.flatMap((base) =>
   }),
 );
 
+/**
+ * Paquetes RETIRADOS: su servicio base ya no existe, así que no se venden más.
+ *
+ * `IHHT_EXPRESS` se descartó con el Manual v9 (IHHT volvió a una única sesión),
+ * pero sus tres paquetes siguieron `active` en Medplum con precio real — USD
+ * 285 / 540 / 1020 por sesiones de un servicio que no se puede reservar. Como
+ * con los servicios: no se borran (un paquete vendido tiene que seguir
+ * resolviendo para consumirse y reportarse) y el seed los publica `retired`,
+ * porque omitirlos los dejaría `active` en el servidor para siempre.
+ */
+export const PAQUETES_RETIRADOS: Paquete[] = TRAMOS.map((t): Paquete => {
+  const totalListaUSD = exacto(60 * t.tamano);
+  const totalUSD = exacto(totalListaUSD * (1 - t.descuento));
+  return {
+    codigo: `PAQ_IHHT_EXPRESS_X${t.tamano}`,
+    nombre: `IHHT EXPRESS — ${t.nombre}`,
+    servicioBaseCodigo: 'IHHT_EXPRESS',
+    tamano: t.tamano,
+    vigenciaDias: t.vigenciaDias,
+    descuento: t.descuento,
+    precioSesionUSD: exacto(totalUSD / t.tamano),
+    totalListaUSD,
+    totalUSD,
+    totalFMUSD: exacto(totalUSD * (1 - FM_DESC)),
+    retirado: true,
+  };
+});
+
+/** Los que se venden + los retirados. Lo usan el seed y el índice por código. */
+export const TODOS_LOS_PAQUETES: Paquete[] = [...PAQUETES, ...PAQUETES_RETIRADOS];
+
 export const PAQUETES_POR_CODIGO: ReadonlyMap<string, Paquete> = new Map(
-  PAQUETES.map((p) => [p.codigo, p]),
+  TODOS_LOS_PAQUETES.map((p) => [p.codigo, p]),
 );
 
 export function getPaquete(codigo: string): Paquete {

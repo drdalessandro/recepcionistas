@@ -22,7 +22,8 @@ import type { ActivityDefinition, PlanDefinition } from '@medplum/fhirtypes';
 import { TODOS_LOS_SERVICIOS } from '../config/catalogo.js';
 import { COMBOS } from '../config/combos.js';
 import { MEMBRESIAS } from '../config/membresias.js';
-import { PAQUETES } from '../config/paquetes.js';
+import { PROGRAMAS } from '../config/programas.js';
+import { TODOS_LOS_PAQUETES } from '../config/paquetes.js';
 import { EXT, SYSTEM } from '../fhir/identifiers.js';
 
 function requireEnv(nombre: string): string {
@@ -44,7 +45,11 @@ function codigosEsperados(): Map<string, Set<string>> {
     [SYSTEM.servicioCodigo, new Set(TODOS_LOS_SERVICIOS.map((s) => s.codigo))],
     [SYSTEM.comboCodigo, new Set(COMBOS.map((c) => c.codigo))],
     [SYSTEM.membresiaCodigo, new Set(MEMBRESIAS.map((m) => m.codigo))],
-    [SYSTEM.paqueteCodigo, new Set(PAQUETES.map((p) => p.codigo))],
+    [SYSTEM.paqueteCodigo, new Set(TODOS_LOS_PAQUETES.map((p) => p.codigo))],
+    // Los programas faltaban: PB100D_PREMIUM_MENSUAL y _100D los publica este
+    // seed y aparecían como AJENOS, o sea que el veredicto mandaba a dar de
+    // baja lo que el propio seed mantiene.
+    [SYSTEM.programaCodigo, new Set(PROGRAMAS.map((p) => p.codigo))],
   ]);
 }
 
@@ -54,6 +59,20 @@ function precioDe(r: Recurso): number | undefined {
 
 function identifierDe(r: Recurso): { system?: string; value?: string } | undefined {
   return r.identifier?.[0];
+}
+
+/**
+ * ¿Es del PB100D clínico, que publica `biowellness-fhir`?
+ *
+ * Se reconoce por el nombre porque esos recursos no llevan identifier nuestro
+ * (`AdPb100d*` son las acciones del protocolo, `Pb100dNivel*` las cuatro
+ * plantillas por nivel). Es una heurística, y por eso NO se usa para borrar
+ * nada: solo para sacarlos de la lista de "dar de baja a mano". Un falso
+ * positivo acá esconde un ajeno; un falso negativo mandaba a borrar la historia
+ * clínica de otro equipo, que es muchísimo peor.
+ */
+function esDePB100D(r: Recurso): boolean {
+  return /^(ad)?pb100d/i.test(r.name ?? '');
 }
 
 function esCanonico(r: Recurso, esperados: Map<string, Set<string>>): boolean {
@@ -90,8 +109,19 @@ async function main(): Promise<void> {
     );
   }
 
-  // 2) Ajenos: en el servidor pero NO en el código. Nadie los mantiene.
-  const ajenos = todos.filter((r) => !esCanonico(r, esperados));
+  // 2) Ajenos: en el servidor pero NO en el código. Pero "ajeno a ESTE seed" no
+  //    es lo mismo que "no lo mantiene nadie": los recursos clínicos del PB100D
+  //    los publica el seed de `biowellness-fhir` (ver CLAUDE.md · PB100D) y este
+  //    repo no tiene por qué conocerlos. Mezclarlos mandaba a dar de baja a mano
+  //    las plantillas clínicas de otro equipo — el peor consejo posible.
+  const otrosRepos = todos.filter((r) => !esCanonico(r, esperados) && esDePB100D(r));
+  const ajenos = todos.filter((r) => !esCanonico(r, esperados) && !esDePB100D(r));
+
+  if (otrosRepos.length > 0) {
+    console.log(`\n=== De otro repo (biowellness-fhir · PB100D): ${otrosRepos.length} ===`);
+    console.log('  Plantillas y acciones clínicas del programa. NO se tocan desde acá.');
+  }
+
   console.log(`\n=== Ajenos al seed: ${ajenos.length} ===`);
   for (const r of ajenos) {
     const ident = identifierDe(r);
@@ -111,6 +141,8 @@ async function main(): Promise<void> {
   }
   if (ajenos.length > 0) {
     console.log('  → No los actualiza el seed: o se migran al código (src/config) o se dan de baja a mano.');
+    console.log('  → Antes de borrar: fijate si el portal los está mostrando. Los que no tienen');
+    console.log('    identifier son de una convención vieja y duplican a los canónicos.');
   }
 
   // 3) Identifiers DUPLICADOS: dos recursos con el mismo identifier hacen que el
@@ -134,7 +166,9 @@ async function main(): Promise<void> {
   }
 
   // 4) Publicados sin precio: se ven en la góndola sin poder venderse.
-  const sinPrecio = todos.filter((r) => precioDe(r) == null);
+  // Los del PB100D clínico no llevan precio A PROPÓSITO (son pasos de un
+  // protocolo, no productos): listarlos acá era ruido que tapaba los reales.
+  const sinPrecio = todos.filter((r) => precioDe(r) == null && !esDePB100D(r));
   console.log(`\n=== Publicados SIN precio: ${sinPrecio.length} ===`);
   for (const r of sinPrecio) {
     console.log(`  ! ${r.resourceType}/${r.id} · ${r.name ?? r.title ?? '(sin nombre)'}`);

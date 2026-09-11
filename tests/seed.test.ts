@@ -21,7 +21,11 @@ describe('Seed — composición', () => {
     expect(seed.activityDefinitions.filter((a) => a.status === 'retired')).toHaveLength(6);
     expect(seed.combos.length).toBe(9);
     expect(seed.membresias.length).toBe(10);
-    expect(seed.paquetes.length).toBe(24); // 8 servicios base × 3 tramos (Multiplaza y Recovery Pro sumados 2026-08-15)
+    // 8 servicios base × 3 tramos (Multiplaza y Recovery Pro sumados 2026-08-15)
+    // + los 3 de IHHT Express, que se publican RETIRADOS: su servicio base ya no
+    // existe, y omitirlos los dejaría `active` vendiéndose en el servidor.
+    expect(seed.paquetes.length).toBe(27);
+    expect(seed.paquetes.filter((p) => p.status === 'retired')).toHaveLength(3);
     expect(seed.programas.length).toBe(2); // PB100D premium: mensual + 100 días
     expect(seed.locations.length).toBe(14); // 13 + Puesto IV 2 (handoff v9)
     // 14 salas + las 3 agendas médicas publicadas (Conrado, D'Alessandro, Dos Santos).

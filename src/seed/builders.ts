@@ -25,7 +25,7 @@ import { MEDICOS, type Medico } from '../config/medicos.js';
 import { CATEGORIA_COMERCIAL, ORDEN_FAMILIA, TODOS_LOS_SERVICIOS } from '../config/catalogo.js';
 import { COMBOS } from '../config/combos.js';
 import { MEMBRESIAS } from '../config/membresias.js';
-import { PAQUETES } from '../config/paquetes.js';
+import { PAQUETES_POR_CODIGO, TODOS_LOS_PAQUETES } from '../config/paquetes.js';
 import { PROGRAMAS } from '../config/programas.js';
 import { FM } from '../config/reglas.js';
 import { CONTRAINDICACIONES } from '../config/contraindicaciones.js';
@@ -219,13 +219,16 @@ export function buildProgramaPlanDefinition(codigo: string): PlanDefinition {
 }
 
 export function buildPaquetePlanDefinition(codigo: string): PlanDefinition {
-  const p = PAQUETES.find((x) => x.codigo === codigo)!;
+  const p = PAQUETES_POR_CODIGO.get(codigo)!;
   return {
     resourceType: 'PlanDefinition',
     url: canonical('PlanDefinition', codigo),
     name: codigo,
     title: `Paquete ${p.nombre}`,
-    status: 'active',
+    // Un paquete retirado se publica igual, pero `retired`: omitirlo lo dejaría
+    // `active` en el servidor (el seed hace upsert, no borra) y se seguiría
+    // vendiendo un paquete de un servicio que ya no se puede reservar.
+    status: p.retirado ? 'retired' : 'active',
     // 'paquete' y no 'package': es la etiqueta con la que se los cuenta y se
     // los filtra en los dos fronts, y el resto del contrato está en español.
     type: { text: 'paquete' },
@@ -488,7 +491,7 @@ export function buildSeed(): RecursosSeed {
     activityDefinitions: TODOS_LOS_SERVICIOS.map(buildActivityDefinition),
     combos: COMBOS.map((c) => buildComboPlanDefinition(c.codigo)),
     membresias: MEMBRESIAS.map((m) => buildMembresiaPlanDefinition(m.codigo)),
-    paquetes: PAQUETES.map((p) => buildPaquetePlanDefinition(p.codigo)),
+    paquetes: TODOS_LOS_PAQUETES.map((p) => buildPaquetePlanDefinition(p.codigo)),
     programas: PROGRAMAS.map((p) => buildProgramaPlanDefinition(p.codigo)),
     contraindicaciones: buildContraindicacionesCodeSystem(),
     consentimiento: buildConsentimientoLibrary(),
