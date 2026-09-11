@@ -171,11 +171,36 @@ async function main(): Promise<void> {
   // sala para nadie y NO se ve en recepción (que dibuja Appointments): se nota
   // solo como un horario que nunca aparece libre en el portal.
   const sueltos = slotsHuerfanos(citas, slots);
+  // De dónde viene cada uno importa más que el id: un Slot que SÍ tiene turno
+  // detrás pero cancelado es un bug (la cancelación tenía que liberarlo, ver
+  // `bw-estado-turno`), y uno que no tiene nada es basura. Se arreglan distinto.
+  const citaDeSlot = new Map<string, Appointment>();
+  for (const a of citas) {
+    for (const ref of a.slot ?? []) {
+      const id = ref.reference?.split('/')[1];
+      if (id) {
+        citaDeSlot.set(id, a);
+      }
+    }
+  }
+  let porCancelacion = 0;
   if (sueltos.length > 0) {
-    console.log(`\n=== Slots busy que ningún turno reclama: ${sueltos.length} ===`);
-    console.log('  Bloquean la sala sin turno detrás. Revisar y, si no corresponden, darlos de baja.');
+    console.log(`\n=== Slots busy que ningún turno vivo reclama: ${sueltos.length} ===`);
+    console.log('  Bloquean la sala sin turno detrás: el horario no se ofrece y no hay a quién atender.');
     for (const s of sueltos.slice(0, 10)) {
+      const cita = s.id ? citaDeSlot.get(s.id) : undefined;
+      if (cita) {
+        porCancelacion++;
+      }
+      const origen = cita
+        ? `Appointment/${cita.id} status=${cita.status} ← la baja del turno NO liberó el Slot`
+        : 'ningún Appointment lo referencia (resto suelto)';
       console.log(`    Slot/${s.id}  ${s.start ? horaAR(s.start) : '(sin start)'}  ${codigoDe(s)}`);
+      console.log(`      ${origen}`);
+    }
+    if (porCancelacion > 0) {
+      console.log(`\n  ⚠️  ${porCancelacion} vienen de un turno dado de baja que no liberó su Slot.`);
+      console.log('     Eso es un bug del circuito de cancelación, no basura: revisar bw-estado-turno.');
     }
   }
 
