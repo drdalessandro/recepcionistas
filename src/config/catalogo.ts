@@ -435,6 +435,44 @@ export const SERVICIOS_RETIRADOS: Servicio[] = [
   ...tb('COLIRIO_PLASMA', 'Colirio de Plasma', 30, 365, { retirado: true }),
   ...tb('COLIRIO_PLASMA_COAGULO', 'Colirio de Plasma Coágulo', 30, 480, { retirado: true }),
   ...tb('CREMA_DERMATO', 'Crema Dermato (por frasco)', 0, 150, { retirado: true }),
+
+  // Variantes de IHHT del changelog intermedio, descartadas por el Manual v9
+  // (que volvió a una única sesión de 30 min / USD 90). Se sacaron del catálogo
+  // en julio y quedaron HUÉRFANAS en Medplum desde entonces: el seed hace
+  // upsert y no borra, así que el portal las siguió ofreciendo dos meses, y al
+  // elegirlas devolvía "Servicio desconocido" porque acá ya no existían.
+  // Estaba anotado en docs/decisiones-pendientes.md desde el 2026-07-12 y
+  // nunca se cerró; esto lo cierra.
+  //
+  // Duración y precio son los que el servidor viene publicando (los que ve la
+  // paciente hoy), no un valor inventado: si hubiera un turno viejo con estos
+  // códigos, se cobra por lo que decía el catálogo cuando se reservó.
+  {
+    codigo: 'IHHT_EXPRESS',
+    nombre: 'IHHT Express',
+    categoria: 'IHHT',
+    duracionMin: 30,
+    precioUSD: 60,
+    requierePrescripcion: false,
+    reglaPricing: 'POR_SESION',
+    split: BW100,
+    fmAplica: true,
+    orden: 30,
+    retirado: true,
+  },
+  {
+    codigo: 'IHHT_PREMIUM',
+    nombre: 'IHHT Premium',
+    categoria: 'IHHT',
+    duracionMin: 60,
+    precioUSD: 120,
+    requierePrescripcion: false,
+    reglaPricing: 'POR_SESION',
+    split: BW100,
+    fmAplica: true,
+    orden: 30,
+    retirado: true,
+  },
 ];
 
 /**

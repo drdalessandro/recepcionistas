@@ -19,7 +19,7 @@
 import 'dotenv/config';
 import { MedplumClient } from '@medplum/core';
 import type { ActivityDefinition, PlanDefinition } from '@medplum/fhirtypes';
-import { SERVICIOS } from '../config/catalogo.js';
+import { TODOS_LOS_SERVICIOS } from '../config/catalogo.js';
 import { COMBOS } from '../config/combos.js';
 import { MEMBRESIAS } from '../config/membresias.js';
 import { PAQUETES } from '../config/paquetes.js';
@@ -38,7 +38,10 @@ type Recurso = ActivityDefinition | PlanDefinition;
 /** Códigos del catálogo local, por sistema de identifier. */
 function codigosEsperados(): Map<string, Set<string>> {
   return new Map([
-    [SYSTEM.servicioCodigo, new Set(SERVICIOS.map((s) => s.codigo))],
+    // Los RETIRADOS cuentan como canónicos: el seed los publica (como
+    // `retired`), así que no son ajenos — marcarlos como tales mandaría a
+    // dar de baja a mano justo lo que el seed mantiene a propósito.
+    [SYSTEM.servicioCodigo, new Set(TODOS_LOS_SERVICIOS.map((s) => s.codigo))],
     [SYSTEM.comboCodigo, new Set(COMBOS.map((c) => c.codigo))],
     [SYSTEM.membresiaCodigo, new Set(MEMBRESIAS.map((m) => m.codigo))],
     [SYSTEM.paqueteCodigo, new Set(PAQUETES.map((p) => p.codigo))],
