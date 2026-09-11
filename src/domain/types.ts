@@ -177,6 +177,11 @@ export interface Paquete {
   totalUSD: number;
   /** Total para Founding Member (20% adicional, USD). */
   totalFMUSD: number;
+  /**
+   * Retirado: no se vende más (su servicio base ya no existe), pero sigue
+   * resolviendo para los paquetes ya vendidos. Se publica `status: 'retired'`.
+   */
+  retirado?: boolean;
 }
 
 /**
