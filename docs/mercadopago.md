@@ -90,8 +90,63 @@ los días 1-5, así que **ese mes no se cobraba nunca y nadie se enteraba**. Con
 el orden actual la ventana es inofensiva: la corrida siguiente vuelve a entrar y
 el Invoice no se duplica. Hay test.
 
+## Auditoría contra la documentación oficial (2026-09-11)
+
+Se contrastó la integración campo por campo con la doc de MercadoPago (MLA, vía
+el MCP de MP). **Todo lo crítico coincide**; queda constancia de qué se verificó
+para no volver a revisarlo desde cero.
+
+| Qué | Qué pide la doc | Nuestro código |
+| --- | --- | --- |
+| `expiration_date_to` | `"2017-02-28T12:00:00.000-04:00"` | `isoArgentina` (`lib/sena.ts`) da `…T17:05:00.000-03:00` — **exacto**, con milisegundos y offset. Ojo: el otro `isoArgentina` del repo (`isoHorarioPortal`) NO lleva milisegundos y acá no sirve |
+| `binary_mode` | válido; advierte que **baja la tasa de aprobación** | Solo en la seña, a propósito: un ticket de Rapipago acredita en días y la tentativa vence en horas |
+| `auto_return` + `back_urls` | `"approved"` con las tres URLs | ✓ |
+| `payment_methods.installments` | `"installments": 12` | ✓ (de `MERCADOPAGO.maxCuotas`) |
+| `statement_descriptor` | `"MINEGOCIO"` | ✓ `BIOWELLNESS` |
+| Firma: template del manifiesto | `id:…;request-id:…;ts:…;` | ✓ |
+| Firma: omitir las partes ausentes | *"debes removerlo del manifest"* | ✓ |
+| Firma: id alfanumérico en minúsculas | `ORD01JQ…` → `ord01jq…` | ✓ |
+| Tipos de suscripción | `subscription_authorized_payment`, `subscription_preapproval` | ✓ los dos |
+| Reintentos | 200/201 antes de **22 s**, si no reintenta **cada 15 min** | `confirmarReserva` es idempotente por `sena-{turno}` **y** `mp-{paymentId}`, y distingue un reintento del mismo pago de un pago doble real (el segundo levanta alerta para devolver) |
+
+### Tres divergencias conocidas (ninguna rompe hoy)
+
+1. **`data.id` se lee del BODY, no de los query params.** La doc es explícita:
+   *"`[data.id_url]` se sustituirá por el valor del parámetro `data.id` recibido
+   en los **query params de la URL**"*. En la práctica MP manda los dos y
+   coinciden, por eso la firma valida. Si alguna vez difirieran, descartaríamos
+   notificaciones legítimas **en silencio**: con firma inválida devolvemos 200,
+   así que MP no reintenta. Antes de "arreglarlo" hay que averiguar si un bot de
+   Medplum puede leer los query params del request — si no puede, esto es un
+   límite documentado, no una deuda.
+
+2. **`subscription_preapproval_plan` no está manejado.** Es el tercer tipo de
+   suscripción de la doc (vinculación de un *plan*). Hoy no aplica —D16: la
+   suscripción la arma Recepción a mano en el panel de MP— pero si llegara, cae
+   en "evento ignorado" sin hacer ruido.
+
+3. **`payment` figura como *legacy*, pero solo para Checkout API.** Para
+   **Checkout Pro**, que es lo que usamos (`/checkout/preferences`), sigue
+   siendo el tipo correcto. Importa el día que alguien migre a la **Orders API**:
+   ahí el tipo pasa a `orders` y el webhook actual lo ignoraría.
+
+> Lo que esta auditoría **no** puede responder: si el MONTO es el correcto. MP
+> cobra bien lo que se le pide; cuánto pedir en la Multiplaza depende del piso de
+> facturación de 3 personas (`Math.max(ocupantes, 3)` en `lib/pricing.ts`), que
+> es una decisión comercial abierta — ver "Lo que sigue sin resolver".
+
 ## Lo que sigue sin resolver
 
+- **Cuánto cobrar de seña en la Multiplaza** (decisión de Andrés, comercial).
+  `lib/pricing.ts` cobra `precioUSD * max(ocupantes, 3)`: una persona sola paga
+  USD 240 y su seña sale USD 120. El portal, en la misma pantalla, le dice
+  *"Valor de referencia: USD 80"*. Apareció con plata real el 2026-09-11 (seña de
+  $174.000 a TC 1450 por una reserva de UNA persona). La contradicción está
+  documentada en [`motor-agenda-fhir.md`](motor-agenda-fhir.md) §713: el motor
+  comercial dice "USD 80 por persona desde uno, **sin piso de sesión**". Ojo con
+  el matiz: el mínimo de 3 de la agenda es **operativo** (`validarMinimoGrupal`
+  advierte, no bloquea), no un piso de facturación — hoy el código trata lo mismo
+  de dos maneras. Si gana el piso, el portal tiene que decirlo antes de reservar.
 - **Reembolsos y contracargos**: si un pago se devuelve desde el panel de MP, el
   sistema no se entera (el webhook ignora `refunded` / `charged_back`), así que
   el Invoice queda como cobrado.
