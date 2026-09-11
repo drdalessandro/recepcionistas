@@ -92,6 +92,37 @@ export function planDeReparacion(citas: Appointment[], slotsBusy: Slot[]): Repar
   return plan;
 }
 
+/**
+ * El problema INVERSO: Slots `busy` de una sala que ningún turno vivo reclama.
+ *
+ * Bloquean la sala para nadie — el horario deja de ofrecerse y no hay a quién
+ * atender. Salen de un turno borrado (o cancelado) sin liberar su Slot, y a
+ * diferencia del turno sin Slot este no se nota en ninguna pantalla: recepción
+ * dibuja Appointments, así que un Slot suelto es invisible ahí y solo se ve
+ * como un horario que nunca aparece libre en el portal.
+ *
+ * Solo mira Slots CON `recurso-fisico`: los de la agenda de médicos viven en
+ * otro Schedule y no llevan esa extensión, así que no son huérfanos acá.
+ *
+ * No se borran solos: puede haber un motivo legítimo (un bloqueo de sala puesto
+ * a mano) y borrar datos del servidor lo decide una persona.
+ */
+export function slotsHuerfanos(citas: Appointment[], slotsBusy: Slot[]): Slot[] {
+  const reclamados = new Set<string>();
+  for (const a of citas) {
+    if (ESTADOS_SIN_SALA.has(a.status ?? '')) {
+      continue;
+    }
+    for (const ref of a.slot ?? []) {
+      const id = ref.reference?.split('/')[1];
+      if (id) {
+        reclamados.add(id);
+      }
+    }
+  }
+  return slotsBusy.filter((s) => codigoDe(s) && s.id && !reclamados.has(s.id));
+}
+
 /** Código del médico del turno, si es una consulta con agenda publicada. */
 function medicoDe(a: Appointment): string | undefined {
   const ref = a.participant?.find((p) => p.actor?.reference?.startsWith('Practitioner/'))?.actor?.reference;

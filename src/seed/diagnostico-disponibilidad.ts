@@ -35,6 +35,7 @@ import { MedplumClient } from '@medplum/core';
 import type { Appointment, Slot } from '@medplum/fhirtypes';
 import { getServicio } from '../config/catalogo.js';
 import { ESTADOS_SIN_SALA } from '../bots/_shared.js';
+import { slotsHuerfanos } from './reparar-slots.js';
 import { EXT, SYSTEM } from '../fhir/identifiers.js';
 import type { DiaDisponible } from '../lib/disponibilidad.js';
 
@@ -166,6 +167,18 @@ async function main(): Promise<void> {
     }
   }
 
+  // El problema inverso: Slot busy que ningún turno vivo reclama. Bloquea la
+  // sala para nadie y NO se ve en recepción (que dibuja Appointments): se nota
+  // solo como un horario que nunca aparece libre en el portal.
+  const sueltos = slotsHuerfanos(citas, slots);
+  if (sueltos.length > 0) {
+    console.log(`\n=== Slots busy que ningún turno reclama: ${sueltos.length} ===`);
+    console.log('  Bloquean la sala sin turno detrás. Revisar y, si no corresponden, darlos de baja.');
+    for (const s of sueltos.slice(0, 10)) {
+      console.log(`    Slot/${s.id}  ${s.start ? horaAR(s.start) : '(sin start)'}  ${codigoDe(s)}`);
+    }
+  }
+
   const recursos = [...new Set([...porRecursoSlots.keys(), ...porRecursoCitas.keys()])].sort();
   console.log(`\n=== Slots busy vs. Appointments, por sala ===`);
   console.log(`  ${'sala'.padEnd(22)}${'slots'.padStart(6)}${'citas'.padStart(7)}`);
@@ -245,7 +258,10 @@ async function main(): Promise<void> {
     console.log('  libre si CUALQUIER sala de la categoría está libre (HBOT individual entra en');
     console.log('  monoplaza o en biplaza).');
   }
-  if (desbalance > 0 || sinRecurso.length > 0 || huerfanos.length > 0) {
+  if (sueltos.length > 0) {
+    console.log(`  ${sueltos.length} Slot(s) busy sin turno: esas salas están bloqueadas para nadie (arriba, con su id).`);
+  }
+  if (desbalance > 0 || sinRecurso.length > 0 || huerfanos.length > 0 || sueltos.length > 0) {
     process.exitCode = 1;
   }
 }
