@@ -496,23 +496,33 @@ export async function cargarReservasDelDia(medplum: MedplumClient, dia: Date): P
 /**
  * Agenda ocupada (Slots busy → ReservaRecurso) de un rango [desde, hasta].
  * Lo usa la disponibilidad del portal (ventana de hasta 7 días, R-13).
+ *
+ * La búsqueda va **acotada por los dos extremos y paginada**. Antes pedía
+ * `start ge desde` sin techo y una sola página de 1000: todo lo que no entrara
+ * en esa página desaparecía de la agenda ocupada **en silencio**, y lo que
+ * desaparece acá vuelve a ofrecerse como libre en el portal. Con la agenda
+ * llena (la demo sola hace ~320 turnos/día) el tope está a un par de días de
+ * distancia, así que era cuestión de tiempo. Mismo arreglo que en el timeline
+ * de recepción: acotar las dos puntas y no confiar en una sola página.
  */
 export async function cargarReservasEnRango(medplum: MedplumClient, desde: Date, hasta: Date): Promise<ReservaRecurso[]> {
-  const ocupados = await medplum.searchResources('Slot', {
-    status: 'busy',
-    start: `ge${desde.toISOString()}`,
-    _count: 1000,
-  });
-
   const reservas: ReservaRecurso[] = [];
-  for (const s of ocupados) {
-    const codigo = s.extension?.find((x) => x.url === EXT.recursoFisico)?.valueString;
-    if (!codigo || !s.start || !s.end || s.start > hasta.toISOString()) {
-      continue;
+  const paginas = medplum.searchResourcePages('Slot', [
+    ['status', 'busy'],
+    ['start', `ge${desde.toISOString()}`],
+    ['start', `le${hasta.toISOString()}`],
+    ['_count', '1000'],
+  ]);
+  for await (const pagina of paginas) {
+    for (const s of pagina) {
+      const codigo = s.extension?.find((x) => x.url === EXT.recursoFisico)?.valueString;
+      if (!codigo || !s.start || !s.end) {
+        continue;
+      }
+      // Personas de la reserva (Slots viejos sin la extensión cuentan como 1).
+      const ocupantes = s.extension?.find((x) => x.url === EXT.ocupantes)?.valueInteger ?? 1;
+      reservas.push({ recursoCodigo: codigo, inicio: new Date(s.start), fin: new Date(s.end), ocupantes });
     }
-    // Personas de la reserva (Slots viejos sin la extensión cuentan como 1).
-    const ocupantes = s.extension?.find((x) => x.url === EXT.ocupantes)?.valueInteger ?? 1;
-    reservas.push({ recursoCodigo: codigo, inicio: new Date(s.start), fin: new Date(s.end), ocupantes });
   }
   return reservas;
 }
