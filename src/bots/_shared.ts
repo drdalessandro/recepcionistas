@@ -494,36 +494,77 @@ export async function cargarReservasDelDia(medplum: MedplumClient, dia: Date): P
 }
 
 /**
- * Agenda ocupada (Slots busy → ReservaRecurso) de un rango [desde, hasta].
- * Lo usa la disponibilidad del portal (ventana de hasta 7 días, R-13).
+ * Estados de Appointment que NO ocupan sala. Son los mismos que oculta el
+ * timeline de recepción (`app/src/lib/timeline.ts`): si las dos pantallas no
+ * usaran la misma lista, una mostraría ocupado lo que la otra ofrece libre.
+ */
+export const ESTADOS_SIN_SALA = new Set(['cancelled', 'entered-in-error', 'waitlist']);
+
+/**
+ * Agenda ocupada de un rango [desde, hasta], para la disponibilidad del portal
+ * (ventana de hasta 7 días, R-13).
+ *
+ * Mira **las dos fuentes**: los Slots `busy` y los Appointments vivos. Dice la
+ * teoría que alcanza con los Slots, porque cada reserva crea el suyo; dijo la
+ * producción que no (2026-09-11: 285 Slots busy contra 511 Appointments vivos,
+ * ~2:1 en las catorce salas). Un turno sin su Slot es invisible para el portal
+ * y se vuelve a ofrecer: exactamente el bug que vio recepción. Recepción dibuja
+ * Appointments y el portal decidía con Slots — dos fuentes de verdad para el
+ * mismo hecho, y ya derivaron.
+ *
+ * La unión solo puede ofrecer de MENOS, nunca de más, que es el lado seguro
+ * (y el que el repo ya eligió para las solicitudes pendientes). El de-duplicado
+ * es exacto, no heurístico: un Appointment que referencia uno de los Slots ya
+ * contados se saltea. Sin eso, la misma reserva pesaría doble y las salas de
+ * reserva exclusiva chocarían contra sí mismas.
  *
  * La búsqueda va **acotada por los dos extremos y paginada**. Antes pedía
  * `start ge desde` sin techo y una sola página de 1000: todo lo que no entrara
- * en esa página desaparecía de la agenda ocupada **en silencio**, y lo que
- * desaparece acá vuelve a ofrecerse como libre en el portal. Con la agenda
- * llena (la demo sola hace ~320 turnos/día) el tope está a un par de días de
- * distancia, así que era cuestión de tiempo. Mismo arreglo que en el timeline
- * de recepción: acotar las dos puntas y no confiar en una sola página.
+ * en esa página desaparecía de la agenda ocupada **en silencio**.
  */
 export async function cargarReservasEnRango(medplum: MedplumClient, desde: Date, hasta: Date): Promise<ReservaRecurso[]> {
   const reservas: ReservaRecurso[] = [];
-  const paginas = medplum.searchResourcePages('Slot', [
+  const slotsContados = new Set<string>();
+
+  for await (const pagina of medplum.searchResourcePages('Slot', [
     ['status', 'busy'],
     ['start', `ge${desde.toISOString()}`],
     ['start', `le${hasta.toISOString()}`],
     ['_count', '1000'],
-  ]);
-  for await (const pagina of paginas) {
+  ])) {
     for (const s of pagina) {
       const codigo = s.extension?.find((x) => x.url === EXT.recursoFisico)?.valueString;
       if (!codigo || !s.start || !s.end) {
         continue;
+      }
+      if (s.id) {
+        slotsContados.add(s.id);
       }
       // Personas de la reserva (Slots viejos sin la extensión cuentan como 1).
       const ocupantes = s.extension?.find((x) => x.url === EXT.ocupantes)?.valueInteger ?? 1;
       reservas.push({ recursoCodigo: codigo, inicio: new Date(s.start), fin: new Date(s.end), ocupantes });
     }
   }
+
+  for await (const pagina of medplum.searchResourcePages('Appointment', [
+    ['date', `ge${desde.toISOString()}`],
+    ['date', `le${hasta.toISOString()}`],
+    ['_count', '1000'],
+  ])) {
+    for (const a of pagina) {
+      const codigo = a.extension?.find((x) => x.url === EXT.recursoFisico)?.valueString;
+      if (!codigo || !a.start || !a.end || ESTADOS_SIN_SALA.has(a.status ?? '')) {
+        continue;
+      }
+      // Ya contado como Slot busy: no se cuenta de nuevo.
+      if ((a.slot ?? []).some((ref) => slotsContados.has(ref.reference?.split('/')[1] ?? ''))) {
+        continue;
+      }
+      const ocupantes = a.extension?.find((x) => x.url === EXT.ocupantes)?.valueInteger ?? 1;
+      reservas.push({ recursoCodigo: codigo, inicio: new Date(a.start), fin: new Date(a.end), ocupantes });
+    }
+  }
+
   return reservas;
 }
 

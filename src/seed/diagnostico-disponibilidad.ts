@@ -10,21 +10,23 @@
  * al 100 %. El síntoma es idéntico desde afuera, pero las causas son opuestas y
  * viven en repos distintos:
  *
- *  - **Nuestra**: `bw-disponibilidad` no ve la agenda (la búsqueda de Slots no
- *    los trae, o los trae sin la extensión `recurso-fisico`) y por lo tanto
- *    devuelve los horarios como LIBRES.
+ *  - **Nuestra**: `bw-disponibilidad` no ve la agenda y devuelve los horarios
+ *    como LIBRES.
  *  - **Del portal**: el bot devuelve bien —`horarios: []` y todo en
  *    `ocupados`— y el portal los pinta igual como elegibles (una grilla fija de
  *    fallback, o rendereando `ocupados` como si fueran chips libres).
  *
- * Este chequeo las separa: ejecuta el bot DE VERDAD y muestra, lado a lado, lo
- * que el bot responde y los datos crudos con los que lo decidió. Si el bot dice
- * `libres 0`, lo que se vea ofrecido en el portal es del portal.
+ * Desde afuera no se distinguen, y por eso este chequeo existe: ejecuta el bot
+ * DE VERDAD y muestra, lado a lado, lo que responde y los datos crudos con los
+ * que lo decidió. La primera corrida (2026-09-11) contestó la pregunta y de
+ * paso corrigió la hipótesis con la que se escribió: el bot devolvía `libres
+ * 22 · ocupados 0`, o sea era NUESTRA.
  *
- * Además compara Slots `busy` contra Appointments en la misma ventana: la
- * agenda de recepción se dibuja con los Appointments y la disponibilidad del
- * portal con los Slots, así que un desbalance entre los dos es, él solo, la
- * explicación de que una pantalla muestre ocupado y la otra libre.
+ * Lo que lo destapó fue comparar las dos fuentes en la misma ventana: recepción
+ * dibuja Appointments y la disponibilidad decidía con Slots, y un turno vivo sin
+ * su Slot es invisible para el portal — su horario se vuelve a ofrecer. Esa
+ * cuenta sigue acá porque la deriva puede volver: los `ocupantes` viven en las
+ * dos y basta con que una sola escritura se saltee una para que reaparezca.
  *
  * SOLO LECTURA: no crea, no modifica y no borra nada.
  */
@@ -32,6 +34,7 @@ import 'dotenv/config';
 import { MedplumClient } from '@medplum/core';
 import type { Appointment, Slot } from '@medplum/fhirtypes';
 import { getServicio } from '../config/catalogo.js';
+import { ESTADOS_SIN_SALA } from '../bots/_shared.js';
 import { EXT, SYSTEM } from '../fhir/identifiers.js';
 import type { DiaDisponible } from '../lib/disponibilidad.js';
 
@@ -111,8 +114,11 @@ async function main(): Promise<void> {
   ])) {
     citas.push(...pagina);
   }
-  // Una cita cancelada libera la sala: no es agenda ocupada.
-  const citasVivas = citas.filter((a) => a.status !== 'cancelled' && a.status !== 'noshow');
+  // La MISMA lista que usa la ocupación (y que oculta el timeline de recepción).
+  // Con otra lista el diagnóstico inventa deriva: las esperas son Appointments
+  // `waitlist` y no llevan Slot **a propósito** — contarlas acá exageraba el
+  // desbalance y mandaba a buscar un Slot que nunca tuvo que existir.
+  const citasVivas = citas.filter((a) => !ESTADOS_SIN_SALA.has(a.status ?? ''));
 
   const codigoDe = (r: Slot | Appointment): string | undefined =>
     r.extension?.find((x) => x.url === EXT.recursoFisico)?.valueString;
@@ -121,7 +127,7 @@ async function main(): Promise<void> {
   console.log(`=== Agenda cruda (hoy 00:00 → +7 días) ===`);
   console.log(`  Slots busy:            ${slots.length}`);
   console.log(`  ...sin recurso-fisico: ${sinRecurso.length}${sinRecurso.length ? '  ← invisibles para la disponibilidad' : ''}`);
-  console.log(`  Appointments vivos:    ${citasVivas.length} (de ${citas.length} con cancelados)`);
+  console.log(`  Appointments vivos:    ${citasVivas.length} (de ${citas.length}; se excluyen cancelados, entered-in-error y esperas)`);
 
   // Recepción dibuja Appointments; el portal decide con Slots. Si no coinciden,
   // una pantalla muestra ocupado y la otra libre — sin que ningún bot falle.
@@ -139,6 +145,27 @@ async function main(): Promise<void> {
       porRecursoCitas.set(c, (porRecursoCitas.get(c) ?? 0) + 1);
     }
   }
+  // La pregunta que importa: ¿qué turno vivo NO tiene su Slot busy? Ése es
+  // invisible para la disponibilidad y su horario se vuelve a ofrecer. Se
+  // resuelve por referencia (`Appointment.slot`), no por horario, así que no
+  // hay falsos positivos.
+  const idsBusy = new Set(slots.map((s) => s.id).filter(Boolean) as string[]);
+  const huerfanos = citasVivas.filter(
+    (a) => codigoDe(a) && !(a.slot ?? []).some((ref) => idsBusy.has(ref.reference?.split('/')[1] ?? '')),
+  );
+  const sinReferencia = huerfanos.filter((a) => (a.slot ?? []).length === 0);
+  console.log(`\n=== Turnos vivos SIN Slot busy: ${huerfanos.length} de ${citasVivas.length} ===`);
+  if (huerfanos.length > 0) {
+    console.log(`  ...sin ninguna referencia a Slot: ${sinReferencia.length}`);
+    console.log(`  ...con Slot referenciado que ya no está busy: ${huerfanos.length - sinReferencia.length}`);
+    for (const a of huerfanos.slice(0, 5)) {
+      console.log(
+        `    Appointment/${a.id}  ${a.start ? horaAR(a.start) : '(sin start)'}  ${codigoDe(a)}  status=${a.status}` +
+          `  slots=[${(a.slot ?? []).map((r) => r.reference).join(', ') || '—'}]`,
+      );
+    }
+  }
+
   const recursos = [...new Set([...porRecursoSlots.keys(), ...porRecursoCitas.keys()])].sort();
   console.log(`\n=== Slots busy vs. Appointments, por sala ===`);
   console.log(`  ${'sala'.padEnd(22)}${'slots'.padStart(6)}${'citas'.padStart(7)}`);
@@ -206,12 +233,19 @@ async function main(): Promise<void> {
     console.log('    · los chips elegibles son SOLO `dias[].horarios[]`;');
     console.log('    · `dias[].ocupados[]` se pinta tachado y no se puede elegir;');
     console.log('    · nunca caer a una grilla fija de fallback (handoff 2026-08-12 §1).');
+  } else if (libres > 0 && huerfanos.length > 0) {
+    console.log('✗ EL BUG ES NUESTRO: hay turnos vivos que la disponibilidad no ve.');
+    console.log(`  ${huerfanos.length} turno(s) sin Slot busy = ${huerfanos.length} franja(s) que se vuelven a ofrecer.`);
+    console.log('  Se arregla deployando los bots (la disponibilidad ya mira Slots + Appointments):');
+    console.log('    npm run deploy:bots');
+    console.log('  Si después de deployar SIGUE ofreciendo horarios tomados, ahí sí mirar el portal.');
   } else if (libres > 0) {
-    console.log('  Hay horarios ofrecidos. Verificar contra la agenda de recepción si alguno está tomado.');
-    console.log('  Ojo con el matiz del handoff: un horario sigue libre si CUALQUIER sala de la');
-    console.log('  categoría está libre (HBOT individual entra en monoplaza o biplaza).');
+    console.log('  Hay horarios ofrecidos y ningún turno huérfano. Verificar contra la agenda de');
+    console.log('  recepción si alguno está tomado — ojo con el matiz del handoff: un horario sigue');
+    console.log('  libre si CUALQUIER sala de la categoría está libre (HBOT individual entra en');
+    console.log('  monoplaza o en biplaza).');
   }
-  if (desbalance > 0 || sinRecurso.length > 0) {
+  if (desbalance > 0 || sinRecurso.length > 0 || huerfanos.length > 0) {
     process.exitCode = 1;
   }
 }
