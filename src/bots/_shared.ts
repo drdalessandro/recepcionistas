@@ -1121,6 +1121,38 @@ export function motivoNoAccionable(appt: Appointment, ahora = new Date()): strin
   return undefined;
 }
 
+/**
+ * Libera la(s) sala(s) de un turno: pone en `free` los Slot que referencia.
+ *
+ * Devuelve los que NO se pudieron liberar en vez de tirar: quien llama sigue
+ * con lo suyo y decide qué hacer. Cada Slot va en su propio try — con un combo
+ * de tres salas, que la primera falle no puede dejar las otras dos tomadas.
+ *
+ * Un Slot que ya no existe no es un fallo: si se borró, no hay sala tomada por
+ * él. Cualquier otro error sí se reporta.
+ */
+export async function liberarSalasDeTurno(medplum: MedplumClient, appt: Appointment): Promise<string[]> {
+  const fallidos: string[] = [];
+  for (const s of appt.slot ?? []) {
+    const id = s.reference?.split('/')[1];
+    if (!id) {
+      continue;
+    }
+    try {
+      const slot = await medplum.readResource('Slot', id);
+      if (slot.status !== 'free') {
+        await medplum.updateResource<Slot>({ ...slot, status: 'free' });
+      }
+    } catch (err) {
+      const msg = (err as Error).message;
+      if (!/not found/i.test(msg)) {
+        fallidos.push(`Slot/${id}: ${msg}`);
+      }
+    }
+  }
+  return fallidos;
+}
+
 export interface ResultadoCancelacionTurno {
   appointment: Appointment;
   /** true si la sesión volvió al plan (R-14, o fuerza mayor declarada). */
@@ -1182,6 +1214,19 @@ export async function cancelarTurnoYLiberar(
       : {}),
   });
 
+  // LIBERAR LA SALA VA ACÁ, pegado a la baja del turno, y no al final.
+  //
+  // Estaba último, después de cerrar el Encounter, anular el saldo, devolver la
+  // sesión y avisar a la lista de espera. Si cualquiera de esos fallaba, la
+  // función cortaba con el turno YA cancelado y la sala todavía tomada — para
+  // siempre y sin que se note: recepción dibuja Appointments, así que el turno
+  // cancelado desaparece de su pantalla, y del lado del portal queda un horario
+  // que nunca se ofrece. Pasó de verdad (Slot/6407c4dc… · lun 15/09 · camilla).
+  //
+  // Cancelar un turno ES liberar la sala; lo de abajo es contabilidad y avisos,
+  // que pueden fallar y reintentarse. El orden ahora dice eso.
+  const salasNoLiberadas = await liberarSalasDeTurno(medplum, appt);
+
   await cerrarEncounterDeTurno(medplum, appointmentId, 'cancelled');
 
   // El saldo pendiente (50% restante) no se debe más. La seña YA COBRADA no se
@@ -1213,15 +1258,14 @@ export async function cancelarTurnoYLiberar(
     await avisarListaDeEspera(medplum, appt);
   }
 
-  for (const s of appt.slot ?? []) {
-    const id = s.reference?.split('/')[1];
-    if (!id) {
-      continue;
-    }
-    const slot = await medplum.readResource('Slot', id).catch(() => undefined);
-    if (slot) {
-      await medplum.updateResource<Slot>({ ...slot, status: 'free' });
-    }
+  // El turno QUEDÓ cancelado, así que no tiramos: decirle al portal que la
+  // cancelación falló, cuando en realidad se hizo, es peor. Pero tampoco es
+  // mudo — queda en el AuditEvent de la ejecución, y `disponibilidad:check`
+  // detecta la sala trabada y dice de qué turno vino.
+  if (salasNoLiberadas.length > 0) {
+    console.error(
+      `bw-cancelar: el turno ${appointmentId} se canceló pero NO se liberó la sala: ${salasNoLiberadas.join(' · ')}`,
+    );
   }
 
   return { appointment: actualizado, sesionDevuelta, horasAnticipacion, yaEstabaCancelado };
