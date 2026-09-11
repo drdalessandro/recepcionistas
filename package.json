@@ -44,6 +44,7 @@
     "catalogo:check": "tsx src/seed/diagnostico-catalogo.ts",
     "policy:check": "tsx src/seed/diagnostico-policies.ts",
     "disponibilidad:check": "tsx src/seed/diagnostico-disponibilidad.ts",
+    "slots:reparar": "tsx src/seed/reparar-slots.ts",
     "verify": "npm run typecheck && npm run typecheck:app && npm run test && npm run build:app",
     "dev": "npm run dev --workspace @biowellness/recepcion-app",
     "build:app": "npm run build --workspace @biowellness/recepcion-app",
