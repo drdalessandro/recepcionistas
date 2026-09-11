@@ -222,8 +222,20 @@ async function main(): Promise<void> {
       );
 
       // Enlazarlo al turno: sin esto, cancelar o completar no libera la sala.
+      //
+      // Y si el enlace falla, DESHACER el Slot. Son dos escrituras y la segunda
+      // puede fallar sola (cuota, turno modificado entremedio): dejar el Slot
+      // creado y suelto convierte esta reparación en el problema inverso —una
+      // sala bloqueada sin turno detrás, invisible en recepción—. Preferimos
+      // volver a dejarlo sin Slot: eso al menos se ve y se repara corriendo
+      // esto de nuevo.
       const refs = [...(r.appointment.slot ?? []), { reference: `Slot/${slot.id}` }];
-      await conEsperaDeCuota(() => medplum.updateResource<Appointment>({ ...r.appointment, slot: refs }));
+      try {
+        await conEsperaDeCuota(() => medplum.updateResource<Appointment>({ ...r.appointment, slot: refs }));
+      } catch (err) {
+        await conEsperaDeCuota(() => medplum.deleteResource('Slot', slot.id!)).catch(() => undefined);
+        throw err;
+      }
       creados++;
 
       // Consulta: la agenda publicada del médico también tiene que quedar tomada,
