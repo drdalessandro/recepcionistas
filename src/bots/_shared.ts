@@ -498,7 +498,7 @@ export async function cargarReservasDelDia(medplum: MedplumClient, dia: Date): P
  * timeline de recepción (`app/src/lib/timeline.ts`): si las dos pantallas no
  * usaran la misma lista, una mostraría ocupado lo que la otra ofrece libre.
  */
-const ESTADOS_SIN_SALA = new Set(['cancelled', 'entered-in-error', 'waitlist']);
+export const ESTADOS_SIN_SALA = new Set(['cancelled', 'entered-in-error', 'waitlist']);
 
 /**
  * Agenda ocupada de un rango [desde, hasta], para la disponibilidad del portal

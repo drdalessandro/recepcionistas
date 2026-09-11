@@ -10,21 +10,23 @@
  * al 100 %. El síntoma es idéntico desde afuera, pero las causas son opuestas y
  * viven en repos distintos:
  *
- *  - **Nuestra**: `bw-disponibilidad` no ve la agenda (la búsqueda de Slots no
- *    los trae, o los trae sin la extensión `recurso-fisico`) y por lo tanto
- *    devuelve los horarios como LIBRES.
+ *  - **Nuestra**: `bw-disponibilidad` no ve la agenda y devuelve los horarios
+ *    como LIBRES.
  *  - **Del portal**: el bot devuelve bien —`horarios: []` y todo en
  *    `ocupados`— y el portal los pinta igual como elegibles (una grilla fija de
  *    fallback, o rendereando `ocupados` como si fueran chips libres).
  *
- * Este chequeo las separa: ejecuta el bot DE VERDAD y muestra, lado a lado, lo
- * que el bot responde y los datos crudos con los que lo decidió. Si el bot dice
- * `libres 0`, lo que se vea ofrecido en el portal es del portal.
+ * Desde afuera no se distinguen, y por eso este chequeo existe: ejecuta el bot
+ * DE VERDAD y muestra, lado a lado, lo que responde y los datos crudos con los
+ * que lo decidió. La primera corrida (2026-09-11) contestó la pregunta y de
+ * paso corrigió la hipótesis con la que se escribió: el bot devolvía `libres
+ * 22 · ocupados 0`, o sea era NUESTRA.
  *
- * Además compara Slots `busy` contra Appointments en la misma ventana: la
- * agenda de recepción se dibuja con los Appointments y la disponibilidad del
- * portal con los Slots, así que un desbalance entre los dos es, él solo, la
- * explicación de que una pantalla muestre ocupado y la otra libre.
+ * Lo que lo destapó fue comparar las dos fuentes en la misma ventana: recepción
+ * dibuja Appointments y la disponibilidad decidía con Slots, y un turno vivo sin
+ * su Slot es invisible para el portal — su horario se vuelve a ofrecer. Esa
+ * cuenta sigue acá porque la deriva puede volver: los `ocupantes` viven en las
+ * dos y basta con que una sola escritura se saltee una para que reaparezca.
  *
  * SOLO LECTURA: no crea, no modifica y no borra nada.
  */
@@ -32,6 +34,7 @@ import 'dotenv/config';
 import { MedplumClient } from '@medplum/core';
 import type { Appointment, Slot } from '@medplum/fhirtypes';
 import { getServicio } from '../config/catalogo.js';
+import { ESTADOS_SIN_SALA } from '../bots/_shared.js';
 import { EXT, SYSTEM } from '../fhir/identifiers.js';
 import type { DiaDisponible } from '../lib/disponibilidad.js';
 
@@ -111,8 +114,11 @@ async function main(): Promise<void> {
   ])) {
     citas.push(...pagina);
   }
-  // Una cita cancelada libera la sala: no es agenda ocupada.
-  const citasVivas = citas.filter((a) => a.status !== 'cancelled' && a.status !== 'noshow');
+  // La MISMA lista que usa la ocupación (y que oculta el timeline de recepción).
+  // Con otra lista el diagnóstico inventa deriva: las esperas son Appointments
+  // `waitlist` y no llevan Slot **a propósito** — contarlas acá exageraba el
+  // desbalance y mandaba a buscar un Slot que nunca tuvo que existir.
+  const citasVivas = citas.filter((a) => !ESTADOS_SIN_SALA.has(a.status ?? ''));
 
   const codigoDe = (r: Slot | Appointment): string | undefined =>
     r.extension?.find((x) => x.url === EXT.recursoFisico)?.valueString;
@@ -121,7 +127,7 @@ async function main(): Promise<void> {
   console.log(`=== Agenda cruda (hoy 00:00 → +7 días) ===`);
   console.log(`  Slots busy:            ${slots.length}`);
   console.log(`  ...sin recurso-fisico: ${sinRecurso.length}${sinRecurso.length ? '  ← invisibles para la disponibilidad' : ''}`);
-  console.log(`  Appointments vivos:    ${citasVivas.length} (de ${citas.length} con cancelados)`);
+  console.log(`  Appointments vivos:    ${citasVivas.length} (de ${citas.length}; se excluyen cancelados, entered-in-error y esperas)`);
 
   // Recepción dibuja Appointments; el portal decide con Slots. Si no coinciden,
   // una pantalla muestra ocupado y la otra libre — sin que ningún bot falle.
