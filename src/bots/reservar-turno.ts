@@ -44,6 +44,7 @@ import {
   validarConsentimientoTB,
   validarPrescripcion,
   validarRecursos,
+  reservasRelevantes,
   validarVentanaReserva,
   type ReservaRecurso,
   type ResultadoValidacion,
@@ -154,9 +155,14 @@ export function validarReserva(ctx: ContextoReserva): ResultadoValidacion {
   }
 
   const nueva: ReservaRecurso = { recursoCodigo: ctx.recursoCodigo, inicio: ctx.inicio, fin: ctx.fin, ocupantes };
-  partes.push(validarRecursos([...ctx.reservasExistentes, nueva]));
+  // SOLO las reservas que pueden afectar a esta sala. `validarRecursos` valida
+  // todo lo que se le pase, así que con la agenda entera del día un problema
+  // preexistente en otra sala bloqueaba esta reserva — reservar la Multiplaza
+  // fallaba por la capacidad de R_IHHT_1 (2026-09-11, producción).
+  const relevantes = reservasRelevantes(ctx.reservasExistentes, ctx.recursoCodigo);
+  partes.push(validarRecursos([...relevantes, nueva]));
   // Mínimo operativo de sesiones grupales (Multiplaza 3): advierte, no bloquea.
-  partes.push(validarMinimoGrupal([...ctx.reservasExistentes, nueva], nueva));
+  partes.push(validarMinimoGrupal([...relevantes, nueva], nueva));
 
   if (ctx.perfil) {
     partes.push(validarVentanaReserva(ctx.perfil, ctx.ahora, ctx.inicio));
