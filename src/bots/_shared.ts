@@ -1324,7 +1324,7 @@ export async function crearPreferenciaMP(
   if (!token) {
     return { ok: false, mensaje: 'MercadoPago no está configurado (falta MERCADOPAGO_ACCESS_TOKEN en Project Secrets).' };
   }
-  const appUrl = secrets['APP_BASE_URL']?.valueString ?? 'https://recepcion.medplum.com.ar';
+  const appUrl = secrets['APP_BASE_URL']?.valueString ?? 'https://app.biowellness.ar';
   const notifUrl = secrets['MP_WEBHOOK_URL']?.valueString;
   // Sin webhook NO se genera link: el pago real se acreditaría sin que el
   // sistema se entere (la tentativa vencería con la seña ya cobrada). Antes
