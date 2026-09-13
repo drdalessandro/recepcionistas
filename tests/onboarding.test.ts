@@ -27,8 +27,8 @@ describe('onboarding · canal y email', () => {
 
 describe('onboarding · link y nombre', () => {
   it('arma el link de setpassword sin doble barra', () => {
-    expect(linkSetPassword('https://recepcion.medplum.com.ar/', 'abc', 'xyz')).toBe(
-      'https://recepcion.medplum.com.ar/setpassword/abc/xyz',
+    expect(linkSetPassword('https://recepcion.biowellness.ar/', 'abc', 'xyz')).toBe(
+      'https://recepcion.biowellness.ar/setpassword/abc/xyz',
     );
     expect(linkSetPassword('https://recepcion.medplum.com.ar', 'abc', 'xyz')).toBe(
       'https://recepcion.medplum.com.ar/setpassword/abc/xyz',
