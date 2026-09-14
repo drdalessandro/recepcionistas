@@ -20,7 +20,10 @@ import {
   BIENVENIDA_DESCONOCIDO,
   CENTRO_DIRECCION,
   CENTRO_MAPA,
+  LINKS_HBOT,
+  LINKS_INFO,
   LINKS_PRECIOS,
+  listaDeLinks,
   MINUTOS_ENTRE_AUTO_RESPUESTAS,
   MINUTOS_SILENCIO_HUMANO,
   PALABRA_HUMANO,
@@ -37,6 +40,8 @@ export type Intencion =
   | 'turno-pedido'
   | 'turno-consulta'
   | 'precios'
+  | 'hbot'
+  | 'informacion'
   | 'horario-ubicacion'
   | 'generico';
 
@@ -185,6 +190,21 @@ const RE_PEDIDO = /\b(quiero|querria|quisiera|necesito|puedo|podria|me gustaria|
 const RE_PRECIO = /\b(precio|precios|cuanto sale|cuanto cuesta|cuanto esta|valor|valores|tarifa|arancel|cotiz)/;
 const RE_HORARIO = /\b(horario|horarios|abren|abierto|cierran|cierra|hasta que hora|a que hora abren)/;
 const RE_UBICACION = /\b(donde (estan|queda|es)|direccion|como llego|como se llega|ubicacion|ubicados|mapa)/;
+const RE_HBOT = /\b(hbot|camara hiperbarica|camara hiperbarica|hiperbarica|hiperbarico|oxigeno hiperbarico)/;
+// "Información" sola, o pidiendo material. Acotada a propósito: la palabra es
+// tan genérica que un patrón amplio se tragaría mensajes que tienen que llegar
+// a una persona.
+const RE_INFO = /\b(informacion|info|folleto|catalogo|mas datos|quiero saber mas|como funciona)\b/;
+/**
+ * Señales de pregunta CLÍNICA. No son para contestar: son para NO contestar.
+ *
+ * "Cámara hiperbárica" aparece igual en "contame de la cámara" que en "¿puedo
+ * hacer cámara con un stent?". La primera se responde con el link a nuestra
+ * página publicada; la segunda la contesta el Director Médico (límite 1 de
+ * docs/whatsapp-auto-respuestas.md). Ante la duda, a una persona.
+ */
+const RE_CLINICO =
+  /\b(puedo|podria|es seguro|contraindic|riesgo|peligro|embaraz|marcapaso|stent|cancer|tumor|epoc|diabet|presion|medicac|tratamiento|operad|cirugia|lesion|dolor|sintoma|enfermedad|tengo)\b/;
 
 /**
  * Qué quiere el mensaje. El orden importa y es deliberado:
@@ -217,6 +237,21 @@ export function detectarIntencion(texto: string, opts?: { conAdjunto?: boolean }
   }
   if (RE_PRECIO.test(t)) {
     return 'precios';
+  }
+  // HBOT e información van DESPUÉS de turno y precios, por el mismo motivo por
+  // el que `turno-pedido` gana a `precios`: "quiero un turno de cámara
+  // hiperbárica" es un pedido de turno, no un pedido de folleto, y "cuánto sale
+  // la cámara" es precio. Mandar el material en esos casos pierde la intención.
+  //
+  // Y cualquiera de las dos cede ante una señal clínica: ahí va a una persona.
+  if ((RE_HBOT.test(t) || RE_INFO.test(t)) && RE_CLINICO.test(t)) {
+    return 'generico';
+  }
+  if (RE_HBOT.test(t)) {
+    return 'hbot';
+  }
+  if (RE_INFO.test(t)) {
+    return 'informacion';
   }
   if (RE_HORARIO.test(t) || RE_UBICACION.test(t)) {
     return 'horario-ubicacion';
@@ -395,9 +430,27 @@ export function armarAutoRespuesta(ctx: ContextoAutoRespuesta): DecisionAutoResp
       return {
         intencion,
         texto:
-          `${hola} Podés ver todos los precios acá:\n` +
-          LINKS_PRECIOS.map((l) => `· ${l.titulo}: ${l.url}`).join('\n') +
-          `\nSi querés que te armemos algo a medida, ${cuandoTeResponden.toLowerCase()}`,
+          `${hola} Podés ver todos los precios acá:\n\n` +
+          listaDeLinks(LINKS_PRECIOS) +
+          `\n\nSi querés que te armemos algo a medida, ${cuandoTeResponden.toLowerCase()}`,
+      };
+
+    case 'hbot':
+      return {
+        intencion,
+        texto:
+          `${hola} Te dejamos todo sobre la Cámara Hiperbárica:\n\n` +
+          listaDeLinks(LINKS_HBOT) +
+          `\n\nSi tenés dudas sobre tu caso en particular, ${cuandoTeResponden.toLowerCase()}`,
+      };
+
+    case 'informacion':
+      return {
+        intencion,
+        texto:
+          `${hola} Acá tenés toda la información:\n\n` +
+          listaDeLinks(LINKS_INFO) +
+          `\n\nSi buscás algo puntual, ${cuandoTeResponden.toLowerCase()}`,
       };
 
     case 'horario-ubicacion':

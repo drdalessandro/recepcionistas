@@ -294,3 +294,75 @@ describe('armado de la respuesta', () => {
     expect(armarAutoRespuesta({ ...base, texto: 'hola', silencioDesdeISO: hace13horas })?.intencion).toBe('generico');
   });
 });
+
+/**
+ * Links de catálogo e información (Andrés, 2026-09-14, con la captura del
+ * teléfono). Tres cosas que el código tiene que sostener:
+ *
+ *  - el ORDEN de precios es la escalera comercial (sesión suelta 0 % · paquete
+ *    5-15 % · combo 20-22 % · membresía 20-30 % ADEMÁS del combo). No es
+ *    cosmético: es lo que la paciente lee como "de lo más caro a lo más
+ *    conveniente", y además WhatsApp arma la vista previa con el PRIMER link;
+ *  - el formato pone título y link en renglones distintos, porque en el
+ *    teléfono la URL larga se parte sola y el renglón queda cortado al medio;
+ *  - una pregunta CLÍNICA sobre HBOT no recibe folleto: va a una persona.
+ */
+describe('auto-respuesta · catálogo, HBOT e información', () => {
+  const base = { ahora: viernes('15:00'), esConocido: true, nombre: 'Ana' };
+  const lineas = (texto: string) => texto.split('\n');
+
+  it('precios: la escalera va de lista a más conveniente', () => {
+    const t = armarAutoRespuesta({ ...base, texto: 'precios' })?.texto ?? '';
+    const orden = ['Sesiones:', 'Paquetes de sesiones:', 'Combos:', 'Membresías:', 'Todo el catálogo:'];
+    expect(orden.map((o) => t.indexOf(o))).toEqual([...orden.map((o) => t.indexOf(o))].sort((a, b) => a - b));
+    expect(orden.every((o) => t.includes(o))).toBe(true);
+  });
+
+  it('precios: Sesiones va PRIMERO (es la vista previa que arma WhatsApp)', () => {
+    const t = armarAutoRespuesta({ ...base, texto: 'precios' })?.texto ?? '';
+    const primerLink = lineas(t).find((l) => l.startsWith('https://'));
+    expect(primerLink).toBe('https://info.biowellness.ar/sesiones-m3a5.html');
+  });
+
+  it('el link va SOLO en su renglón, nunca pegado al título', () => {
+    for (const texto of ['precios', 'camara hiperbarica', 'informacion']) {
+      const t = armarAutoRespuesta({ ...base, texto })?.texto ?? '';
+      for (const l of lineas(t).filter((x) => x.includes('https://'))) {
+        expect(l.trim()).toMatch(/^https:\/\/\S+$/);
+      }
+    }
+  });
+
+  it('HBOT manda las tres páginas publicadas', () => {
+    const t = armarAutoRespuesta({ ...base, texto: '¿tienen cámara hiperbárica?' })?.texto ?? '';
+    expect(t).toContain('https://info.biowellness.ar/hbot.html');
+    expect(t).toContain('https://info.biowellness.ar/como-funciona.html');
+    expect(t).toContain('https://info.biowellness.ar/guia/hbot/');
+  });
+
+  it('una pregunta CLÍNICA sobre HBOT va a una persona, no al folleto', () => {
+    // Límite 1 de docs/whatsapp-auto-respuestas.md: lo clínico lo contesta el
+    // Director Médico. El bot enlaza material publicado; no responde.
+    for (const t of [
+      'puedo hacer camara hiperbarica si tengo un stent?',
+      'tengo marcapasos, puedo hacer hbot?',
+      'es seguro el oxigeno hiperbarico en el embarazo?',
+      'hbot con epoc tiene riesgo?',
+    ]) {
+      expect(detectarIntencion(t)).toBe('generico');
+    }
+  });
+
+  it('pedir turno de HBOT sigue siendo un pedido de turno, no un folleto', () => {
+    // Mismo criterio que `turno-pedido` sobre `precios`: mandar el material
+    // perdería la intención de reservar.
+    expect(detectarIntencion('quiero un turno de cámara hiperbárica')).toBe('turno-pedido');
+    expect(detectarIntencion('cuánto sale la cámara hiperbárica')).toBe('precios');
+  });
+
+  it('"información" a secas responde con el índice', () => {
+    const r = armarAutoRespuesta({ ...base, texto: 'Información' });
+    expect(r?.intencion).toBe('informacion');
+    expect(r?.texto).toContain('https://info.biowellness.ar/');
+  });
+});
