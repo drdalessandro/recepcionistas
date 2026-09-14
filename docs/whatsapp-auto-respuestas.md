@@ -120,9 +120,14 @@ App (`CTA_APP`), separada por un renglón en blanco, con el título en un rengl�
 y el link solo en el siguiente:
 
 ```
-📱 Autogestión: en la App pedís turnos, seguís tu plan y tus pagos, y nos escribís. Todo en un solo lugar:
+📱 *Autogestión en la App*
+Pedí turnos, seguí tu plan y tus pagos, y escribinos. Todo en un solo lugar:
 https://app.biowellness.ar
 ```
+
+El título va en **negrita de WhatsApp** (`*…*`): se renderiza en texto libre,
+que es lo único que manda el bot. Es lo que lo pone a la par de Web e Info en
+la bienvenida (Andrés, 2026-09-14).
 
 Tres decisiones detrás de ese bloque:
 
@@ -143,10 +148,10 @@ Y **dos excepciones**, en `llevaCtaApp()`, que no son gusto:
 
 - **`HUMANO`**: la persona pidió que la dejemos de contestar. Cerrar ese
   mensaje vendiéndole la App es lo contrario de lo que pidió.
-- **`generico` a un número desconocido**: la bienvenida ya manda el link de la
-  App tres segundos después (`BIENVENIDA_DESCONOCIDO`). El mismo link dos
-  veces en diez segundos se lee como un error. Ojo: un *pedido de turno* de un
-  número desconocido **sí** lleva el cierre, porque ahí no hay bienvenida.
+- **`generico` a un número desconocido**: `CTA_APP` ya es el **segundo globo**
+  de la bienvenida (ver "Números desconocidos"). El mismo bloque dos veces en
+  diez segundos se lee como un error. Ojo: un *pedido de turno* de un número
+  desconocido **sí** lleva el cierre, porque ahí no hay bienvenida.
 
 Todo esto tiene test: presente y último en las demás intenciones, ausente en
 las dos excepciones, y la URL es la misma `PORTAL_URL` del onboarding.
@@ -192,9 +197,43 @@ peor que no contestar.
 
 ## Números desconocidos
 
-También reciben acuse (pidiéndoles nombre y apellido para darlos de alta), y el
-aviso en **Avisos** sigue funcionando igual que antes. Como no tienen hilo donde
-dejar la marca, la anti-repetición mira los avisos previos del mismo teléfono.
+También reciben respuesta —**tres globos**, con `SEGUNDOS_ENTRE_MENSAJES` (3 s)
+entre medio— y el aviso en **Avisos** sigue funcionando igual. Como no tienen
+hilo donde dejar la marca, la anti-repetición mira los avisos previos del mismo
+teléfono.
+
+1. **Saludo** (`BIENVENIDA_SALUDO`): bajada de marca; **Web e Info destacadas**
+   (emoji + título en negrita + link solo en su renglón); mapa e Instagram en
+   una línea plana cada uno. El email salió: quien escribe por WhatsApp ya nos
+   tiene, y era el texto que sobraba.
+2. **La App** (`CTA_APP`): el mismo bloque que cierra el resto de las
+   respuestas, a la par de Web e Info. Por eso `llevaCtaApp()` **no** lo vuelve
+   a pegar en este caso.
+3. **El pedido de datos** (`pedidoDeDatos()`): Nombre y Apellido, Email y DNI
+   (opcional). Fuera de horario suma cuándo se responde y el horario real.
+
+Cada globo arma su propia tarjeta de vista previa con su primer link: la Web en
+el 1, la App en el 2.
+
+### Por qué la pregunta va última (y por qué la pausa NO se sube)
+
+Hasta el 2026-09-14 la pregunta iba en el **primer** globo: quien contestaba
+rápido veía sus datos seguidos de dos mensajes nuestros que parecían
+ignorarlos. Se evaluó subir la pausa de 3 s a 10-12 s y se descartó:
+
+- **No entra.** La pausa corre adentro del webhook de Twilio, que corta a los
+  15 s, y el bot corre en Lambda con el timeout por defecto de Medplum (10 s).
+  Con 10 s por pausa el tercer globo no saldría, y tampoco correría lo que
+  viene después: **el aviso a Recepción del número desconocido**. Se perdería
+  justo el lead.
+- **No alcanza.** Escribir nombre, apellido y email lleva 20-40 s. Ninguna
+  pausa elimina el cruce; solo lo hace menos frecuente.
+
+Con la pregunta en el **último** globo, la respuesta no puede llegar antes que
+ella, a cualquier velocidad. Y si igual contestan en el medio, no pasa nada
+grave: entra como mensaje nuevo, la anti-repetición lo calla (misma intención
+dentro de las 3 h) y el aviso llega igual. Hay test de que la pregunta está
+solo en el último globo.
 
 ## Qué tocar para cambiar algo
 
@@ -205,7 +244,9 @@ Todo en `src/config/auto-respuesta.ts`, sin tocar lógica:
 | `LINKS_PRECIOS` | Los links de la lista de precios, **en orden**: el orden ES el mensaje comercial (ver abajo). |
 | `LINKS_HBOT` · `LINKS_INFO` | Los links de las intenciones `hbot` e `informacion`. |
 | `listaDeLinks()` | El formato: título arriba, link en su propio renglón. |
-| `CTA_APP` · `APP_URL` | El cierre con la App que llevan (casi) todas las respuestas. Las dos excepciones están en `llevaCtaApp()` (lógica, no perilla). |
+| `CTA_APP` · `APP_URL` | El cierre con la App que llevan (casi) todas las respuestas, y el segundo globo de la bienvenida. Las dos excepciones están en `llevaCtaApp()` (lógica, no perilla). |
+| `BIENVENIDA_SALUDO` · `PEDIDO_DATOS` | El primer globo de la bienvenida al desconocido y los campos que se le piden en el último. |
+| `SEGUNDOS_ENTRE_MENSAJES` | La pausa entre globos. **No subirla** (ver "Números desconocidos"). |
 | `MINUTOS_ENTRE_AUTO_RESPUESTAS` | Cada cuánto puede repetirse la misma respuesta. |
 | `MINUTOS_SILENCIO_HUMANO` | Cuánto dura el silencio que pide `HUMANO`. |
 | `CENTRO_DIRECCION` | Dirección y mapa (el link se arma solo). |

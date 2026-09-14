@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { APP_URL, CTA_APP } from '../src/config/auto-respuesta.js';
+import { APP_URL, BIENVENIDA_SALUDO, CTA_APP, PEDIDO_DATOS } from '../src/config/auto-respuesta.js';
 import {
   armarAutoRespuesta,
   detectarIntencion,
@@ -128,12 +128,18 @@ describe('armado de la respuesta', () => {
     expect(r?.texto).toContain('abrimos mañana a las 08:00');
   });
 
-  it('a un número desconocido le pide nombre y email para poder asesorarlo', () => {
+  it('a un número desconocido le pide nombre, email y DNI opcional, en el ÚLTIMO globo', () => {
     const r = armarAutoRespuesta({ ...base, esConocido: false, nombre: undefined, texto: 'hola' });
-    expect(r?.texto).toContain('Nombre y Apellido:');
-    expect(r?.texto).toContain('Email:');
-    // El bloque va con los renglones en blanco tal cual los definió Andrés.
-    expect(r?.texto).toContain('compartinos por favor:\n\nNombre y Apellido:\nEmail:');
+    const ultimo = r?.mensajesSiguientes?.at(-1) ?? '';
+    expect(ultimo).toContain('Nombre y Apellido:');
+    expect(ultimo).toContain('Email:');
+    expect(ultimo).toContain('DNI (opcional):');
+    // El bloque va con los renglones en blanco tal cual lo definió Andrés.
+    expect(ultimo).toContain(`compartinos por favor:\n\n${PEDIDO_DATOS}`);
+    // Y la pregunta va SOLO ahí: si estuviera antes, lo que conteste la
+    // persona podría llegar entre nuestros globos (2026-09-14).
+    expect(r?.texto).not.toContain('Nombre y Apellido');
+    expect(r?.mensajesSiguientes?.[0]).not.toContain('Nombre y Apellido');
   });
 
   // 2026-08-22 es SÁBADO y 2026-08-23 DOMINGO (Argentina = UTC-3).
@@ -145,34 +151,39 @@ describe('armado de la respuesta', () => {
     const [h, m] = hhmmArg.split(':').map(Number);
     return new Date(Date.UTC(2026, 7, 23, (h as number) + 3, m as number));
   };
-  const aDesconocido = (ahora: Date): string =>
-    armarAutoRespuesta({ ...base, ahora, esConocido: false, nombre: undefined, texto: 'hola' })
-      ?.texto ?? '';
+  /** Los tres globos de la bienvenida, en el orden en que salen. */
+  const secuencia = (ahora: Date): string[] => {
+    const r = armarAutoRespuesta({ ...base, ahora, esConocido: false, nombre: undefined, texto: 'hola' });
+    return [r?.texto ?? '', ...(r?.mensajesSiguientes ?? [])];
+  };
+  const todo = (ahora: Date): string => secuencia(ahora).join('\n');
+  const ultimo = (ahora: Date): string => secuencia(ahora).at(-1) ?? '';
 
   it('con el centro abierto, al desconocido no se le habla de horarios', () => {
-    const r = aDesconocido(viernes('15:00'));
-    expect(r).toContain('Para poder asesorarte');
-    expect(r).not.toContain('estamos cerrados');
-    expect(r).not.toContain('Horario:');
+    expect(ultimo(viernes('15:00'))).toContain('Para poder asesorarte');
+    expect(ultimo(viernes('15:00'))).toContain('Enseguida te contacta alguien del equipo.');
+    expect(todo(viernes('15:00'))).not.toContain('estamos cerrados');
+    expect(todo(viernes('15:00'))).not.toContain('Horario:');
   });
 
-  it('el domingo avisa que está cerrado, cuándo se responde y el horario', () => {
-    const r = aDesconocido(domingo('11:00'));
+  it('el domingo avisa que está cerrado, cuándo se responde y el horario — en el globo de la pregunta', () => {
+    const r = ultimo(domingo('11:00'));
     expect(r).toContain('Ahora estamos cerrados');
     expect(r).toContain('te respondemos mañana a las 08:00');
     expect(r).toContain('Horario: lunes a viernes de 08:00 a 22:00');
     expect(r).toContain('domingo cerrado');
+    // Cerrado o abierto, el saludo es el mismo: lo que cambia es el cierre.
+    expect(secuencia(domingo('11:00'))[0]).toBe(secuencia(viernes('15:00'))[0]);
   });
 
   it('el sábado a la noche NO promete "mañana": el domingo no abre', () => {
-    const r = aDesconocido(sabado('21:00'));
-    expect(r).toContain('te respondemos el lunes a las 08:00');
-    expect(r).not.toContain('mañana');
+    expect(ultimo(sabado('21:00'))).toContain('te respondemos el lunes a las 08:00');
+    expect(todo(sabado('21:00'))).not.toContain('mañana');
   });
 
-  it('la firma lleva el 🧬 al final', () => {
+  it('la bajada de marca va en el saludo, con el 🧬', () => {
     for (const ahora of [viernes('15:00'), domingo('11:00')]) {
-      expect(aDesconocido(ahora)).toContain('Optimización Biológica. 🧬');
+      expect(secuencia(ahora)[0]).toContain('Optimización Biológica. 🧬');
     }
   });
 
@@ -192,25 +203,37 @@ describe('armado de la respuesta', () => {
     }
   });
 
-  it('los links van repartidos: web y mapa en uno, app e info en el otro', () => {
-    const [segundo, tercero] = armarAutoRespuesta({
-      ...base,
-      esConocido: false,
-      nombre: undefined,
-      texto: 'hola',
-    })?.mensajesSiguientes as [string, string];
+  it('los tres globos, en orden: saludo con Web e Info → la App → la pregunta', () => {
+    const r = armarAutoRespuesta({ ...base, esConocido: false, nombre: undefined, texto: 'hola' });
+    const [segundo, tercero] = r?.mensajesSiguientes as [string, string];
 
-    expect(segundo).toContain('Web: https://www.biowellness.ar');
-    expect(segundo).toContain('Mapa: ');
-    expect(segundo).not.toContain('app.biowellness.ar');
+    expect(r?.texto).toBe(BIENVENIDA_SALUDO);
+    expect(segundo).toBe(CTA_APP);
+    expect(tercero.startsWith('Para poder asesorarte')).toBe(true);
+  });
 
-    // Cada link con su título, para que se entienda a qué entra cada uno.
-    expect(tercero).toContain('Autogestión y App del usuario\nApp: https://app.biowellness.ar');
-    expect(tercero).toContain('Información sobre nuestros servicios\nInfo: https://info.biowellness.ar');
-    // Instagram con la palabra, no un emoji: con "📷 biowellness.ar" no se
+  it('jerarquía: Web, Info y App con título en negrita y link en su renglón; mapa e Instagram planos', () => {
+    const saludo = BIENVENIDA_SALUDO;
+    // Destacados: emoji + *título* en un renglón, link SOLO en el siguiente.
+    expect(saludo).toContain('🌐 *Conocé Biowellness*\nhttps://www.biowellness.ar');
+    expect(saludo).toContain('ℹ️ *Servicios e información*\nhttps://info.biowellness.ar');
+    expect(CTA_APP).toMatch(/^📱 \*[^*\n]+\*\n/);
+    // Segundo plano: una línea plana cada uno, sin negrita.
+    expect(saludo).toContain('\n📍 Mapa: https://maps.app.goo.gl/');
+    expect(saludo).not.toMatch(/\*[^*\n]*Mapa/);
+    // Instagram con la palabra, no un emoji solo: con "📷 biowellness.ar" no se
     // entendía que era la cuenta de IG (Andrés, 2026-08-23).
-    expect(tercero).toContain('Instagram: @biowellness.ar');
-    expect(tercero).toContain('Email: info@biowellness.ar');
+    expect(saludo).toContain('Instagram: @biowellness.ar');
+    // El email salió a propósito (menos texto; quien escribe por WhatsApp ya nos tiene).
+    expect(saludo).not.toContain('info@biowellness.ar');
+    // La App NO va en el saludo: tiene su propio globo (y su propia tarjeta).
+    expect(saludo).not.toContain('app.biowellness.ar');
+  });
+
+  it('la tarjeta de vista previa de cada globo: la Web en el saludo, la App en el segundo', () => {
+    const primerLink = (t: string) => t.split('\n').find((l) => l.startsWith('https://'));
+    expect(primerLink(BIENVENIDA_SALUDO)).toBe('https://www.biowellness.ar');
+    expect(primerLink(CTA_APP)).toBe(APP_URL);
   });
 
   it('ningún globo se pasa del límite de un mensaje de WhatsApp', () => {
@@ -442,11 +465,12 @@ describe('auto-respuesta · el cierre con la App (autogestión)', () => {
     expect(llevaCtaApp('turno-pedido', false)).toBe(true);
   });
 
-  it('el cierre nombra la autogestión y va título arriba, link solo abajo (misma URL que el portal)', () => {
-    expect(CTA_APP).toContain('Autogestión');
+  it('el cierre nombra la autogestión: título en negrita, imperativos, link solo abajo (misma URL que el portal)', () => {
     const renglones = CTA_APP.split('\n');
-    expect(renglones).toHaveLength(2);
-    expect(renglones[1]).toBe(APP_URL);
+    expect(renglones).toHaveLength(3);
+    expect(renglones[0]).toMatch(/^📱 \*Autogestión[^*]*\*$/);
+    expect(renglones[1]).toMatch(/^Pedí .*escribinos/);
+    expect(renglones[2]).toBe(APP_URL);
     expect(APP_URL).toBe(PORTAL_URL);
   });
 

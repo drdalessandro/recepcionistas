@@ -101,16 +101,20 @@ export const APP_URL = 'https://app.biowellness.ar';
  * link de MercadoPago, y una promesa que la App no cumple es un reclamo en
  * Mensajes.
  *
- * Formato: título en un renglón, link solo en el siguiente (misma regla que
- * `listaDeLinks`). Va separado del resto por un renglón en blanco.
+ * Formato: título en **negrita de WhatsApp** (`*…*`, se renderiza en texto
+ * libre, que es lo único que manda el bot), una línea de imperativos y el link
+ * solo en el último renglón (misma regla que `listaDeLinks`). Va separado del
+ * resto por un renglón en blanco. El título en negrita es lo que lo pone a la
+ * par de Web e Info en la bienvenida (Andrés, 2026-09-14).
  *
  * NO va en dos casos, decididos en `llevaCtaApp()` (`lib/auto-respuesta.ts`):
  * cuando la persona pidió `HUMANO` (pidió que la dejemos de contestar, no que
- * le vendamos la App) y en la bienvenida al número desconocido (ya trae el
- * link de la App tres segundos después, en `BIENVENIDA_DESCONOCIDO`).
+ * le vendamos la App) y en la bienvenida al número desconocido, donde ESTE
+ * MISMO bloque es el segundo globo (ver `BIENVENIDA_SALUDO`).
  */
 export const CTA_APP =
-  '📱 Autogestión: en la App pedís turnos, seguís tu plan y tus pagos, y nos escribís. Todo en un solo lugar:\n' +
+  '📱 *Autogestión en la App*\n' +
+  'Pedí turnos, seguí tu plan y tus pagos, y escribinos. Todo en un solo lugar:\n' +
   APP_URL;
 
 /**
@@ -152,32 +156,60 @@ export const VENTANA_AVISO_MINUTOS = 60;
  * ventana acotada: cada segundo de pausa se descuenta de ese presupuesto. Tres
  * segundos dan el ritmo de alguien escribiendo sin arriesgar un timeout (y con
  * dos pausas encadenadas seguimos MUY por debajo del límite).
+ *
+ * NO subirla para "darle tiempo a contestar" (se evaluó, 2026-09-14): Twilio
+ * corta a los 15 s y el bot corre en Lambda con el timeout por defecto de
+ * Medplum (10 s), así que con 10-12 s por pausa el tercer globo no saldría y
+ * tampoco correría lo de después —el aviso a Recepción del número desconocido—.
+ * Y aunque se pudiera, no resuelve nada: escribir nombre, apellido y email
+ * lleva 20-40 s. Lo que evita el cruce es el ORDEN de la bienvenida (la
+ * pregunta va en el ÚLTIMO globo), no la pausa.
  */
 export const SEGUNDOS_ENTRE_MENSAJES = 3;
 
 /**
- * Los mensajes que siguen al saludo cuando el número NO está en la base.
+ * La bienvenida al número que NO está en la base son TRES globos, en este
+ * orden y con `SEGUNDOS_ENTRE_MENSAJES` entre medio:
  *
- * Van en mensajes aparte a propósito: los cuatro links en un solo globo lo
- * estiran y WhatsApp arma la tarjeta de vista previa con el primero. La bajada
- * ("Longevidad Saludable - …") queda SOLO en el saludo: repetirla acá, tres
- * segundos después, se leía como un mensaje duplicado (Andrés, 2026-08-23).
+ *   1. `BIENVENIDA_SALUDO` — saludo, bajada de marca, Web e Info destacadas,
+ *      mapa e Instagram en segundo plano.
+ *   2. `CTA_APP` — la App, a la par de Web e Info.
+ *   3. El pedido de datos (`pedidoDeDatos()` en `lib/auto-respuesta.ts`), que
+ *      es dinámico: fuera de horario dice cuándo se responde.
+ *
+ * **La pregunta va ÚLTIMA a propósito** (Andrés, 2026-09-14). Hasta entonces
+ * iba en el primer globo y quien contestaba rápido veía sus datos seguidos de
+ * dos mensajes nuestros que parecían ignorarlos. Con la pregunta al final, la
+ * respuesta no puede llegar antes que ella, a cualquier velocidad — es la
+ * única solución que no depende de la pausa (ver `SEGUNDOS_ENTRE_MENSAJES`).
+ *
+ * Jerarquía visual (pedida por Andrés): Web, Info y App con emoji + título en
+ * negrita y el link solo en su renglón; mapa e Instagram en una línea plana
+ * cada uno, sin negrita. El email salió: quien escribe por WhatsApp ya nos
+ * tiene, y era el texto que sobraba.
+ *
+ * WhatsApp arma la tarjeta de vista previa con el PRIMER link de cada globo:
+ * la Web en el 1, la App en el 2. La bajada de marca va SOLO acá, no repetida
+ * en los otros globos (Andrés, 2026-08-23).
  */
-export const BIENVENIDA_DESCONOCIDO: string[] = [
-  'Queremos que conozcas más acerca de BIOWELLNESS\n' +
-    '\n' +
-    'Te compartimos información útil\n' +
-    'Web: https://www.biowellness.ar\n' +
-    'Mapa: https://maps.app.goo.gl/8dN7McDRnREjdDsV7',
-  'También podés entrar desde acá:\n' +
-    '\n' +
-    'Autogestión y App del usuario\n' +
-    `App: ${APP_URL}\n` +
-    '\n' +
-    'Información sobre nuestros servicios\n' +
-    'Info: https://info.biowellness.ar\n' +
-    '\n' +
-    'Contactanos:\n' +
-    'Email: info@biowellness.ar\n' +
-    'Instagram: @biowellness.ar',
-];
+export const BIENVENIDA_SALUDO =
+  'Hola! 👋🏼\n' +
+  'Gracias por tu interés en Biowellness San Isidro.\n' +
+  'BIOWELLNESS: Longevidad Saludable - Recuperación Deportiva - Optimización Biológica. 🧬\n' +
+  '\n' +
+  '🌐 *Conocé Biowellness*\n' +
+  'https://www.biowellness.ar\n' +
+  '\n' +
+  'ℹ️ *Servicios e información*\n' +
+  'https://info.biowellness.ar\n' +
+  '\n' +
+  '📍 Mapa: https://maps.app.goo.gl/8dN7McDRnREjdDsV7\n' +
+  '📸 Instagram: @biowellness.ar';
+
+/**
+ * Los campos que se le piden al desconocido para darlo de alta. Un campo por
+ * renglón, con los dos puntos: la persona los completa debajo o al lado. El
+ * DNI es opcional (Andrés, 2026-09-14): sirve para el dedup de la ficha, pero
+ * pedirlo como obligatorio en el primer contacto espanta.
+ */
+export const PEDIDO_DATOS = 'Nombre y Apellido:\nEmail:\nDNI (opcional):';
