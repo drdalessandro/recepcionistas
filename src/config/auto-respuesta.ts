@@ -82,6 +82,37 @@ export function listaDeLinks(links: Array<{ titulo: string; url: string }>): str
   return links.map((l) => `${l.titulo}:\n${l.url}`).join('\n\n');
 }
 
+/** La App de la paciente (el portal). Misma URL que `PORTAL_URL` en `lib/onboarding.ts`; hay test. */
+export const APP_URL = 'https://app.biowellness.ar';
+
+/**
+ * Cierre de (casi) toda respuesta automática: la invitación a autogestionarse
+ * desde la App.
+ *
+ * Por qué al FINAL y no al principio: WhatsApp arma la tarjeta de vista previa
+ * con el primer link del mensaje, y ese lugar es de Sesiones (precios) o de la
+ * página de HBOT. En las respuestas que no traen ningún link (acuse, turno,
+ * comprobante) la App pasa a ser el único y se lleva la tarjeta, que es
+ * exactamente lo que queremos vender.
+ *
+ * Lo que promete es lo que la App hace hoy (mismo alcance que la invitación
+ * de `lib/onboarding.ts`: turnos, plan, pagos): pedir turno, seguir el plan y
+ * los pagos, y escribirnos. No promete "pagás desde la App": la seña sale por
+ * link de MercadoPago, y una promesa que la App no cumple es un reclamo en
+ * Mensajes.
+ *
+ * Formato: título en un renglón, link solo en el siguiente (misma regla que
+ * `listaDeLinks`). Va separado del resto por un renglón en blanco.
+ *
+ * NO va en dos casos, decididos en `llevaCtaApp()` (`lib/auto-respuesta.ts`):
+ * cuando la persona pidió `HUMANO` (pidió que la dejemos de contestar, no que
+ * le vendamos la App) y en la bienvenida al número desconocido (ya trae el
+ * link de la App tres segundos después, en `BIENVENIDA_DESCONOCIDO`).
+ */
+export const CTA_APP =
+  '📱 Autogestión: en la App pedís turnos, seguís tu plan y tus pagos, y nos escribís. Todo en un solo lugar:\n' +
+  APP_URL;
+
 /**
  * Cuánto espera el sistema antes de repetir la MISMA auto-respuesta en un hilo.
  *
@@ -141,7 +172,7 @@ export const BIENVENIDA_DESCONOCIDO: string[] = [
   'También podés entrar desde acá:\n' +
     '\n' +
     'Autogestión y App del usuario\n' +
-    'App: https://app.biowellness.ar\n' +
+    `App: ${APP_URL}\n` +
     '\n' +
     'Información sobre nuestros servicios\n' +
     'Info: https://info.biowellness.ar\n' +
