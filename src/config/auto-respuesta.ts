@@ -30,12 +30,57 @@ export const CENTRO_MAPA = `https://maps.google.com/?q=${encodeURIComponent(CENT
  * antes de comparar.
  */
 export const LINKS_PRECIOS: Array<{ titulo: string; url: string }> = [
+  // ORDEN = la escalera comercial, de lista a más conveniente. No es una
+  // intuición: sesión suelta 0 % · paquete 5-15 % · combo 20-22 % · membresía
+  // 20-30 % ADEMÁS del combo (`descuentoContinuidad` se acumula). Verificado
+  // contra config/paquetes, combos y membresias (2026-09-14).
+  //
+  // Que "Sesiones" quede PRIMERO tiene un efecto extra: WhatsApp arma la
+  // tarjeta de vista previa con el primer link del mensaje, así que la tarjeta
+  // pasa a ser la puerta de entrada del catálogo en vez de Combos, que era el
+  // tercer escalón.
+  { titulo: 'Sesiones', url: 'https://info.biowellness.ar/sesiones-m3a5.html' },
+  { titulo: 'Paquetes de sesiones', url: 'https://info.biowellness.ar/paquetes-k4m7.html' },
   { titulo: 'Combos', url: 'https://info.biowellness.ar/combos-r9t4.html' },
-  { titulo: 'Paquetes', url: 'https://info.biowellness.ar/paquetes-k4m7.html' },
   { titulo: 'Membresías', url: 'https://info.biowellness.ar/membresias-w8p2.html' },
-  { titulo: 'Web', url: 'https://www.biowellness.ar' },
+  // Cierre, no un escalón más: el índice por si ninguna de las cuatro era lo
+  // que buscaba. La Web salió de esta lista — no es una lista de precios y en
+  // un mensaje de "Precios" era ruido; sigue estando en la bienvenida.
   { titulo: 'Todo el catálogo', url: 'https://info.biowellness.ar' },
 ];
+
+/**
+ * Links de información (no de precios). Los manda la intención `informacion`.
+ *
+ * REGLA DE ORO: esto enlaza material YA PUBLICADO por nosotros, no contesta.
+ * La diferencia importa: mandar la Guía HBOT es seguro; responder una pregunta
+ * clínica sobre HBOT no lo es, y por eso `detectarIntencion` manda a una
+ * persona cualquier mensaje con señales clínicas (ver RE_CLINICO).
+ */
+export const LINKS_INFO: Array<{ titulo: string; url: string }> = [
+  { titulo: 'Toda la información', url: 'https://info.biowellness.ar/' },
+  { titulo: 'Cómo funciona', url: 'https://info.biowellness.ar/como-funciona.html' },
+];
+
+/** Links de Cámara Hiperbárica (intención `hbot`). */
+export const LINKS_HBOT: Array<{ titulo: string; url: string }> = [
+  { titulo: 'Cámara Hiperbárica', url: 'https://info.biowellness.ar/hbot.html' },
+  { titulo: 'Cómo funciona', url: 'https://info.biowellness.ar/como-funciona.html' },
+  { titulo: 'Guía HBOT', url: 'https://info.biowellness.ar/guia/hbot/' },
+];
+
+/**
+ * Formato de una lista de links para WhatsApp: **título y link en renglones
+ * distintos**.
+ *
+ * Antes iba `· Título: https://…` en una sola línea. En el teléfono la URL
+ * larga se parte sola y el renglón queda cortado al medio: se lee compactado y
+ * desordenado (Andrés, 2026-09-14, con la captura). Con el título arriba, el
+ * link queda entero en su propio renglón y la lista se escanea de un vistazo.
+ */
+export function listaDeLinks(links: Array<{ titulo: string; url: string }>): string {
+  return links.map((l) => `${l.titulo}:\n${l.url}`).join('\n\n');
+}
 
 /**
  * Cuánto espera el sistema antes de repetir la MISMA auto-respuesta en un hilo.

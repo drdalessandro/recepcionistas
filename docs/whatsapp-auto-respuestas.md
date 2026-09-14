@@ -74,11 +74,57 @@ Todo vive en `src/lib/auto-respuesta.ts` (lógica pura, testeada) y
 | `comprobante-pago` | "ya pagué", "mando comprobante", o una pista de pago **con adjunto** | Acusa recibo **y deja un aviso en Avisos** para verificarlo contra MercadoPago o caja. |
 | `turno-pedido` | Habla de turno **y** pide ("quiero", "necesito", "sacar"…) | Confirma que se anotó **y crea la solicitud en la bandeja de Solicitudes**, que es donde Recepción ya resuelve los pedidos. |
 | `turno-consulta` | Habla de turno sin pedir ("¿a qué hora era mi turno?") | Le dice **su próximo turno real** si lo tiene. |
-| `precios` | "cuánto sale", "precio", "tarifa" | Links a la lista publicada. |
+| `precios` | "cuánto sale", "precio", "tarifa" | Links a la lista publicada, **en escalera comercial**: Sesiones → Paquetes → Combos → Membresías → Todo el catálogo. |
+| `hbot` | "cámara hiperbárica", "HBOT", "hiperbárica" — **sin** señal clínica | Las tres páginas publicadas: HBOT, Cómo funciona y la Guía HBOT. |
+| `informacion` | "información", "catálogo", "cómo funciona" — **sin** señal clínica | El índice de info y Cómo funciona. |
 | `horario-ubicacion` | "horarios", "dónde están", "cómo llego" | Dirección + mapa + **el horario real de `horario.ts`**: si Andrés cambia el horario, el mensaje cambia solo. |
 | `generico` | Todo lo demás | Acuse de recibo: saluda, dice **cuándo** le responde una persona (según esté abierto o cerrado) y menciona su próximo turno si lo tiene. |
 
 Lo que no cae en ninguna es `generico`. **No adivinar es una decisión de diseño.**
+
+### El orden de los links de precios no es cosmético
+
+`LINKS_PRECIOS` va de precio de lista a más conveniente, y eso está verificado
+contra el catálogo (2026-09-14), no supuesto:
+
+| | Descuento |
+| --- | --- |
+| Sesiones sueltas | 0 % (lista) |
+| Paquetes | 5 % · 10 % · 15 % por volumen |
+| Combos | 20 % – 22 % sobre lista |
+| Membresías | 20 % – 30 % **además** del combo (`descuentoContinuidad` se acumula) |
+
+Dos motivos para respetarlo si se toca la lista:
+
+1. La paciente lo lee como una escalera de "lo más caro a lo más conveniente".
+2. **WhatsApp arma la tarjeta de vista previa con el PRIMER link del mensaje.**
+   Con Sesiones primero, la tarjeta es la puerta de entrada del catálogo; antes
+   era Combos, que es el tercer escalón.
+
+Matiz honesto: paquete y combo no son el mismo eje (paquete = N sesiones del
+mismo servicio; combo = servicios distintos en una visita), así que no es
+estrictamente un ranking de lo mismo. Como narrativa comercial funciona.
+
+### Título arriba, link abajo
+
+`listaDeLinks()` pone el título en un renglón y la URL en el siguiente. Antes
+iba `· Título: https://…` en una sola línea y **en el teléfono la URL larga se
+parte sola**: el renglón queda cortado al medio y la lista se lee compactada y
+desordenada (Andrés, 2026-09-14, con la captura). No es preferencia estética:
+es legibilidad en el dispositivo donde se lee de verdad.
+
+### HBOT e información ceden ante lo clínico y ante el turno
+
+Las dos intenciones nuevas van **después** de `turno-*` y de `precios` en
+`detectarIntencion`, por el mismo motivo por el que `turno-pedido` le gana a
+`precios`: "quiero un turno de cámara hiperbárica" es un pedido de turno, y
+"cuánto sale la cámara" es precio. Mandar el folleto perdería la intención.
+
+Y las dos ceden ante `RE_CLINICO`. "Cámara hiperbárica" aparece igual en
+"contame de la cámara" que en **"¿puedo hacer cámara si tengo un stent?"**: la
+primera se responde con el link a nuestra página, la segunda va a una persona.
+El bot **enlaza material publicado, no contesta** — es el límite 1 de acá
+arriba, y está cubierto por tests.
 
 ### Horario: en hora de Argentina, no en UTC
 
@@ -118,7 +164,9 @@ Todo en `src/config/auto-respuesta.ts`, sin tocar lógica:
 
 | Perilla | Qué cambia |
 | --- | --- |
-| `LINKS_PRECIOS` | Los links de la lista de precios. ⚠️ **Completar** con las URLs reales de terapias, paquetes y membresías: hoy solo está confirmada la de combos. |
+| `LINKS_PRECIOS` | Los links de la lista de precios, **en orden**: el orden ES el mensaje comercial (ver abajo). |
+| `LINKS_HBOT` · `LINKS_INFO` | Los links de las intenciones `hbot` e `informacion`. |
+| `listaDeLinks()` | El formato: título arriba, link en su propio renglón. |
 | `MINUTOS_ENTRE_AUTO_RESPUESTAS` | Cada cuánto puede repetirse la misma respuesta. |
 | `MINUTOS_SILENCIO_HUMANO` | Cuánto dura el silencio que pide `HUMANO`. |
 | `CENTRO_DIRECCION` | Dirección y mapa (el link se arma solo). |
