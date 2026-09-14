@@ -17,7 +17,7 @@
  */
 import { HORARIO_SEMANAL } from '../config/horario.js';
 import {
-  BIENVENIDA_DESCONOCIDO,
+  BIENVENIDA_SALUDO,
   CENTRO_DIRECCION,
   CENTRO_MAPA,
   CTA_APP,
@@ -28,6 +28,7 @@ import {
   MINUTOS_ENTRE_AUTO_RESPUESTAS,
   MINUTOS_SILENCIO_HUMANO,
   PALABRA_HUMANO,
+  PEDIDO_DATOS,
   VENTANA_LIBRE_HORAS,
 } from '../config/auto-respuesta.js';
 
@@ -281,7 +282,8 @@ export interface ContextoAutoRespuesta {
 }
 
 /**
- * El saludo al número que NO está en la base.
+ * El pedido de datos al número que NO está en la base: el ÚLTIMO globo de la
+ * bienvenida (ver `BIENVENIDA_SALUDO` en config para el porqué del orden).
  *
  * Fuera de horario cambia: avisa que está cerrado, dice CUÁNDO se responde y
  * suma el horario de la semana. El "cuándo" NO se hardcodea — un "mañana" fijo
@@ -289,29 +291,17 @@ export interface ContextoAutoRespuesta {
  * `textoProximaApertura` contra el horario real, así que si cambia el horario
  * cambia el mensaje (Andrés, 2026-08-24).
  */
-function bienvenidaDesconocido(abierto: boolean, apertura: string | undefined): string {
-  const pedido = 'Nombre y Apellido:\nEmail:';
-  const firma = 'BIOWELLNESS: Longevidad Saludable - Recuperación Deportiva - Optimización Biológica. 🧬';
+function pedidoDeDatos(abierto: boolean, apertura: string | undefined): string {
+  const pedido = `Para poder asesorarte, compartinos por favor:\n\n${PEDIDO_DATOS}`;
 
   if (abierto) {
-    return (
-      'Hola! 👋🏼\n' +
-      'Gracias por tu interés en Biowellness San Isidro. Para poder asesorarte, compartinos por favor:\n\n' +
-      `${pedido}\n\n` +
-      firma
-    );
+    return `${pedido}\n\nEnseguida te contacta alguien del equipo.`;
   }
 
   // Sin apertura calculable (horario sin ningún día abierto) no se promete una
   // hora que no existe.
   const cuando = apertura ? `te respondemos ${apertura}` : 'te respondemos apenas reabramos';
-  return (
-    'Hola! 👋🏼\n' +
-    `Gracias por tu interés en Biowellness San Isidro. Ahora estamos cerrados: pasanos tu nombre, apellido y mail y ${cuando}.\n\n` +
-    `${pedido}\n\n` +
-    `Horario: ${textoHorarioSemanal()}.\n\n` +
-    firma
-  );
+  return `${pedido}\n\nAhora estamos cerrados: ${cuando}.\nHorario: ${textoHorarioSemanal()}.`;
 }
 
 export interface DecisionAutoRespuesta {
@@ -321,7 +311,7 @@ export interface DecisionAutoRespuesta {
   /**
    * Mensajes que salen DESPUÉS de `texto`, en globos aparte y con una pausa
    * entre medio. Se usan cuando partir el contenido se lee mejor que un solo
-   * globo largo (ver `BIENVENIDA_DESCONOCIDO`).
+   * globo largo (ver `BIENVENIDA_SALUDO`).
    */
   mensajesSiguientes?: string[];
   /** Además, anotar una solicitud de turno para la bandeja de Recepción. */
@@ -345,9 +335,9 @@ function minutosDesde(iso: string, ahora: Date): number {
  *
  * - `humano`: la persona pidió que la dejemos de contestar. Cerrar ese mensaje
  *   vendiéndole la App es exactamente lo contrario de lo que pidió.
- * - `generico` a un número **desconocido**: la bienvenida ya le manda el link
- *   de la App tres segundos después (`BIENVENIDA_DESCONOCIDO`). Dos veces el
- *   mismo link en diez segundos se lee como un error, no como insistencia.
+ * - `generico` a un número **desconocido**: `CTA_APP` ya es el segundo globo
+ *   de la bienvenida (ver `BIENVENIDA_SALUDO`). Dos veces el mismo bloque en
+ *   diez segundos se lee como un error, no como insistencia.
  */
 export function llevaCtaApp(intencion: Intencion, esConocido: boolean): boolean {
   if (intencion === 'humano') return false;
@@ -504,10 +494,11 @@ function decidirRespuesta(ctx: ContextoAutoRespuesta): DecisionAutoRespuesta | u
           ? `${hola} Recibimos tu mensaje 👋 ${cuandoTeResponden}${
               ctx.proximoTurno ? ` Te esperamos ${ctx.proximoTurno}.` : ''
             }`
-          : bienvenidaDesconocido(abierto, apertura),
-        // Al desconocido le sigue la presentación de la marca; al que ya está
-        // en la base no, que no necesita que le presenten el centro.
-        ...(ctx.esConocido ? {} : { mensajesSiguientes: BIENVENIDA_DESCONOCIDO }),
+          : BIENVENIDA_SALUDO,
+        // Al desconocido le siguen la App y, ÚLTIMO, el pedido de datos: así
+        // lo que conteste no puede llegar antes que la pregunta. Al que ya
+        // está en la base no, que no necesita que le presenten el centro.
+        ...(ctx.esConocido ? {} : { mensajesSiguientes: [CTA_APP, pedidoDeDatos(abierto, apertura)] }),
       };
   }
 }
