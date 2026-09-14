@@ -113,6 +113,44 @@ parte sola**: el renglón queda cortado al medio y la lista se lee compactada y
 desordenada (Andrés, 2026-09-14, con la captura). No es preferencia estética:
 es legibilidad en el dispositivo donde se lee de verdad.
 
+### El cierre: la App en (casi) todas las respuestas
+
+Toda respuesta automática termina con la invitación a autogestionarse desde la
+App (`CTA_APP`), separada por un renglón en blanco, con el título en un renglón
+y el link solo en el siguiente:
+
+```
+📱 Autogestión: en la App pedís turnos, seguís tu plan y tus pagos, y nos escribís. Todo en un solo lugar:
+https://app.biowellness.ar
+```
+
+Tres decisiones detrás de ese bloque:
+
+1. **Va al final, no al principio.** WhatsApp arma la tarjeta de vista previa
+   con el primer link, y ese lugar es de Sesiones (precios) o de la página de
+   HBOT. En las respuestas que no traen ningún link (acuse, turno, comprobante)
+   la App pasa a ser el único link y **se lleva la tarjeta**, que es justo lo
+   que queremos vender.
+2. **Promete lo que la App hace hoy** — pedir turno, seguir el plan y los pagos,
+   escribirnos — con el mismo alcance que la invitación de `lib/onboarding.ts`.
+   No dice "pagás desde la App": la seña sale por link de MercadoPago, y una
+   promesa que la App no cumple vuelve como reclamo en Mensajes.
+3. **Se pega una sola vez, después de decidir la respuesta** (`armarAutoRespuesta`
+   llama a `decidirRespuesta` y le agrega el cierre), no caso por caso: una
+   intención nueva no puede olvidárselo.
+
+Y **dos excepciones**, en `llevaCtaApp()`, que no son gusto:
+
+- **`HUMANO`**: la persona pidió que la dejemos de contestar. Cerrar ese
+  mensaje vendiéndole la App es lo contrario de lo que pidió.
+- **`generico` a un número desconocido**: la bienvenida ya manda el link de la
+  App tres segundos después (`BIENVENIDA_DESCONOCIDO`). El mismo link dos
+  veces en diez segundos se lee como un error. Ojo: un *pedido de turno* de un
+  número desconocido **sí** lleva el cierre, porque ahí no hay bienvenida.
+
+Todo esto tiene test: presente y último en las demás intenciones, ausente en
+las dos excepciones, y la URL es la misma `PORTAL_URL` del onboarding.
+
 ### HBOT e información ceden ante lo clínico y ante el turno
 
 Las dos intenciones nuevas van **después** de `turno-*` y de `precios` en
@@ -167,6 +205,7 @@ Todo en `src/config/auto-respuesta.ts`, sin tocar lógica:
 | `LINKS_PRECIOS` | Los links de la lista de precios, **en orden**: el orden ES el mensaje comercial (ver abajo). |
 | `LINKS_HBOT` · `LINKS_INFO` | Los links de las intenciones `hbot` e `informacion`. |
 | `listaDeLinks()` | El formato: título arriba, link en su propio renglón. |
+| `CTA_APP` · `APP_URL` | El cierre con la App que llevan (casi) todas las respuestas. Las dos excepciones están en `llevaCtaApp()` (lógica, no perilla). |
 | `MINUTOS_ENTRE_AUTO_RESPUESTAS` | Cada cuánto puede repetirse la misma respuesta. |
 | `MINUTOS_SILENCIO_HUMANO` | Cuánto dura el silencio que pide `HUMANO`. |
 | `CENTRO_DIRECCION` | Dirección y mapa (el link se arma solo). |

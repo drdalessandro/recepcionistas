@@ -1,14 +1,17 @@
 import { describe, expect, it } from 'vitest';
+import { APP_URL, CTA_APP } from '../src/config/auto-respuesta.js';
 import {
   armarAutoRespuesta,
   detectarIntencion,
   estaAbierto,
+  llevaCtaApp,
   partesArgentina,
   textoHorarioSemanal,
   textoProximaApertura,
   textoRestante,
   ventana24h,
 } from '../src/lib/auto-respuesta.js';
+import { PORTAL_URL } from '../src/lib/onboarding.js';
 
 // Fechas en UTC, que es como corre el bot. 2026-08-21 es VIERNES.
 const viernes = (hhmmArg: string): Date => {
@@ -364,5 +367,97 @@ describe('auto-respuesta · catálogo, HBOT e información', () => {
     const r = armarAutoRespuesta({ ...base, texto: 'Información' });
     expect(r?.intencion).toBe('informacion');
     expect(r?.texto).toContain('https://info.biowellness.ar/');
+  });
+});
+
+describe('auto-respuesta · el cierre con la App (autogestión)', () => {
+  const base = { ahora: viernes('15:00'), esConocido: true, nombre: 'Ana' };
+  const links = (texto: string) => texto.split('\n').filter((l) => l.startsWith('https://'));
+
+  // Una frase por intención, sacadas de los tests de detección de arriba.
+  const unaPorIntencion: Array<[string, string]> = [
+    ['comprobante-pago', 'Hola, ya hice el pago, adjunto comprobante'],
+    ['turno-pedido', 'quiero un turno para cámara'],
+    ['turno-consulta', '¿a qué hora era mi turno?'],
+    ['precios', '¿Cuánto sale la sesión de HBOT?'],
+    ['hbot', '¿tienen cámara hiperbárica?'],
+    ['informacion', 'Información'],
+    ['horario-ubicacion', '¿qué horarios tienen?'],
+    ['generico', 'buenas, una consulta'],
+  ];
+
+  it('cierra TODAS las respuestas a un conocido, al final y con un renglón en blanco antes', () => {
+    for (const [intencion, texto] of unaPorIntencion) {
+      const r = armarAutoRespuesta({ ...base, texto });
+      expect(r?.intencion, texto).toBe(intencion);
+      expect(r?.texto.endsWith(`\n\n${CTA_APP}`), texto).toBe(true);
+      // "Uno o dos espacios": un renglón en blanco, nunca dos (Andrés, 2026-09-14).
+      expect(r?.texto, texto).not.toContain('\n\n\n');
+    }
+  });
+
+  it('la App es el ÚLTIMO link: no le roba la tarjeta de vista previa a Sesiones ni a HBOT', () => {
+    for (const texto of ['precios', 'camara hiperbarica', 'informacion', 'horarios']) {
+      const l = links(armarAutoRespuesta({ ...base, texto })?.texto ?? '');
+      expect(l.length, texto).toBeGreaterThan(1);
+      expect(l.at(-1), texto).toBe(APP_URL);
+      expect(l[0], texto).not.toBe(APP_URL);
+    }
+  });
+
+  it('en las respuestas sin links, la App queda como único link (y se lleva la tarjeta)', () => {
+    for (const texto of ['buenas, una consulta', 'quiero un turno para cámara', 'ya hice el pago, adjunto comprobante']) {
+      expect(links(armarAutoRespuesta({ ...base, texto })?.texto ?? ''), texto).toEqual([APP_URL]);
+    }
+  });
+
+  it('a quien escribió HUMANO no se le vende nada', () => {
+    const r = armarAutoRespuesta({ ...base, texto: 'HUMANO' });
+    expect(r?.intencion).toBe('humano');
+    expect(r?.activarSilencio).toBe(true);
+    expect(r?.texto).not.toContain(APP_URL);
+  });
+
+  it('al número desconocido la App le llega UNA vez: en la bienvenida, no en el saludo', () => {
+    const r = armarAutoRespuesta({ ...base, esConocido: false, nombre: undefined, texto: 'hola' });
+    expect(r?.intencion).toBe('generico');
+    expect(r?.texto).not.toContain(CTA_APP);
+    const todo = [r?.texto ?? '', ...(r?.mensajesSiguientes ?? [])].join('\n');
+    expect(todo.split(APP_URL).length - 1).toBe(1);
+  });
+
+  it('un pedido de turno de un número desconocido SÍ lleva la App: ahí no hay bienvenida', () => {
+    const r = armarAutoRespuesta({ ...base, esConocido: false, nombre: undefined, texto: 'necesito sacar turno' });
+    expect(r?.intencion).toBe('turno-pedido');
+    expect(r?.mensajesSiguientes).toBeUndefined();
+    expect(r?.texto.endsWith(CTA_APP)).toBe(true);
+  });
+
+  it('la regla, explícita: solo HUMANO y el genérico a desconocido quedan afuera', () => {
+    expect(llevaCtaApp('humano', true)).toBe(false);
+    expect(llevaCtaApp('humano', false)).toBe(false);
+    expect(llevaCtaApp('generico', false)).toBe(false);
+    expect(llevaCtaApp('generico', true)).toBe(true);
+    expect(llevaCtaApp('precios', false)).toBe(true);
+    expect(llevaCtaApp('turno-pedido', false)).toBe(true);
+  });
+
+  it('el cierre nombra la autogestión y va título arriba, link solo abajo (misma URL que el portal)', () => {
+    expect(CTA_APP).toContain('Autogestión');
+    const renglones = CTA_APP.split('\n');
+    expect(renglones).toHaveLength(2);
+    expect(renglones[1]).toBe(APP_URL);
+    expect(APP_URL).toBe(PORTAL_URL);
+  });
+
+  it('el silencio pedido y la anti-repetición siguen mandando: sin respuesta no hay cierre', () => {
+    const enSilencio = armarAutoRespuesta({ ...base, texto: 'precios', silencioDesdeISO: base.ahora.toISOString() });
+    expect(enSilencio).toBeUndefined();
+    const repetida = armarAutoRespuesta({
+      ...base,
+      texto: 'precios',
+      ultima: { intencion: 'precios', cuandoISO: base.ahora.toISOString() },
+    });
+    expect(repetida).toBeUndefined();
   });
 });

@@ -20,6 +20,7 @@ import {
   BIENVENIDA_DESCONOCIDO,
   CENTRO_DIRECCION,
   CENTRO_MAPA,
+  CTA_APP,
   LINKS_HBOT,
   LINKS_INFO,
   LINKS_PRECIOS,
@@ -336,6 +337,30 @@ function minutosDesde(iso: string, ahora: Date): number {
 }
 
 /**
+ * ¿Esta respuesta cierra con la invitación a la App (`CTA_APP`)?
+ *
+ * Casi siempre sí: la App es donde la paciente resuelve sola lo que acá le
+ * estamos contestando a medias (pedir turno, ver su plan, escribirnos). Las
+ * dos excepciones no son gusto:
+ *
+ * - `humano`: la persona pidió que la dejemos de contestar. Cerrar ese mensaje
+ *   vendiéndole la App es exactamente lo contrario de lo que pidió.
+ * - `generico` a un número **desconocido**: la bienvenida ya le manda el link
+ *   de la App tres segundos después (`BIENVENIDA_DESCONOCIDO`). Dos veces el
+ *   mismo link en diez segundos se lee como un error, no como insistencia.
+ */
+export function llevaCtaApp(intencion: Intencion, esConocido: boolean): boolean {
+  if (intencion === 'humano') return false;
+  if (intencion === 'generico' && !esConocido) return false;
+  return true;
+}
+
+/** Pega `CTA_APP` al final del texto, separado por un renglón en blanco. */
+function conCtaApp(texto: string): string {
+  return `${texto.trimEnd()}\n\n${CTA_APP}`;
+}
+
+/**
  * Qué contestar (o no contestar) a un mensaje entrante.
  *
  * `undefined` significa **silencio deliberado**: el paciente pidió una persona,
@@ -343,6 +368,16 @@ function minutosDesde(iso: string, ahora: Date): number {
  * sería peor que callarse.
  */
 export function armarAutoRespuesta(ctx: ContextoAutoRespuesta): DecisionAutoRespuesta | undefined {
+  const decision = decidirRespuesta(ctx);
+  // El cierre con la App se pega acá, una sola vez, y no caso por caso: así
+  // ninguna intención nueva se lo olvida y las dos excepciones viven en un
+  // solo lugar (`llevaCtaApp`).
+  if (!decision || !llevaCtaApp(decision.intencion, ctx.esConocido)) return decision;
+  return { ...decision, texto: conCtaApp(decision.texto) };
+}
+
+/** La decisión sin el cierre de la App: qué intención es y qué texto va. */
+function decidirRespuesta(ctx: ContextoAutoRespuesta): DecisionAutoRespuesta | undefined {
   const intencion = detectarIntencion(ctx.texto, { conAdjunto: ctx.conAdjunto });
 
   // Silencio pedido por el paciente: no se manda NADA (ni siquiera el acuse).
