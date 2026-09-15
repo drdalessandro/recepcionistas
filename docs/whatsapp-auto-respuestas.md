@@ -76,6 +76,7 @@ Todo vive en `src/lib/auto-respuesta.ts` (lógica pura, testeada) y
 | `turno-consulta` | Habla de turno sin pedir ("¿a qué hora era mi turno?") | Le dice **su próximo turno real** si lo tiene. |
 | `precios` | "cuánto sale", "precio", "tarifa" | Links a la lista publicada, **en escalera comercial**: Sesiones → Paquetes → Combos → Membresías → Todo el catálogo. |
 | `hbot` | "cámara hiperbárica", "HBOT", "hiperbárica" — **sin** señal clínica | Las tres páginas publicadas: HBOT, Cómo funciona y la Guía HBOT. |
+| `ihht` | "IHHT", "hipoxia", "hiperoxia", "hipóxico", "entrenamiento en altura" — **sin** señal clínica | Las tres páginas publicadas: IHHT, Cómo funciona y la Guía IHHT. "Intermitente" sola no alcanza. |
 | `informacion` | "información", "catálogo", "cómo funciona" — **sin** señal clínica | El índice de info y Cómo funciona. |
 | `horario-ubicacion` | "horarios", "dónde están", "cómo llego" | Dirección + mapa + **el horario real de `horario.ts`**: si Andrés cambia el horario, el mensaje cambia solo. |
 | `generico` | Todo lo demás | Acuse de recibo: saluda, dice **cuándo** le responde una persona (según esté abierto o cerrado) y menciona su próximo turno si lo tiene. |
@@ -156,18 +157,27 @@ Y **dos excepciones**, en `llevaCtaApp()`, que no son gusto:
 Todo esto tiene test: presente y último en las demás intenciones, ausente en
 las dos excepciones, y la URL es la misma `PORTAL_URL` del onboarding.
 
-### HBOT e información ceden ante lo clínico y ante el turno
+### HBOT, IHHT e información ceden ante lo clínico y ante el turno
 
-Las dos intenciones nuevas van **después** de `turno-*` y de `precios` en
-`detectarIntencion`, por el mismo motivo por el que `turno-pedido` le gana a
+Las tres intenciones de "folleto" van **después** de `turno-*` y de `precios`
+en `detectarIntencion`, por el mismo motivo por el que `turno-pedido` le gana a
 `precios`: "quiero un turno de cámara hiperbárica" es un pedido de turno, y
-"cuánto sale la cámara" es precio. Mandar el folleto perdería la intención.
+"cuánto sale la hipoxia" es precio. Mandar el folleto perdería la intención.
 
-Y las dos ceden ante `RE_CLINICO`. "Cámara hiperbárica" aparece igual en
+Y las tres ceden ante `RE_CLINICO`. "Cámara hiperbárica" aparece igual en
 "contame de la cámara" que en **"¿puedo hacer cámara si tengo un stent?"**: la
 primera se responde con el link a nuestra página, la segunda va a una persona.
-El bot **enlaza material publicado, no contesta** — es el límite 1 de acá
-arriba, y está cubierto por tests.
+Lo mismo con "¿puedo hacer IHHT con marcapasos?". El bot **enlaza material
+publicado, no contesta** — es el límite 1 de acá arriba, y está cubierto por
+tests.
+
+IHHT (2026-09-15) copia el circuito de HBOT: `LINKS_IHHT` con la página, Cómo
+funciona y la Guía IHHT, y `RE_IHHT` reconoce "ihht", "hipoxia", "hiperoxia",
+"hipóxico" y "entrenamiento en altura". Si un mensaje nombra las dos terapias,
+gana HBOT (es la que más preguntan; una persona completa después). Las URLs
+las pasó Andrés y **no se pudieron verificar desde el entorno de desarrollo**
+(el proxy bloquea `info.biowellness.ar`): si una diera 404, se cambia en
+config sin tocar lógica.
 
 ### Horario: en hora de Argentina, no en UTC
 
@@ -242,7 +252,7 @@ Todo en `src/config/auto-respuesta.ts`, sin tocar lógica:
 | Perilla | Qué cambia |
 | --- | --- |
 | `LINKS_PRECIOS` | Los links de la lista de precios, **en orden**: el orden ES el mensaje comercial (ver abajo). |
-| `LINKS_HBOT` · `LINKS_INFO` | Los links de las intenciones `hbot` e `informacion`. |
+| `LINKS_HBOT` · `LINKS_IHHT` · `LINKS_INFO` | Los links de las intenciones `hbot`, `ihht` e `informacion`. |
 | `listaDeLinks()` | El formato: título arriba, link en su propio renglón. |
 | `CTA_APP` · `APP_URL` | El cierre con la App que llevan (casi) todas las respuestas, y el segundo globo de la bienvenida. Las dos excepciones están en `llevaCtaApp()` (lógica, no perilla). |
 | `BIENVENIDA_SALUDO` · `PEDIDO_DATOS` | El primer globo de la bienvenida al desconocido y los campos que se le piden en el último. |
