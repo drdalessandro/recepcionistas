@@ -83,6 +83,16 @@ export const LINKS_IHHT: Array<{ titulo: string; url: string }> = [
 ];
 
 /**
+ * Links de Red Light — Fotobiomodulación (intención `red-light`). Mismo
+ * esquema que HBOT e IHHT (Andrés, 2026-09-15).
+ */
+export const LINKS_RED_LIGHT: Array<{ titulo: string; url: string }> = [
+  { titulo: 'Qué es Red Light', url: 'https://info.biowellness.ar/red-light.html' },
+  { titulo: 'Cómo funciona', url: 'https://info.biowellness.ar/como-funciona.html' },
+  { titulo: 'Guía Red Light', url: 'https://info.biowellness.ar/guia/red-light/' },
+];
+
+/**
  * Formato de una lista de links para WhatsApp: **título y link en renglones
  * distintos**.
  *

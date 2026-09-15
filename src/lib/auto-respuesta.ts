@@ -24,6 +24,7 @@ import {
   LINKS_HBOT,
   LINKS_IHHT,
   LINKS_INFO,
+  LINKS_RED_LIGHT,
   LINKS_PRECIOS,
   listaDeLinks,
   MINUTOS_ENTRE_AUTO_RESPUESTAS,
@@ -45,6 +46,7 @@ export type Intencion =
   | 'precios'
   | 'hbot'
   | 'ihht'
+  | 'red-light'
   | 'informacion'
   | 'horario-ubicacion'
   | 'generico';
@@ -199,6 +201,10 @@ const RE_HBOT = /\b(hbot|camara hiperbarica|hiperbarica|hiperbarico|oxigeno hipe
 // saca antes: "hipóxico" llega como "hipoxico". "Intermitente" sola NO está: es
 // demasiado genérica para mandar un folleto por ella.
 const RE_IHHT = /\b(ihht|hipoxia|hiperoxia|hipoxic|hiperoxic|entrenamiento (en|de) altura|altura simulada)/;
+// Red Light = Fotobiomodulación. "Infrarrojo" a secas NO está: también es el
+// sauna del circuito Recovery, y mandar el folleto de luz roja por él sería
+// contestar otra cosa. "Fotobiomodul" cubre -ación y -ador.
+const RE_RED_LIGHT = /\b(red ?light|red-light|fotobiomodul|luz roja|terapia (de|con) luz)|\bpbm\b/;
 // "Información" sola, o pidiendo material. Acotada a propósito: la palabra es
 // tan genérica que un patrón amplio se tragaría mensajes que tienen que llegar
 // a una persona.
@@ -252,16 +258,20 @@ export function detectarIntencion(texto: string, opts?: { conAdjunto?: boolean }
   // la cámara" es precio. Mandar el material en esos casos pierde la intención.
   //
   // Y cualquiera de las dos cede ante una señal clínica: ahí va a una persona.
-  if ((RE_HBOT.test(t) || RE_IHHT.test(t) || RE_INFO.test(t)) && RE_CLINICO.test(t)) {
+  if ((RE_HBOT.test(t) || RE_IHHT.test(t) || RE_RED_LIGHT.test(t) || RE_INFO.test(t)) && RE_CLINICO.test(t)) {
     return 'generico';
   }
-  // Si nombra las dos terapias en el mismo mensaje gana HBOT, que es la que
-  // más preguntan. Es un empate raro y una persona lo completa después.
+  // Si nombra más de una terapia en el mismo mensaje gana la primera de este
+  // orden (HBOT es la que más preguntan). Es un empate raro y una persona lo
+  // completa después.
   if (RE_HBOT.test(t)) {
     return 'hbot';
   }
   if (RE_IHHT.test(t)) {
     return 'ihht';
+  }
+  if (RE_RED_LIGHT.test(t)) {
+    return 'red-light';
   }
   if (RE_INFO.test(t)) {
     return 'informacion';
@@ -407,11 +417,19 @@ function decidirRespuesta(ctx: ContextoAutoRespuesta): DecisionAutoRespuesta | u
   const apertura = textoProximaApertura(ctx.ahora);
   // De quién depende la respuesta humana y cuándo llega. Es la frase que baja
   // la ansiedad: el paciente sabe que hay alguien del otro lado y cuándo.
+  // Cerrado, al desconocido se le piden nombre y apellido; a quien ya está en
+  // la base NO: lo saludamos por su nombre y pedírselo se lee como que no lo
+  // reconocemos (captura de producción, 2026-09-15).
+  const pedirDatos = ctx.esConocido ? '' : ' Por favor, dejanos tu nombre y apellido para contactarte.';
   const cuandoTeResponden = abierto
     ? 'Enseguida te contacta alguien del equipo.'
     : apertura
-      ? `Ahora estamos cerrados: abrimos ${apertura} y te respondemos. Por favor, dejanos tu nombre y apellido para contactarte`
+      ? `Ahora estamos cerrados: abrimos ${apertura} y te respondemos.${pedirDatos}`
       : 'Te responde alguien del equipo apenas reabramos.';
+  // La misma frase después de una coma ("Si tenés dudas, ahora estamos…"):
+  // baja SOLO la primera letra. Un `toLowerCase()` entero bajaba también el
+  // "Por favor" que viene después de un punto (misma captura).
+  const cuandoTeRespondenEnFrase = cuandoTeResponden.charAt(0).toLowerCase() + cuandoTeResponden.slice(1);
 
   switch (intencion) {
     case 'humano':
@@ -468,7 +486,7 @@ function decidirRespuesta(ctx: ContextoAutoRespuesta): DecisionAutoRespuesta | u
         texto:
           `${hola} Podés ver todos los precios acá:\n\n` +
           listaDeLinks(LINKS_PRECIOS) +
-          `\n\nSi querés que te armemos algo a medida, ${cuandoTeResponden.toLowerCase()}`,
+          `\n\nSi querés que te armemos algo a medida, ${cuandoTeRespondenEnFrase}`,
       };
 
     case 'hbot':
@@ -477,7 +495,7 @@ function decidirRespuesta(ctx: ContextoAutoRespuesta): DecisionAutoRespuesta | u
         texto:
           `${hola} Te dejamos todo sobre la Cámara Hiperbárica:\n\n` +
           listaDeLinks(LINKS_HBOT) +
-          `\n\nSi tenés dudas sobre tu caso en particular, ${cuandoTeResponden.toLowerCase()}`,
+          `\n\nSi tenés dudas sobre tu caso en particular, ${cuandoTeRespondenEnFrase}`,
       };
 
     case 'ihht':
@@ -486,7 +504,16 @@ function decidirRespuesta(ctx: ContextoAutoRespuesta): DecisionAutoRespuesta | u
         texto:
           `${hola} Te dejamos todo sobre el IHHT (Hipoxia-Hiperoxia Intermitente):\n\n` +
           listaDeLinks(LINKS_IHHT) +
-          `\n\nSi tenés dudas sobre tu caso en particular, ${cuandoTeResponden.toLowerCase()}`,
+          `\n\nSi tenés dudas sobre tu caso en particular, ${cuandoTeRespondenEnFrase}`,
+      };
+
+    case 'red-light':
+      return {
+        intencion,
+        texto:
+          `${hola} Te dejamos todo sobre Red Light (Fotobiomodulación):\n\n` +
+          listaDeLinks(LINKS_RED_LIGHT) +
+          `\n\nSi tenés dudas sobre tu caso en particular, ${cuandoTeRespondenEnFrase}`,
       };
 
     case 'informacion':
@@ -495,7 +522,7 @@ function decidirRespuesta(ctx: ContextoAutoRespuesta): DecisionAutoRespuesta | u
         texto:
           `${hola} Acá tenés toda la información:\n\n` +
           listaDeLinks(LINKS_INFO) +
-          `\n\nSi buscás algo puntual, ${cuandoTeResponden.toLowerCase()}`,
+          `\n\nSi buscás algo puntual, ${cuandoTeRespondenEnFrase}`,
       };
 
     case 'horario-ubicacion':
