@@ -77,6 +77,7 @@ Todo vive en `src/lib/auto-respuesta.ts` (lógica pura, testeada) y
 | `precios` | "cuánto sale", "precio", "tarifa" | Links a la lista publicada, **en escalera comercial**: Sesiones → Paquetes → Combos → Membresías → Todo el catálogo. |
 | `hbot` | "cámara hiperbárica", "HBOT", "hiperbárica" — **sin** señal clínica | Las tres páginas publicadas: HBOT, Cómo funciona y la Guía HBOT. |
 | `ihht` | "IHHT", "hipoxia", "hiperoxia", "hipóxico", "entrenamiento en altura" — **sin** señal clínica | Las tres páginas publicadas: IHHT, Cómo funciona y la Guía IHHT. "Intermitente" sola no alcanza. |
+| `red-light` | "red light", "fotobiomodulación", "luz roja", "terapia de luz" — **sin** señal clínica | Las tres páginas publicadas: Red Light, Cómo funciona y la Guía Red Light. "Infrarrojo" a secas no alcanza: también es el sauna de Recovery. |
 | `informacion` | "información", "catálogo", "cómo funciona" — **sin** señal clínica | El índice de info y Cómo funciona. |
 | `horario-ubicacion` | "horarios", "dónde están", "cómo llego" | Dirección + mapa + **el horario real de `horario.ts`**: si Andrés cambia el horario, el mensaje cambia solo. |
 | `generico` | Todo lo demás | Acuse de recibo: saluda, dice **cuándo** le responde una persona (según esté abierto o cerrado) y menciona su próximo turno si lo tiene. |
@@ -171,13 +172,26 @@ Lo mismo con "¿puedo hacer IHHT con marcapasos?". El bot **enlaza material
 publicado, no contesta** — es el límite 1 de acá arriba, y está cubierto por
 tests.
 
-IHHT (2026-09-15) copia el circuito de HBOT: `LINKS_IHHT` con la página, Cómo
-funciona y la Guía IHHT, y `RE_IHHT` reconoce "ihht", "hipoxia", "hiperoxia",
-"hipóxico" y "entrenamiento en altura". Si un mensaje nombra las dos terapias,
-gana HBOT (es la que más preguntan; una persona completa después). Las URLs
-las pasó Andrés y **no se pudieron verificar desde el entorno de desarrollo**
-(el proxy bloquea `info.biowellness.ar`): si una diera 404, se cambia en
-config sin tocar lógica.
+IHHT y Red Light (2026-09-15) copian el circuito de HBOT: `LINKS_IHHT` y
+`LINKS_RED_LIGHT` con la página, Cómo funciona y la guía del paciente.
+`RE_IHHT` reconoce "ihht", "hipoxia", "hiperoxia", "hipóxico" y "entrenamiento
+en altura"; `RE_RED_LIGHT`, "red light", "fotobiomodulación", "luz roja" y
+"terapia de luz" — **no** "infrarrojo" a secas, que también es el sauna del
+circuito Recovery. Si un mensaje nombra más de una terapia gana la primera de
+este orden: HBOT → IHHT → Red Light (HBOT es la que más preguntan; una persona
+completa después). Las URLs las pasó Andrés y **no se pudieron verificar desde
+el entorno de desarrollo** (el proxy bloquea `info.biowellness.ar`): si una
+diera 404, se cambia en config sin tocar lógica.
+
+### "Estamos cerrados" dentro de una frase
+
+Las respuestas de folleto y de precios terminan con "Si tenés dudas sobre tu
+caso en particular, …" seguido de la frase de cuándo responde una persona. Una
+captura de producción (2026-09-15) mostró dos cosas: a una paciente saludada
+por su nombre se le pedía *"dejanos tu nombre y apellido"*, y el "Por favor"
+que va después de un punto salía en minúscula porque la frase entera pasaba
+por `toLowerCase()`. Ahora el pedido de nombre y apellido va **solo al número
+desconocido**, y en la frase se baja **solo la primera letra**. Hay test.
 
 ### Horario: en hora de Argentina, no en UTC
 
@@ -252,7 +266,7 @@ Todo en `src/config/auto-respuesta.ts`, sin tocar lógica:
 | Perilla | Qué cambia |
 | --- | --- |
 | `LINKS_PRECIOS` | Los links de la lista de precios, **en orden**: el orden ES el mensaje comercial (ver abajo). |
-| `LINKS_HBOT` · `LINKS_IHHT` · `LINKS_INFO` | Los links de las intenciones `hbot`, `ihht` e `informacion`. |
+| `LINKS_HBOT` · `LINKS_IHHT` · `LINKS_RED_LIGHT` · `LINKS_INFO` | Los links de las intenciones `hbot`, `ihht`, `red-light` e `informacion`. |
 | `listaDeLinks()` | El formato: título arriba, link en su propio renglón. |
 | `CTA_APP` · `APP_URL` | El cierre con la App que llevan (casi) todas las respuestas, y el segundo globo de la bienvenida. Las dos excepciones están en `llevaCtaApp()` (lógica, no perilla). |
 | `BIENVENIDA_SALUDO` · `PEDIDO_DATOS` | El primer globo de la bienvenida al desconocido y los campos que se le piden en el último. |

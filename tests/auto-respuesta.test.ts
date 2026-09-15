@@ -351,7 +351,7 @@ describe('auto-respuesta · catálogo, HBOT e información', () => {
   });
 
   it('el link va SOLO en su renglón, nunca pegado al título', () => {
-    for (const texto of ['precios', 'camara hiperbarica', 'ihht', 'informacion']) {
+    for (const texto of ['precios', 'camara hiperbarica', 'ihht', 'red light', 'informacion']) {
       const t = armarAutoRespuesta({ ...base, texto })?.texto ?? '';
       for (const l of lineas(t).filter((x) => x.includes('https://'))) {
         expect(l.trim()).toMatch(/^https:\/\/\S+$/);
@@ -458,6 +458,99 @@ describe('auto-respuesta · IHHT', () => {
   });
 });
 
+/**
+ * Red Light — Fotobiomodulación (Andrés, 2026-09-15). Mismo circuito que HBOT
+ * e IHHT.
+ */
+describe('auto-respuesta · Red Light', () => {
+  const base = { ahora: viernes('15:00'), esConocido: true, nombre: 'Ana' };
+  const links = (texto: string) => texto.split('\n').filter((l) => l.startsWith('https://'));
+
+  it('reconoce cómo lo escribe la gente', () => {
+    for (const t of [
+      'hacen red light?',
+      'Red-Light',
+      'redlight',
+      'qué es la fotobiomodulación',
+      'tienen luz roja?',
+      'terapia de luz',
+    ]) {
+      expect(detectarIntencion(t), t).toBe('red-light');
+    }
+  });
+
+  it('"infrarrojo" a secas NO alcanza: también es el sauna del circuito Recovery', () => {
+    expect(detectarIntencion('tienen sauna infrarrojo?')).toBe('generico');
+  });
+
+  it('manda las tres páginas publicadas, la de Red Light primera (es la tarjeta)', () => {
+    const r = armarAutoRespuesta({ ...base, texto: 'hacen red light?' });
+    expect(r?.intencion).toBe('red-light');
+    expect(r?.texto).toContain('Red Light (Fotobiomodulación)');
+    expect(links(r?.texto ?? '')).toEqual([
+      'https://info.biowellness.ar/red-light.html',
+      'https://info.biowellness.ar/como-funciona.html',
+      'https://info.biowellness.ar/guia/red-light/',
+      APP_URL,
+    ]);
+  });
+
+  it('cierra con la App, al final', () => {
+    const t = armarAutoRespuesta({ ...base, texto: 'luz roja' })?.texto ?? '';
+    expect(t.endsWith(`\n\n${CTA_APP}`)).toBe(true);
+    expect(llevaCtaApp('red-light', false)).toBe(true);
+  });
+
+  it('una pregunta CLÍNICA sobre Red Light va a una persona, no al folleto', () => {
+    for (const t of ['puedo hacer red light si tengo cancer?', 'la luz roja tiene riesgo en el embarazo?']) {
+      expect(detectarIntencion(t), t).toBe('generico');
+    }
+  });
+
+  it('pedir turno o precio de Red Light no es un folleto', () => {
+    expect(detectarIntencion('quiero un turno de red light')).toBe('turno-pedido');
+    expect(detectarIntencion('cuánto sale la fotobiomodulación?')).toBe('precios');
+  });
+
+  it('en un empate con HBOT o IHHT, Red Light cede', () => {
+    expect(detectarIntencion('hacen hbot y red light?')).toBe('hbot');
+    expect(detectarIntencion('ihht o luz roja?')).toBe('ihht');
+  });
+});
+
+/**
+ * La frase "cuándo te responden" dentro de una oración, con el centro cerrado
+ * (captura de producción, 2026-09-15: "…ahora estamos cerrados: abrimos mañana
+ * a las 08:00 y te respondemos. por favor, dejanos tu nombre y apellido para
+ * contactarte" — a una paciente saludada por su nombre, y con minúscula
+ * después del punto).
+ */
+describe('auto-respuesta · "estamos cerrados" dentro de una frase', () => {
+  const cerrado = { ahora: viernes('22:30'), nombre: 'Ana' };
+
+  it('a la paciente conocida NO se le piden nombre y apellido: la saludamos por su nombre', () => {
+    for (const texto of ['hacen ihht?', 'precios', 'red light']) {
+      const t = armarAutoRespuesta({ ...cerrado, esConocido: true, texto })?.texto ?? '';
+      // La frase va después de una coma ("…en particular, ahora…" / "…a medida,
+      // ahora…"): primera letra en minúscula, y termina en punto.
+      expect(t, texto).toContain(', ahora estamos cerrados: abrimos mañana a las 08:00 y te respondemos.');
+      expect(t, texto).not.toContain('dejanos tu nombre');
+    }
+  });
+
+  it('al desconocido sí, con mayúscula después del punto y punto final', () => {
+    const t = armarAutoRespuesta({ ...cerrado, esConocido: false, nombre: undefined, texto: 'hacen ihht?' })?.texto ?? '';
+    expect(t).toContain('y te respondemos. Por favor, dejanos tu nombre y apellido para contactarte.');
+    // Ninguna minúscula después de un punto y un espacio, en todo el mensaje.
+    expect(t).not.toMatch(/\. [a-záéíóú]/);
+  });
+
+  it('abierto, la frase sigue igual que siempre', () => {
+    const t = armarAutoRespuesta({ ahora: viernes('15:00'), esConocido: true, nombre: 'Ana', texto: 'precios' })?.texto ?? '';
+    expect(t).toContain('a medida, enseguida te contacta alguien del equipo.');
+  });
+});
+
 describe('auto-respuesta · el cierre con la App (autogestión)', () => {
   const base = { ahora: viernes('15:00'), esConocido: true, nombre: 'Ana' };
   const links = (texto: string) => texto.split('\n').filter((l) => l.startsWith('https://'));
@@ -470,12 +563,13 @@ describe('auto-respuesta · el cierre con la App (autogestión)', () => {
     ['precios', '¿Cuánto sale la sesión de HBOT?'],
     ['hbot', '¿tienen cámara hiperbárica?'],
     ['ihht', '¿hacen IHHT?'],
+    ['red-light', '¿hacen Red Light?'],
     ['informacion', 'Información'],
     ['horario-ubicacion', '¿qué horarios tienen?'],
     ['generico', 'buenas, una consulta'],
   ];
 
-  it('cierra TODAS las respuestas a un conocido (nueve intenciones), al final y con un renglón en blanco antes', () => {
+  it('cierra TODAS las respuestas a un conocido (diez intenciones), al final y con un renglón en blanco antes', () => {
     for (const [intencion, texto] of unaPorIntencion) {
       const r = armarAutoRespuesta({ ...base, texto });
       expect(r?.intencion, texto).toBe(intencion);
