@@ -78,6 +78,7 @@ Todo vive en `src/lib/auto-respuesta.ts` (lógica pura, testeada) y
 | `hbot` | "cámara hiperbárica", "HBOT", "hiperbárica" — **sin** señal clínica | Las tres páginas publicadas: HBOT, Cómo funciona y la Guía HBOT. |
 | `ihht` | "IHHT", "hipoxia", "hiperoxia", "hipóxico", "entrenamiento en altura" — **sin** señal clínica | Las tres páginas publicadas: IHHT, Cómo funciona y la Guía IHHT. "Intermitente" sola no alcanza. |
 | `red-light` | "red light", "fotobiomodulación", "luz roja", "terapia de luz" — **sin** señal clínica | Las tres páginas publicadas: Red Light, Cómo funciona y la Guía Red Light. "Infrarrojo" a secas no alcanza: también es el sauna de Recovery. |
+| `recovery` | "recovery", "sauna", "baño de hielo", "inmersión en frío", "contraste", "circuito recovery" — **sin** señal clínica | Las tres páginas publicadas: Recovery Pro, Cómo funciona y la Guía Recovery Pro. "Frío" y "crio" a secas no alcanzan: la Crioterapia Localizada es otro servicio. |
 | `informacion` | "información", "catálogo", "cómo funciona" — **sin** señal clínica | El índice de info y Cómo funciona. |
 | `horario-ubicacion` | "horarios", "dónde están", "cómo llego" | Dirección + mapa + **el horario real de `horario.ts`**: si Andrés cambia el horario, el mensaje cambia solo. |
 | `generico` | Todo lo demás | Acuse de recibo: saluda, dice **cuándo** le responde una persona (según esté abierto o cerrado) y menciona su próximo turno si lo tiene. |
@@ -172,16 +173,23 @@ Lo mismo con "¿puedo hacer IHHT con marcapasos?". El bot **enlaza material
 publicado, no contesta** — es el límite 1 de acá arriba, y está cubierto por
 tests.
 
-IHHT y Red Light (2026-09-15) copian el circuito de HBOT: `LINKS_IHHT` y
-`LINKS_RED_LIGHT` con la página, Cómo funciona y la guía del paciente.
-`RE_IHHT` reconoce "ihht", "hipoxia", "hiperoxia", "hipóxico" y "entrenamiento
-en altura"; `RE_RED_LIGHT`, "red light", "fotobiomodulación", "luz roja" y
-"terapia de luz" — **no** "infrarrojo" a secas, que también es el sauna del
-circuito Recovery. Si un mensaje nombra más de una terapia gana la primera de
-este orden: HBOT → IHHT → Red Light (HBOT es la que más preguntan; una persona
-completa después). Las URLs las pasó Andrés y **no se pudieron verificar desde
-el entorno de desarrollo** (el proxy bloquea `info.biowellness.ar`): si una
-diera 404, se cambia en config sin tocar lógica.
+IHHT, Red Light y Recovery Pro (2026-09-15) copian el circuito de HBOT:
+`LINKS_IHHT`, `LINKS_RED_LIGHT` y `LINKS_RECOVERY` con la página, Cómo funciona
+y la guía del paciente. `RE_IHHT` reconoce "ihht", "hipoxia", "hiperoxia",
+"hipóxico" y "entrenamiento en altura"; `RE_RED_LIGHT`, "red light",
+"fotobiomodulación", "luz roja" y "terapia de luz"; `RE_RECOVERY`, "recovery",
+"sauna", "baño de hielo", "inmersión en frío", "contraste" y "circuito
+recovery". Dos palabras quedan afuera a propósito: "infrarrojo" a secas (es
+Red Light **y** el sauna de Recovery) y "frío"/"crio" a secas (la Crioterapia
+Localizada es otro servicio).
+
+Si un mensaje nombra más de una terapia gana la primera de este orden:
+**HBOT → IHHT → Recovery → Red Light**. HBOT porque es la que más preguntan;
+Recovery antes que Red Light porque el circuito *incluye* red light, así que
+"¿el recovery incluye red light?" pregunta por Recovery. Una persona completa
+después. Las URLs las pasó Andrés y **no se pudieron verificar desde el entorno
+de desarrollo** (el proxy bloquea `info.biowellness.ar`): si una diera 404, se
+cambia en config sin tocar lógica.
 
 ### "Estamos cerrados" dentro de una frase
 
@@ -266,7 +274,7 @@ Todo en `src/config/auto-respuesta.ts`, sin tocar lógica:
 | Perilla | Qué cambia |
 | --- | --- |
 | `LINKS_PRECIOS` | Los links de la lista de precios, **en orden**: el orden ES el mensaje comercial (ver abajo). |
-| `LINKS_HBOT` · `LINKS_IHHT` · `LINKS_RED_LIGHT` · `LINKS_INFO` | Los links de las intenciones `hbot`, `ihht`, `red-light` e `informacion`. |
+| `LINKS_HBOT` · `LINKS_IHHT` · `LINKS_RED_LIGHT` · `LINKS_RECOVERY` · `LINKS_INFO` | Los links de las intenciones `hbot`, `ihht`, `red-light`, `recovery` e `informacion`. |
 | `listaDeLinks()` | El formato: título arriba, link en su propio renglón. |
 | `CTA_APP` · `APP_URL` | El cierre con la App que llevan (casi) todas las respuestas, y el segundo globo de la bienvenida. Las dos excepciones están en `llevaCtaApp()` (lógica, no perilla). |
 | `BIENVENIDA_SALUDO` · `PEDIDO_DATOS` | El primer globo de la bienvenida al desconocido y los campos que se le piden en el último. |

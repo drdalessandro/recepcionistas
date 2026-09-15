@@ -24,6 +24,7 @@ import {
   LINKS_HBOT,
   LINKS_IHHT,
   LINKS_INFO,
+  LINKS_RECOVERY,
   LINKS_RED_LIGHT,
   LINKS_PRECIOS,
   listaDeLinks,
@@ -47,6 +48,7 @@ export type Intencion =
   | 'hbot'
   | 'ihht'
   | 'red-light'
+  | 'recovery'
   | 'informacion'
   | 'horario-ubicacion'
   | 'generico';
@@ -205,6 +207,11 @@ const RE_IHHT = /\b(ihht|hipoxia|hiperoxia|hipoxic|hiperoxic|entrenamiento (en|d
 // sauna del circuito Recovery, y mandar el folleto de luz roja por él sería
 // contestar otra cosa. "Fotobiomodul" cubre -ación y -ador.
 const RE_RED_LIGHT = /\b(red ?light|red-light|fotobiomodul|luz roja|terapia (de|con) luz)|\bpbm\b/;
+// Recovery Pro = el circuito de sauna infrarrojo, frío y red light. "Frío" y
+// "crio" a secas NO están: la Crioterapia Localizada es OTRO servicio del
+// catálogo, y "tengo frío" no es una consulta. "Sauna" sí: acá solo hay uno.
+const RE_RECOVERY =
+  /\b(recovery|sauna|ba[nñ]o de hielo|inmersion en frio|cold plunge|contraste|circuito (de )?recuperacion|circuito recovery)/;
 // "Información" sola, o pidiendo material. Acotada a propósito: la palabra es
 // tan genérica que un patrón amplio se tragaría mensajes que tienen que llegar
 // a una persona.
@@ -258,17 +265,24 @@ export function detectarIntencion(texto: string, opts?: { conAdjunto?: boolean }
   // la cámara" es precio. Mandar el material en esos casos pierde la intención.
   //
   // Y cualquiera de las dos cede ante una señal clínica: ahí va a una persona.
-  if ((RE_HBOT.test(t) || RE_IHHT.test(t) || RE_RED_LIGHT.test(t) || RE_INFO.test(t)) && RE_CLINICO.test(t)) {
+  if (
+    (RE_HBOT.test(t) || RE_IHHT.test(t) || RE_RECOVERY.test(t) || RE_RED_LIGHT.test(t) || RE_INFO.test(t)) &&
+    RE_CLINICO.test(t)
+  ) {
     return 'generico';
   }
   // Si nombra más de una terapia en el mismo mensaje gana la primera de este
-  // orden (HBOT es la que más preguntan). Es un empate raro y una persona lo
-  // completa después.
+  // orden (HBOT es la que más preguntan). Recovery va ANTES que Red Light a
+  // propósito: el circuito incluye red light, así que "recovery con red
+  // light" pregunta por Recovery. Es un empate raro y una persona lo completa.
   if (RE_HBOT.test(t)) {
     return 'hbot';
   }
   if (RE_IHHT.test(t)) {
     return 'ihht';
+  }
+  if (RE_RECOVERY.test(t)) {
+    return 'recovery';
   }
   if (RE_RED_LIGHT.test(t)) {
     return 'red-light';
@@ -513,6 +527,15 @@ function decidirRespuesta(ctx: ContextoAutoRespuesta): DecisionAutoRespuesta | u
         texto:
           `${hola} Te dejamos todo sobre Red Light (Fotobiomodulación):\n\n` +
           listaDeLinks(LINKS_RED_LIGHT) +
+          `\n\nSi tenés dudas sobre tu caso en particular, ${cuandoTeRespondenEnFrase}`,
+      };
+
+    case 'recovery':
+      return {
+        intencion,
+        texto:
+          `${hola} Te dejamos todo sobre Recovery Pro (sauna infrarrojo, frío y red light):\n\n` +
+          listaDeLinks(LINKS_RECOVERY) +
           `\n\nSi tenés dudas sobre tu caso en particular, ${cuandoTeRespondenEnFrase}`,
       };
 

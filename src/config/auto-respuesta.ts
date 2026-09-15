@@ -93,6 +93,17 @@ export const LINKS_RED_LIGHT: Array<{ titulo: string; url: string }> = [
 ];
 
 /**
+ * Links de Recovery Pro — el circuito de sauna infrarrojo, frío y red light
+ * (intención `recovery`). Mismo esquema que HBOT, IHHT y Red Light
+ * (Andrés, 2026-09-15).
+ */
+export const LINKS_RECOVERY: Array<{ titulo: string; url: string }> = [
+  { titulo: 'Qué es Recovery Pro', url: 'https://info.biowellness.ar/recovery-pro.html' },
+  { titulo: 'Cómo funciona', url: 'https://info.biowellness.ar/como-funciona.html' },
+  { titulo: 'Guía Recovery Pro', url: 'https://info.biowellness.ar/guia/recovery-pro/' },
+];
+
+/**
  * Formato de una lista de links para WhatsApp: **título y link en renglones
  * distintos**.
  *
