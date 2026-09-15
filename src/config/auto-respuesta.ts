@@ -16,8 +16,23 @@
 /** Dirección del centro (la misma del consentimiento). */
 export const CENTRO_DIRECCION = 'Roque Sáenz Peña 530, San Isidro, Buenos Aires';
 
-/** Link al mapa: se arma con la dirección, no se hardcodea un id de Google. */
-export const CENTRO_MAPA = `https://maps.google.com/?q=${encodeURIComponent(CENTRO_DIRECCION)}`;
+/**
+ * Link al mapa: el CORTO de Google Maps (creado desde la ficha del centro).
+ *
+ * Hasta 2026-09-15 se armaba `maps.google.com/?q=<dirección codificada>`: en
+ * el teléfono ocupaba tres renglones de `%20` y `%C3%B1` y se leía como un
+ * error. La bienvenida ya usaba el corto; ahora hay una sola fuente. Si el
+ * centro se muda, se cambia acá y en `CENTRO_DIRECCION`.
+ */
+export const CENTRO_MAPA = 'https://maps.app.goo.gl/8dN7McDRnREjdDsV7';
+
+/**
+ * Cómo llegar (tren, colectivo, estacionamiento), un renglón por ítem. Sale
+ * como bloque "🚗 Cómo llegar:" al final de la respuesta de dirección y
+ * horario. **Vacío = el bloque no sale**: hoy no está cargado porque el texto
+ * lo tiene que dar Andrés (no se inventa una línea de colectivo).
+ */
+export const CENTRO_COMO_LLEGAR: string[] = [];
 
 /**
  * Links a la lista de precios publicada.
@@ -237,7 +252,7 @@ export const BIENVENIDA_SALUDO =
   'ℹ️ *Servicios e información*\n' +
   'https://info.biowellness.ar\n' +
   '\n' +
-  '📍 Mapa: https://maps.app.goo.gl/8dN7McDRnREjdDsV7\n' +
+  `📍 Mapa: ${CENTRO_MAPA}\n` +
   '📸 Instagram: @biowellness.ar';
 
 /**

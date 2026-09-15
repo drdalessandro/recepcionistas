@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { APP_URL, BIENVENIDA_SALUDO, CTA_APP, PEDIDO_DATOS } from '../src/config/auto-respuesta.js';
+import {
+  APP_URL,
+  BIENVENIDA_SALUDO,
+  CENTRO_COMO_LLEGAR,
+  CENTRO_DIRECCION,
+  CENTRO_MAPA,
+  CTA_APP,
+  PEDIDO_DATOS,
+} from '../src/config/auto-respuesta.js';
 import {
   armarAutoRespuesta,
   detectarIntencion,
@@ -268,6 +276,7 @@ describe('armado de la respuesta', () => {
 
   it('horario y ubicación salen del horario real configurado', () => {
     const r = armarAutoRespuesta({ ...base, texto: '¿dónde quedan?' });
+    expect(r?.intencion).toBe('horario-ubicacion');
     expect(r?.texto).toContain('Roque Sáenz Peña 530');
     expect(r?.texto).toContain('lunes a viernes de 08:00 a 22:00');
   });
@@ -581,6 +590,65 @@ describe('auto-respuesta · Recovery Pro', () => {
     expect(detectarIntencion('red light')).toBe('red-light');
     expect(detectarIntencion('hbot o recovery?')).toBe('hbot');
     expect(detectarIntencion('ihht y sauna')).toBe('ihht');
+  });
+});
+
+/**
+ * "¿Dónde están?" (Andrés, 2026-09-15): el mapa pasa al link CORTO (el largo
+ * de Google ocupaba tres renglones de %20 en el teléfono), el texto va en
+ * bloques con aire, y estacionamiento / "en San Isidro" / cómo llegar entran
+ * a propósito en vez de por accidente.
+ */
+describe('auto-respuesta · dónde están (horario-ubicacion)', () => {
+  const base = { ahora: viernes('15:00'), esConocido: true, nombre: 'Ana' };
+  const links = (texto: string) => texto.split('\n').filter((l) => l.startsWith('https://'));
+
+  it('dirección + mapa CORTO en su renglón, y el horario en su propio bloque', () => {
+    const t = armarAutoRespuesta({ ...base, texto: '¿dónde están?' })?.texto ?? '';
+    expect(t).toContain(`📍 ${CENTRO_DIRECCION}\n${CENTRO_MAPA}\n\n🕒 Horario: lunes a viernes de 08:00 a 22:00`);
+    expect(t).toContain('Ahora estamos abiertos, te esperamos 👋');
+    expect(t).not.toContain('maps.google.com');
+    expect(t).not.toContain('%20');
+  });
+
+  it('el link del mapa es el corto de Google Maps y es el MISMO que el de la bienvenida', () => {
+    expect(CENTRO_MAPA).toMatch(/^https:\/\/maps\.app\.goo\.gl\/[A-Za-z0-9]+$/);
+    expect(BIENVENIDA_SALUDO).toContain(`📍 Mapa: ${CENTRO_MAPA}`);
+  });
+
+  it('la tarjeta de vista previa es el mapa (primer link); la App cierra', () => {
+    const l = links(armarAutoRespuesta({ ...base, texto: 'dirección?' })?.texto ?? '');
+    expect(l[0]).toBe(CENTRO_MAPA);
+    expect(l.at(-1)).toBe(APP_URL);
+  });
+
+  it('cerrado, dice cuándo abre debajo del horario', () => {
+    const t = armarAutoRespuesta({ ...base, ahora: viernes('22:30'), texto: 'cómo llego' })?.texto ?? '';
+    expect(t).toContain('domingo cerrado.\nAbrimos mañana a las 08:00.');
+    expect(t).not.toContain('te esperamos');
+  });
+
+  it('estacionamiento, "en San Isidro" y cómo llegar disparan la misma respuesta, a propósito', () => {
+    for (const t of [
+      '¿dónde estacionar?',
+      'tienen estacionamiento?',
+      'cerca de la estación?',
+      'están en san isidro?',
+      'cómo llegar en tren?',
+      'se puede ir en colectivo?',
+      'dónde está el centro',
+    ]) {
+      expect(detectarIntencion(t), t).toBe('horario-ubicacion');
+    }
+  });
+
+  it('"cómo llegar" sale SOLO si hay texto cargado (hoy no hay: lo tiene que dar Andrés)', () => {
+    const t = armarAutoRespuesta({ ...base, texto: '¿dónde están?' })?.texto ?? '';
+    if (CENTRO_COMO_LLEGAR.length === 0) {
+      expect(t).not.toContain('Cómo llegar');
+    } else {
+      expect(t).toContain(`\n\n🚗 Cómo llegar:\n${CENTRO_COMO_LLEGAR.join('\n')}`);
+    }
   });
 });
 

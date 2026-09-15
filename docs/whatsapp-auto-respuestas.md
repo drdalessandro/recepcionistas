@@ -80,7 +80,7 @@ Todo vive en `src/lib/auto-respuesta.ts` (lógica pura, testeada) y
 | `red-light` | "red light", "fotobiomodulación", "luz roja", "terapia de luz" — **sin** señal clínica | Las tres páginas publicadas: Red Light, Cómo funciona y la Guía Red Light. "Infrarrojo" a secas no alcanza: también es el sauna de Recovery. |
 | `recovery` | "recovery", "sauna", "baño de hielo", "inmersión en frío", "contraste", "circuito recovery" — **sin** señal clínica | Las tres páginas publicadas: Recovery Pro, Cómo funciona y la Guía Recovery Pro. "Frío" y "crio" a secas no alcanzan: la Crioterapia Localizada es otro servicio. |
 | `informacion` | "información", "catálogo", "cómo funciona" — **sin** señal clínica | El índice de info y Cómo funciona. |
-| `horario-ubicacion` | "horarios", "dónde están", "cómo llego" | Dirección + mapa + **el horario real de `horario.ts`**: si Andrés cambia el horario, el mensaje cambia solo. |
+| `horario-ubicacion` | "horarios", "dónde están", "cómo llego", "estacionamiento", "en San Isidro", "en tren/colectivo" | Dirección + **mapa corto** + **el horario real de `horario.ts`** (si Andrés cambia el horario, el mensaje cambia solo), en bloques con aire; y "🚗 Cómo llegar" si `CENTRO_COMO_LLEGAR` tiene texto. |
 | `generico` | Todo lo demás | Acuse de recibo: saluda, dice **cuándo** le responde una persona (según esté abierto o cerrado) y menciona su próximo turno si lo tiene. |
 
 Lo que no cae en ninguna es `generico`. **No adivinar es una decisión de diseño.**
@@ -281,7 +281,8 @@ Todo en `src/config/auto-respuesta.ts`, sin tocar lógica:
 | `SEGUNDOS_ENTRE_MENSAJES` | La pausa entre globos. **No subirla** (ver "Números desconocidos"). |
 | `MINUTOS_ENTRE_AUTO_RESPUESTAS` | Cada cuánto puede repetirse la misma respuesta. |
 | `MINUTOS_SILENCIO_HUMANO` | Cuánto dura el silencio que pide `HUMANO`. |
-| `CENTRO_DIRECCION` | Dirección y mapa (el link se arma solo). |
+| `CENTRO_DIRECCION` · `CENTRO_MAPA` | La dirección y el link **corto** del mapa (`maps.app.goo.gl`), el mismo de la bienvenida. Hasta 2026-09-15 el mapa se armaba con la dirección codificada y ocupaba tres renglones de `%20` en el teléfono. |
+| `CENTRO_COMO_LLEGAR` | Renglones de cómo llegar (tren, colectivo, estacionamiento). **Vacío = el bloque no sale**; hoy está vacío porque el texto lo da Andrés. |
 
 Los **textos** están en `armarAutoRespuesta()`. El **horario** NO se toca acá:
 sale de `src/config/horario.ts`, que es la única fuente de verdad.

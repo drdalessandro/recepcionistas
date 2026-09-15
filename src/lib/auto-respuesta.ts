@@ -18,6 +18,7 @@
 import { HORARIO_SEMANAL } from '../config/horario.js';
 import {
   BIENVENIDA_SALUDO,
+  CENTRO_COMO_LLEGAR,
   CENTRO_DIRECCION,
   CENTRO_MAPA,
   CTA_APP,
@@ -197,7 +198,12 @@ const RE_TURNO = /\b(turno|cita|reserva|reservar|agendar|sobreturno)/;
 const RE_PEDIDO = /\b(quiero|querria|quisiera|necesito|puedo|podria|me gustaria|sacar|pedir|reservar|agendar|tienen|hay|disponib)/;
 const RE_PRECIO = /\b(precio|precios|cuanto sale|cuanto cuesta|cuanto esta|valor|valores|tarifa|arancel|cotiz)/;
 const RE_HORARIO = /\b(horario|horarios|abren|abierto|cierran|cierra|hasta que hora|a que hora abren)/;
-const RE_UBICACION = /\b(donde (estan|queda|es)|direccion|como llego|como se llega|ubicacion|ubicados|mapa)/;
+// "donde es\b" y no "donde es": sin el borde, "¿dónde estacionar?" entraba por
+// accidente. Ahora estacionar/estacionamiento/estación entran a propósito, igual
+// que "en San Isidro" y "en tren/colectivo/auto": todas se contestan con la
+// dirección, el mapa y (si está cargado) el bloque de cómo llegar.
+const RE_UBICACION =
+  /\b(donde (estan|esta|queda|quedan|es)\b|direccion|como llego|como se llega|como llegar|ubicacion|ubicados|mapa|estacion(ar|amiento)?\b|en san isidro|en tren\b|en colectivo\b|en auto\b)/;
 const RE_HBOT = /\b(hbot|camara hiperbarica|hiperbarica|hiperbarico|oxigeno hiperbarico)/;
 // IHHT = Hipoxia-Hiperoxia Intermitente. Sin acentos porque `normalizar()` los
 // saca antes: "hipóxico" llega como "hipoxico". "Intermitente" sola NO está: es
@@ -548,14 +554,23 @@ function decidirRespuesta(ctx: ContextoAutoRespuesta): DecisionAutoRespuesta | u
           `\n\nSi buscás algo puntual, ${cuandoTeRespondenEnFrase}`,
       };
 
-    case 'horario-ubicacion':
+    case 'horario-ubicacion': {
+      // Bloques con aire, título arriba y link solo en su renglón (la misma
+      // regla que el resto): dirección + mapa, horario + estado, y cómo llegar
+      // si hay texto cargado. Antes iban tres renglones pegados y el mapa era
+      // el link largo de Google (Andrés, 2026-09-15).
+      const estado = abierto ? 'Ahora estamos abiertos, te esperamos 👋' : apertura ? `Abrimos ${apertura}.` : '';
+      const comoLlegar = CENTRO_COMO_LLEGAR.length ? `\n\n🚗 Cómo llegar:\n${CENTRO_COMO_LLEGAR.join('\n')}` : '';
       return {
         intencion,
         texto:
-          `${hola} Estamos en ${CENTRO_DIRECCION}.\n${CENTRO_MAPA}\n` +
-          `Horario: ${textoHorarioSemanal()}.\n` +
-          (abierto ? 'Ahora estamos abiertos, te esperamos 👋' : apertura ? `Abrimos ${apertura}.` : ''),
+          `${hola} Te dejamos la dirección y el horario:\n\n` +
+          `📍 ${CENTRO_DIRECCION}\n${CENTRO_MAPA}\n\n` +
+          `🕒 Horario: ${textoHorarioSemanal()}.` +
+          (estado ? `\n${estado}` : '') +
+          comoLlegar,
       };
+    }
 
     default:
       return {
