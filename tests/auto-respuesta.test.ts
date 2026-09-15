@@ -351,7 +351,7 @@ describe('auto-respuesta · catálogo, HBOT e información', () => {
   });
 
   it('el link va SOLO en su renglón, nunca pegado al título', () => {
-    for (const texto of ['precios', 'camara hiperbarica', 'informacion']) {
+    for (const texto of ['precios', 'camara hiperbarica', 'ihht', 'informacion']) {
       const t = armarAutoRespuesta({ ...base, texto })?.texto ?? '';
       for (const l of lineas(t).filter((x) => x.includes('https://'))) {
         expect(l.trim()).toMatch(/^https:\/\/\S+$/);
@@ -393,6 +393,71 @@ describe('auto-respuesta · catálogo, HBOT e información', () => {
   });
 });
 
+/**
+ * IHHT — Hipoxia-Hiperoxia Intermitente (Andrés, 2026-09-15). Mismo circuito
+ * que HBOT: tres páginas publicadas, cede ante lo clínico, el turno y el
+ * precio, y cierra con la App.
+ */
+describe('auto-respuesta · IHHT', () => {
+  const base = { ahora: viernes('15:00'), esConocido: true, nombre: 'Ana' };
+  const links = (texto: string) => texto.split('\n').filter((l) => l.startsWith('https://'));
+
+  it('reconoce cómo lo escribe la gente', () => {
+    for (const t of [
+      'hacen ihht?',
+      'IHHT',
+      'me interesa la hipoxia',
+      'qué es la hipoxia-hiperoxia intermitente',
+      'entrenamiento hipóxico',
+      'tienen entrenamiento en altura?',
+    ]) {
+      expect(detectarIntencion(t), t).toBe('ihht');
+    }
+  });
+
+  it('"intermitente" sola NO alcanza: es demasiado genérica', () => {
+    expect(detectarIntencion('tengo un dolor intermitente')).toBe('generico');
+    expect(detectarIntencion('vengo de forma intermitente')).toBe('generico');
+  });
+
+  it('manda las tres páginas publicadas, la de IHHT primera (es la tarjeta)', () => {
+    const r = armarAutoRespuesta({ ...base, texto: 'hacen ihht?' });
+    expect(r?.intencion).toBe('ihht');
+    expect(r?.texto).toContain('IHHT (Hipoxia-Hiperoxia Intermitente)');
+    expect(links(r?.texto ?? '')).toEqual([
+      'https://info.biowellness.ar/ihht.html',
+      'https://info.biowellness.ar/como-funciona.html',
+      'https://info.biowellness.ar/guia/ihht/',
+      APP_URL,
+    ]);
+  });
+
+  it('cierra con la App, al final y con un renglón en blanco antes', () => {
+    const t = armarAutoRespuesta({ ...base, texto: 'ihht' })?.texto ?? '';
+    expect(t.endsWith(`\n\n${CTA_APP}`)).toBe(true);
+    expect(llevaCtaApp('ihht', false)).toBe(true);
+  });
+
+  it('una pregunta CLÍNICA sobre IHHT va a una persona, no al folleto', () => {
+    for (const t of [
+      'puedo hacer ihht con marcapasos?',
+      'la hipoxia es segura si tengo epoc?',
+      'tengo presion alta, puedo hacer entrenamiento hipoxico?',
+    ]) {
+      expect(detectarIntencion(t), t).toBe('generico');
+    }
+  });
+
+  it('pedir turno o precio de IHHT no es un folleto', () => {
+    expect(detectarIntencion('quiero un turno de ihht')).toBe('turno-pedido');
+    expect(detectarIntencion('cuánto sale la hipoxia?')).toBe('precios');
+  });
+
+  it('si nombra HBOT e IHHT en el mismo mensaje, gana HBOT', () => {
+    expect(detectarIntencion('hacen cámara hiperbárica e ihht?')).toBe('hbot');
+  });
+});
+
 describe('auto-respuesta · el cierre con la App (autogestión)', () => {
   const base = { ahora: viernes('15:00'), esConocido: true, nombre: 'Ana' };
   const links = (texto: string) => texto.split('\n').filter((l) => l.startsWith('https://'));
@@ -404,12 +469,13 @@ describe('auto-respuesta · el cierre con la App (autogestión)', () => {
     ['turno-consulta', '¿a qué hora era mi turno?'],
     ['precios', '¿Cuánto sale la sesión de HBOT?'],
     ['hbot', '¿tienen cámara hiperbárica?'],
+    ['ihht', '¿hacen IHHT?'],
     ['informacion', 'Información'],
     ['horario-ubicacion', '¿qué horarios tienen?'],
     ['generico', 'buenas, una consulta'],
   ];
 
-  it('cierra TODAS las respuestas a un conocido, al final y con un renglón en blanco antes', () => {
+  it('cierra TODAS las respuestas a un conocido (nueve intenciones), al final y con un renglón en blanco antes', () => {
     for (const [intencion, texto] of unaPorIntencion) {
       const r = armarAutoRespuesta({ ...base, texto });
       expect(r?.intencion, texto).toBe(intencion);

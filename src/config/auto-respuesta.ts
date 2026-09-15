@@ -70,6 +70,19 @@ export const LINKS_HBOT: Array<{ titulo: string; url: string }> = [
 ];
 
 /**
+ * Links de IHHT — Hipoxia-Hiperoxia Intermitente (intención `ihht`). Mismo
+ * esquema que HBOT: la página, cómo funciona y la guía del paciente
+ * (Andrés, 2026-09-15). La página de IHHT va PRIMERA: es la que arma la tarjeta.
+ */
+export const LINKS_IHHT: Array<{ titulo: string; url: string }> = [
+  // "Qué es" y no el nombre completo: la apertura del mensaje ya dice
+  // "IHHT (Hipoxia-Hiperoxia Intermitente)" y repetirlo se leía doble.
+  { titulo: 'Qué es el IHHT', url: 'https://info.biowellness.ar/ihht.html' },
+  { titulo: 'Cómo funciona', url: 'https://info.biowellness.ar/como-funciona.html' },
+  { titulo: 'Guía IHHT', url: 'https://info.biowellness.ar/guia/ihht/' },
+];
+
+/**
  * Formato de una lista de links para WhatsApp: **título y link en renglones
  * distintos**.
  *

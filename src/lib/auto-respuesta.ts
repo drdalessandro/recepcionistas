@@ -22,6 +22,7 @@ import {
   CENTRO_MAPA,
   CTA_APP,
   LINKS_HBOT,
+  LINKS_IHHT,
   LINKS_INFO,
   LINKS_PRECIOS,
   listaDeLinks,
@@ -43,6 +44,7 @@ export type Intencion =
   | 'turno-consulta'
   | 'precios'
   | 'hbot'
+  | 'ihht'
   | 'informacion'
   | 'horario-ubicacion'
   | 'generico';
@@ -192,7 +194,11 @@ const RE_PEDIDO = /\b(quiero|querria|quisiera|necesito|puedo|podria|me gustaria|
 const RE_PRECIO = /\b(precio|precios|cuanto sale|cuanto cuesta|cuanto esta|valor|valores|tarifa|arancel|cotiz)/;
 const RE_HORARIO = /\b(horario|horarios|abren|abierto|cierran|cierra|hasta que hora|a que hora abren)/;
 const RE_UBICACION = /\b(donde (estan|queda|es)|direccion|como llego|como se llega|ubicacion|ubicados|mapa)/;
-const RE_HBOT = /\b(hbot|camara hiperbarica|camara hiperbarica|hiperbarica|hiperbarico|oxigeno hiperbarico)/;
+const RE_HBOT = /\b(hbot|camara hiperbarica|hiperbarica|hiperbarico|oxigeno hiperbarico)/;
+// IHHT = Hipoxia-Hiperoxia Intermitente. Sin acentos porque `normalizar()` los
+// saca antes: "hipóxico" llega como "hipoxico". "Intermitente" sola NO está: es
+// demasiado genérica para mandar un folleto por ella.
+const RE_IHHT = /\b(ihht|hipoxia|hiperoxia|hipoxic|hiperoxic|entrenamiento (en|de) altura|altura simulada)/;
 // "Información" sola, o pidiendo material. Acotada a propósito: la palabra es
 // tan genérica que un patrón amplio se tragaría mensajes que tienen que llegar
 // a una persona.
@@ -246,11 +252,16 @@ export function detectarIntencion(texto: string, opts?: { conAdjunto?: boolean }
   // la cámara" es precio. Mandar el material en esos casos pierde la intención.
   //
   // Y cualquiera de las dos cede ante una señal clínica: ahí va a una persona.
-  if ((RE_HBOT.test(t) || RE_INFO.test(t)) && RE_CLINICO.test(t)) {
+  if ((RE_HBOT.test(t) || RE_IHHT.test(t) || RE_INFO.test(t)) && RE_CLINICO.test(t)) {
     return 'generico';
   }
+  // Si nombra las dos terapias en el mismo mensaje gana HBOT, que es la que
+  // más preguntan. Es un empate raro y una persona lo completa después.
   if (RE_HBOT.test(t)) {
     return 'hbot';
+  }
+  if (RE_IHHT.test(t)) {
+    return 'ihht';
   }
   if (RE_INFO.test(t)) {
     return 'informacion';
@@ -466,6 +477,15 @@ function decidirRespuesta(ctx: ContextoAutoRespuesta): DecisionAutoRespuesta | u
         texto:
           `${hola} Te dejamos todo sobre la Cámara Hiperbárica:\n\n` +
           listaDeLinks(LINKS_HBOT) +
+          `\n\nSi tenés dudas sobre tu caso en particular, ${cuandoTeResponden.toLowerCase()}`,
+      };
+
+    case 'ihht':
+      return {
+        intencion,
+        texto:
+          `${hola} Te dejamos todo sobre el IHHT (Hipoxia-Hiperoxia Intermitente):\n\n` +
+          listaDeLinks(LINKS_IHHT) +
           `\n\nSi tenés dudas sobre tu caso en particular, ${cuandoTeResponden.toLowerCase()}`,
       };
 
