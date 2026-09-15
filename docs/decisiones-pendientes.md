@@ -23,6 +23,16 @@ Qué queda pendiente para esa fecha:
 > lista de espera, la prioridad de estos dos sube: pasan de "más trabajo" a
 > "canal de adquisición barato".
 
+## Teleconsulta — PROPUESTA (2026-09-15)
+
+Piloto de **Cardiología, Nutrición y Endocrinología** por videollamada (Jitsi
+Meet en una EC2 propia). La visión completa, el modelo FHIR, los bots y el
+circuito están en [`teleconsulta.md`](teleconsulta.md). **Nada implementado**:
+antes de escribir código hay nueve decisiones para Andrés (§10 de ese
+documento): cobro 100 % anticipado, honorarios y precio de los especialistas,
+aptitud en modalidad virtual (R-20 sin el cuestionario de ingreso), no-show,
+acceso solo con portal, Recepción fuera de la sala, grilla de 30 min y dominio.
+
 ## Lista de espera — 2 preguntas abiertas (2026-08-14)
 
 Se implementó la lista de espera (anotar a quien no consiguió lugar y avisar
