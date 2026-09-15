@@ -351,7 +351,7 @@ describe('auto-respuesta · catálogo, HBOT e información', () => {
   });
 
   it('el link va SOLO en su renglón, nunca pegado al título', () => {
-    for (const texto of ['precios', 'camara hiperbarica', 'ihht', 'red light', 'informacion']) {
+    for (const texto of ['precios', 'camara hiperbarica', 'ihht', 'red light', 'recovery', 'informacion']) {
       const t = armarAutoRespuesta({ ...base, texto })?.texto ?? '';
       for (const l of lineas(t).filter((x) => x.includes('https://'))) {
         expect(l.trim()).toMatch(/^https:\/\/\S+$/);
@@ -479,8 +479,9 @@ describe('auto-respuesta · Red Light', () => {
     }
   });
 
-  it('"infrarrojo" a secas NO alcanza: también es el sauna del circuito Recovery', () => {
-    expect(detectarIntencion('tienen sauna infrarrojo?')).toBe('generico');
+  it('"infrarrojo" a secas NO es Red Light: "sauna infrarrojo" es el circuito Recovery', () => {
+    expect(detectarIntencion('tienen sauna infrarrojo?')).toBe('recovery');
+    expect(detectarIntencion('infrarrojo')).toBe('generico');
   });
 
   it('manda las tres páginas publicadas, la de Red Light primera (es la tarjeta)', () => {
@@ -515,6 +516,71 @@ describe('auto-respuesta · Red Light', () => {
   it('en un empate con HBOT o IHHT, Red Light cede', () => {
     expect(detectarIntencion('hacen hbot y red light?')).toBe('hbot');
     expect(detectarIntencion('ihht o luz roja?')).toBe('ihht');
+  });
+});
+
+/**
+ * Recovery Pro — el circuito de sauna infrarrojo, frío y red light (Andrés,
+ * 2026-09-15). Mismo circuito de respuesta que HBOT, IHHT y Red Light.
+ */
+describe('auto-respuesta · Recovery Pro', () => {
+  const base = { ahora: viernes('15:00'), esConocido: true, nombre: 'Ana' };
+  const links = (texto: string) => texto.split('\n').filter((l) => l.startsWith('https://'));
+
+  it('reconoce cómo lo escribe la gente', () => {
+    for (const t of [
+      'hacen recovery?',
+      'Recovery Pro',
+      'tienen sauna?',
+      'sauna infrarrojo',
+      'baño de hielo',
+      'inmersión en frío',
+      'terapia de contraste',
+      'circuito recovery',
+    ]) {
+      expect(detectarIntencion(t), t).toBe('recovery');
+    }
+  });
+
+  it('"frío" y "crio" a secas NO alcanzan: la Crioterapia Localizada es otro servicio', () => {
+    expect(detectarIntencion('hacen crioterapia?')).toBe('generico');
+    expect(detectarIntencion('tengo frío en el consultorio')).toBe('generico');
+  });
+
+  it('manda las tres páginas publicadas, la de Recovery primera (es la tarjeta)', () => {
+    const r = armarAutoRespuesta({ ...base, texto: 'hacen recovery?' });
+    expect(r?.intencion).toBe('recovery');
+    expect(r?.texto).toContain('Recovery Pro (sauna infrarrojo, frío y red light)');
+    expect(links(r?.texto ?? '')).toEqual([
+      'https://info.biowellness.ar/recovery-pro.html',
+      'https://info.biowellness.ar/como-funciona.html',
+      'https://info.biowellness.ar/guia/recovery-pro/',
+      APP_URL,
+    ]);
+  });
+
+  it('cierra con la App, al final', () => {
+    const t = armarAutoRespuesta({ ...base, texto: 'sauna' })?.texto ?? '';
+    expect(t.endsWith(`\n\n${CTA_APP}`)).toBe(true);
+    expect(llevaCtaApp('recovery', false)).toBe(true);
+  });
+
+  it('una pregunta CLÍNICA sobre Recovery va a una persona, no al folleto', () => {
+    for (const t of ['puedo hacer sauna con presion alta?', 'el baño de hielo es seguro en el embarazo?']) {
+      expect(detectarIntencion(t), t).toBe('generico');
+    }
+  });
+
+  it('pedir turno o precio de Recovery no es un folleto', () => {
+    expect(detectarIntencion('quiero un turno de recovery')).toBe('turno-pedido');
+    expect(detectarIntencion('cuánto sale el sauna?')).toBe('precios');
+  });
+
+  it('Recovery incluye red light: "recovery con red light" es Recovery; HBOT e IHHT le ganan', () => {
+    expect(detectarIntencion('el recovery pro incluye red light?')).toBe('recovery');
+    expect(detectarIntencion('red light')).toBe('red-light');
+    expect(detectarIntencion('hbot o recovery?')).toBe('hbot');
+    expect(detectarIntencion('ihht y sauna')).toBe('ihht');
   });
 });
 
@@ -564,12 +630,13 @@ describe('auto-respuesta · el cierre con la App (autogestión)', () => {
     ['hbot', '¿tienen cámara hiperbárica?'],
     ['ihht', '¿hacen IHHT?'],
     ['red-light', '¿hacen Red Light?'],
+    ['recovery', '¿hacen Recovery?'],
     ['informacion', 'Información'],
     ['horario-ubicacion', '¿qué horarios tienen?'],
     ['generico', 'buenas, una consulta'],
   ];
 
-  it('cierra TODAS las respuestas a un conocido (diez intenciones), al final y con un renglón en blanco antes', () => {
+  it('cierra TODAS las respuestas a un conocido (once intenciones), al final y con un renglón en blanco antes', () => {
     for (const [intencion, texto] of unaPorIntencion) {
       const r = armarAutoRespuesta({ ...base, texto });
       expect(r?.intencion, texto).toBe(intencion);
