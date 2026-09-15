@@ -117,6 +117,7 @@ Pantallas del esqueleto:
 - [`docs/modelo-datos-fhir.md`](docs/modelo-datos-fhir.md) — recursos y extensiones FHIR
 - [`docs/decisiones-pendientes.md`](docs/decisiones-pendientes.md) — decisiones abiertas
 - [`docs/pasarelas-de-pago.md`](docs/pasarelas-de-pago.md) — evaluación de Clover frente a MercadoPago: probabilidad de uso, matriz y camino rápido
+- [`docs/teleconsulta.md`](docs/teleconsulta.md) — teleconsulta (Cardiología · Nutrición · Endocrinología) sobre Jitsi en EC2: visión, modelo FHIR, bots, circuito de punta a punta y decisiones pendientes (propuesta)
 - [`CLAUDE.md`](CLAUDE.md) — convenciones y guía para el desarrollo
 
 ---
