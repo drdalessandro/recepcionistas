@@ -1,6 +1,6 @@
 # Teleconsulta — visión e integración (propuesta)
 
-> **Estado: APROBADA PARA AVANZAR (Andrés, 2026-09-16) · Fase 0 en curso.**
+> **Estado: APROBADA PARA AVANZAR (Andrés, 2026-09-16) · Fase 0 instalada.**
 > Piloto con **Cardiología, Nutrición y Endocrinología** sobre **Jitsi Meet** en
 > una EC2 propia de AWS. Nada implementado en el repo todavía: la Fase 0 es
 > infraestructura y tiene su runbook en
@@ -58,7 +58,7 @@ forma distinta a la API, y una llamada nunca puede tirar la agenda.
 | Puertos | 443 TCP (web), 10000 UDP (media), 4443 TCP (respaldo). Coturn: 3478 UDP/TCP y 5349 TCP |
 | Tamaño inicial | Una instancia mediana. Con tres especialidades hay pocas llamadas simultáneas, y una llamada de **dos personas va punto a punto**: el servidor casi no interviene |
 | Acceso | **Solo con token JWT** (paquete `jitsi-meet-tokens`; en Docker, `ENABLE_AUTH=1` y `AUTH_TYPE=jwt`). Nadie crea salas a mano ni entra sin token |
-| Roles | El **profesional entra como moderador** según el claim del token; el **paciente como invitado** y ve la pantalla de espera hasta que el moderador entra (módulos de Prosody `token_affiliation`, de jitsi-contrib, y `muc_wait_for_host`: verificar contra la versión instalada, runbook §4) |
+| Roles | El **profesional entra como moderador** según el claim del token y el paciente no, verificado en producción (2026-09-16). Son **tres** piezas y las tres hacen falta: `enable-auto-owner = false` en Jicofo, el módulo `token_affiliation`, y `wait_for_host_disable_auto_owners = true` — sin esta última, Jitsi promueve a moderador a **todo** el que traiga token. Receta y por qué: runbook §4.2 |
 | Nombre de la sala | Un UUID por turno (`tc-<uuid>`). **Nunca el nombre del paciente ni el id del turno**: el nombre de la sala viaja en URLs y logs |
 | Grabación y terceros | Apagados: sin grabación, sin streaming, sin avatares externos ni analytics (`disableThirdPartyRequests`) |
 | Embebido | Los dos fronts lo abren con el **IFrame API** (`external_api.js` del propio dominio). El nginx de Jitsi tiene que permitir `frame-ancestors` para el portal y el Dashboard; el iframe necesita `allow="camera; microphone; display-capture; autoplay"` |
@@ -276,8 +276,13 @@ Portal                          Medplum (bots)                       Recepción 
 
 - **Ventana de acceso:** desde 15 minutos antes hasta 60 después del fin.
   Fuera de eso el botón no aparece y el bot no emite token.
-- **El paciente espera al profesional**, no al revés: Jitsi lo deja en la
-  pantalla de espera hasta que entra el moderador.
+- **La espera la muestra el portal, no Jitsi** (decisión de la Fase 0,
+  2026-09-16). El módulo de Jitsi que retiene invitados considera anfitrión a
+  cualquiera que traiga token, y en nuestro diseño el paciente también tiene el
+  suyo, así que nunca lo retendría. El portal muestra su propio mensaje
+  alrededor del video mientras el profesional no se conecta. El riesgo es nulo:
+  a esa sala **solo el paciente y su profesional tienen token**. Detalle en el
+  runbook §4.4.
 - **Escalado:** si a los **5 minutos** el profesional no entró, el vigilante
   deja el aviso `profesional-ausente` y Recepción lo llama. Si el paciente no
   apareció **10 minutos** después de la hora, aviso para que Recepción lo
@@ -334,6 +339,8 @@ Portal                          Medplum (bots)                       Recepción 
 
 - Página `/teleconsulta/:id` con el iframe de Jitsi, el botón activo en la
   ventana, y la llamada a los dos bots.
+- **La sala de espera**: mientras el profesional no entró, el mensaje propio
+  alrededor del video (ver §6.7 y runbook §4.4). Es del portal, no de Jitsi.
 - "Mis estudios" con la opción de asociar el PDF a un turno próximo.
 - Cuestionario previo de la especialidad en el flujo del turno.
 - Consentimiento de teleconsulta (mismo mecanismo que el general).
@@ -399,7 +406,7 @@ Cada fase se entrega verde antes de seguir (slices verticales, como el resto del
 
 | Fase | Contenido | Depende de | Cómo se verifica |
 |---|---|---|---|
-| **0 · Infra** | EC2 con Jitsi, dominio, TLS, JWT, coturn, endurecimiento. **Sin tocar el código.** Runbook: [`teleconsulta-fase0.md`](teleconsulta-fase0.md) | AWS y DNS | Las ocho pruebas del runbook §7: sin token, con token, espera, 4G, tres personas, iPhone, token vencido, sala equivocada |
+| **0 · Infra** | EC2 con Jitsi, dominio, TLS, JWT, coturn, endurecimiento. **Sin tocar el código.** Runbook: [`teleconsulta-fase0.md`](teleconsulta-fase0.md) | AWS y DNS | Nueve pruebas (runbook §7). **Instalado y verificado el 2026-09-16** hasta la prueba 4 (permisos reales); faltan 4G, tres personas, iPhone, token vencido y sala equivocada |
 | **1 · Piloto** | Catálogo y profesionales, policies, los cuatro bots, reserva y cobro total, recordatorio con link, Avisos nuevos, carril en la Agenda, modal del turno. Portal: página, PDFs al turno, cuestionario previo, consentimiento. Dashboard: botón y ficha previa | Las decisiones de §10 | Tests de `src/lib/teleconsulta.ts`; `npm run verify`; `policy:check`; una teleconsulta real de punta a punta con un paciente de prueba |
 | **2 · Endurecer** | Presencia desde el servidor de Jitsi por webhook (`/webhooks/jitsi`, misma receta de nginx; módulo de eventos de Prosody), no-show automático, informe post-consulta, "pasar a la historia clínica" desde Mensajes, imágenes DICOM, receta electrónica, obras sociales, *Proponer* para consultas | Lo aprendido del piloto | Ídem + prueba de reconexión y de webhook con firma |
 

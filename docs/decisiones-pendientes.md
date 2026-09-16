@@ -23,14 +23,17 @@ Qué queda pendiente para esa fecha:
 > lista de espera, la prioridad de estos dos sube: pasan de "más trabajo" a
 > "canal de adquisición barato".
 
-## Teleconsulta — APROBADA PARA AVANZAR (Andrés, 2026-09-16) · Fase 0 en curso
+## Teleconsulta — APROBADA PARA AVANZAR (Andrés, 2026-09-16) · Fase 0 instalada
 
 Piloto de **Cardiología, Nutrición y Endocrinología** por videollamada (Jitsi
 Meet en una EC2 propia). Visión, modelo FHIR, bots y circuito en
 [`teleconsulta.md`](teleconsulta.md); la Fase 0 (infraestructura, sin código)
 tiene su runbook en [`teleconsulta-fase0.md`](teleconsulta-fase0.md) e instala
-Jitsi con **paquetes Debian**, no Docker (comparación en su §1). De las nueve
-decisiones de `teleconsulta.md` §10, la Fase 0 solo asume el **dominio**
+Jitsi con **paquetes Debian**, no Docker (comparación en su §1). El servidor
+quedó **instalado y cerrado con token el 2026-09-16**, con el profesional como
+único moderador; faltan cinco pruebas de aceptación y el **dominio del
+Dashboard** para el `frame-ancestors`. De las nueve decisiones de
+`teleconsulta.md` §10, la Fase 0 solo asume el **dominio**
 (`meet.biowellness.ar`). Las otras ocho **siguen abiertas** y se cierran una
 por una antes de la Fase 1: cobro 100 % anticipado, honorarios y precio de los
 especialistas, aptitud en modalidad virtual (R-20 sin el cuestionario de
