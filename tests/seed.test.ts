@@ -12,7 +12,9 @@ const seed = buildSeed();
 describe('Seed — composición', () => {
   it('Construye los grupos de recursos esperados', () => {
     expect(seed.structureDefinitions.length).toBeGreaterThanOrEqual(28);
-    expect(seed.accessPolicies.length).toBe(8); // 7 roles internos (+ Kinesiología y Nutrición, PB100D) + Paciente — Portal
+    // 9 roles internos + Paciente — Portal. Kinesiología y Nutrición entraron
+    // con el PB100D; Cardiología y Endocrinología, con la teleconsulta.
+    expect(seed.accessPolicies.length).toBe(10);
     // 32 que se ofrecen + 6 RETIRADOS. Los retirados se publican a propósito
     // (con `status: 'retired'`): el seed hace upsert y no borra, así que
     // omitirlos los dejaría `active` en el servidor y el portal los seguiría
@@ -231,14 +233,25 @@ describe('Seed — AccessPolicy Paciente — Portal (los dos usos de Coverage)',
     expect(escribible.criteria).not.toContain('category=');
   });
 
-  it('El paciente solo puede ejecutar los cinco bots del portal, y ninguno más', () => {
+  it('El paciente solo puede ejecutar los bots del portal, y ninguno más', () => {
     const portal = seed.accessPolicies.find((p) => p.name === 'Paciente — Portal')!;
     const bot = (portal.resource ?? []).find((r) => r.resourceType === 'Bot')!;
     expect(bot.readonly).toBe(true);
 
     const permitidos = (bot.criteria ?? '').replace('Bot?name=', '').split(',');
     expect(permitidos.sort()).toEqual(
-      ['bw-cancelar-turno', 'bw-disponibilidad', 'bw-mover-turno', 'bw-preferencia-semanal', 'bw-solicitar-turno'].sort(),
+      [
+        'bw-cancelar-turno',
+        'bw-disponibilidad',
+        'bw-mover-turno',
+        'bw-preferencia-semanal',
+        'bw-solicitar-turno',
+        // Teleconsulta (2026-09-16): entrar a SU videollamada y registrar que
+        // entró. Los dos verifican que el turno sea del paciente antes de hacer
+        // nada; el token sale acotado a esa sala y a la ventana del turno.
+        'bw-teleconsulta-presencia',
+        'bw-teleconsulta-token',
+      ].sort(),
     );
 
     // Lo que importa no es el string sino QUÉ queda afuera: un bot de más acá es

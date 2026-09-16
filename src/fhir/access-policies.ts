@@ -114,6 +114,67 @@ export const POLICY_TERAPEUTA: AccessPolicy = {
 };
 
 /**
+ * Lo mínimo para **atender** a un paciente, presencial o por videollamada.
+ *
+ * Se comparte entre las especialidades en vez de repetirse: una policy que se
+ * copia y pega es una que queda desactualizada en la mitad de los lugares, y
+ * acá el costo de eso es un profesional que no ve el laboratorio de su paciente
+ * cinco minutos antes de la consulta.
+ *
+ * `DocumentReference` incluye la información previa que sube el paciente (§6.5
+ * de docs/teleconsulta.md) y el informe que el profesional deja después.
+ * `ServiceRequest` y `MedicationRequest` son las órdenes y recetas, que el
+ * portal ya sabe mostrar. `Encounter` es la visita, que abre y cierra el bot de
+ * presencia. Nada de esto lo ve Recepción: su policy no los lista (principio 3).
+ */
+const ATENCION_CLINICA: NonNullable<AccessPolicy['resource']> = [
+  { resourceType: 'Encounter' },
+  { resourceType: 'DocumentReference' },
+  { resourceType: 'ServiceRequest' },
+  { resourceType: 'MedicationRequest' },
+  { resourceType: 'DiagnosticReport' },
+  { resourceType: 'Consent', readonly: true },
+  { resourceType: 'Binary' },
+  // Ejecutar los bots de la videollamada: el token de moderador y el registro
+  // de presencia. Ningún otro.
+  {
+    resourceType: 'Bot',
+    readonly: true,
+    criteria: 'Bot?name=bw-teleconsulta-token,bw-teleconsulta-presencia',
+  },
+];
+
+/**
+ * Cardiología y Endocrinología (teleconsulta, 2026-09-16). No existían: los dos
+ * roles nacen con el piloto.
+ *
+ * Mismo alcance que Nutrición más lo suyo, y **sin** `NutritionOrder`. Leen el
+ * plan y las metas y no las editan, igual que las otras especialidades: las
+ * metas las fija el médico tratante en el Dashboard. El `PractitionerRole` con
+ * la especialidad se asigna a mano desde el admin, como enfermería, terapeutas,
+ * kinesiología y nutrición (docs/usuarios.md).
+ */
+function policyEspecialidad(nombre: string): AccessPolicy {
+  return {
+    resourceType: 'AccessPolicy',
+    name: nombre,
+    resource: [
+      { resourceType: 'Appointment', readonly: true },
+      { resourceType: 'Patient', readonly: true },
+      { resourceType: 'CarePlan', readonly: true },
+      { resourceType: 'Goal', readonly: true },
+      { resourceType: 'Observation' },
+      { resourceType: 'Task' },
+      { resourceType: 'QuestionnaireResponse' },
+      ...ATENCION_CLINICA,
+    ],
+  };
+}
+
+export const POLICY_CARDIOLOGIA = policyEspecialidad('Cardiología — Clínico limitado');
+export const POLICY_ENDOCRINOLOGIA = policyEspecialidad('Endocrinología — Clínico limitado');
+
+/**
  * Kinesiología (handoff PB100D §4): no existía rol ni policy en ningún repo.
  * El PB100D deriva a kinesiología pelviperineal (acción A02) y en los niveles
  * 3 y 4 kinesiología lleva el entrenamiento. Lee el plan y las metas (no los
@@ -148,6 +209,11 @@ export const POLICY_NUTRICION: AccessPolicy = {
     { resourceType: 'NutritionOrder' },
     { resourceType: 'Task' },
     { resourceType: 'QuestionnaireResponse' },
+    // Teleconsulta (2026-09-16): sin estas cuatro entradas la nutricionista no
+    // puede ver los PDFs que el paciente sube antes de la consulta, ni dejar
+    // indicaciones, ni registrar la visita. La policy estaba pensada para la
+    // bandeja del PB100D, no para atender.
+    ...ATENCION_CLINICA,
   ],
 };
 
@@ -340,7 +406,12 @@ export const POLICY_PACIENTE_PORTAL: AccessPolicy = {
     {
       resourceType: 'Bot',
       readonly: true,
-      criteria: 'Bot?name=bw-solicitar-turno,bw-disponibilidad,bw-cancelar-turno,bw-mover-turno,bw-preferencia-semanal',
+      //  - bw-teleconsulta-token / bw-teleconsulta-presencia: entrar a SU
+      //    videollamada y registrar que entró. El token se emite solo dentro de
+      //    la ventana del turno y para SU sala; el bot verifica que el turno sea
+      //    suyo antes de firmar nada (misma defensa que bw-cancelar-turno).
+      criteria:
+        'Bot?name=bw-solicitar-turno,bw-disponibilidad,bw-cancelar-turno,bw-mover-turno,bw-preferencia-semanal,bw-teleconsulta-token,bw-teleconsulta-presencia',
     },
   ],
 };
@@ -353,5 +424,7 @@ export const ACCESS_POLICIES: AccessPolicy[] = [
   POLICY_TERAPEUTA,
   POLICY_KINESIOLOGIA,
   POLICY_NUTRICION,
+  POLICY_CARDIOLOGIA,
+  POLICY_ENDOCRINOLOGIA,
   POLICY_PACIENTE_PORTAL,
 ];

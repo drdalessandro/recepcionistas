@@ -9,6 +9,20 @@
 
 export type Moneda = 'USD' | 'ARS';
 
+/**
+ * Cómo se presta el servicio.
+ *
+ * `presencial` es el default histórico y el de todo el catálogo v9: el paciente
+ * viene al centro y ocupa una sala. `virtual` es la teleconsulta (Jitsi en
+ * `meet.biowellness.ar`), que no ocupa sala física pero **sí ocupa la agenda del
+ * profesional**: un turno presencial y uno virtual del mismo médico compiten por
+ * el mismo horario, y por eso comparten `Schedule`.
+ *
+ * Viaja al turno en `Appointment.appointmentType` (no en una extensión): FHIR
+ * tiene el campo y el Panel Bio ya lee campos nativos. Ver docs/teleconsulta.md.
+ */
+export type ModalidadAtencion = 'presencial' | 'virtual';
+
 /** Categorías de servicio (definen reglas de pricing/agenda y split). */
 export type CategoriaServicio =
   | 'HBOT'
@@ -57,6 +71,11 @@ export interface Servicio {
   precioARS?: number;
   /** Para consultas: código del médico que atiende (ver src/config/medicos.ts). */
   practitionerCodigo?: string;
+  /**
+   * Modalidad de prestación. Ausente = `presencial` (todo el catálogo v9).
+   * Solo las consultas tienen variante `virtual` por ahora.
+   */
+  modalidad?: ModalidadAtencion;
   /** Requiere prescripción médica activa (IV / Terapias Biológicas). */
   requierePrescripcion: boolean;
   /** Regla de cálculo de precio. */
