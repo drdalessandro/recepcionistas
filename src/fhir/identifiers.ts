@@ -440,6 +440,8 @@ export const TIPO_AVISO = {
   pacienteEnLinea: 'paciente-en-linea',
   /** Pasó la hora y el profesional no se conectó: hay alguien esperando solo. */
   profesionalAusente: 'profesional-ausente',
+  /** Pasó la hora y el paciente no entró a su videollamada. */
+  pacienteAusente: 'paciente-ausente',
   /** El profesional pidió que se le agende un control a este paciente. */
   agendarControl: 'agendar-control',
 } as const;
