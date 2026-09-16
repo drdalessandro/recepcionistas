@@ -209,6 +209,24 @@ export const EXT = {
   esperaDias: `${BASE}/StructureDefinition/espera-dias`,
   /** Lista de espera · franjas del día que le sirven (CSV: manana|tarde|noche). */
   esperaFranjas: `${BASE}/StructureDefinition/espera-franjas`,
+  /**
+   * Modalidad de prestación del servicio (`presencial` | `virtual`), en el
+   * `ActivityDefinition` del catálogo y en el `ChargeItem` del cobro.
+   *
+   * En el **turno** la modalidad NO va acá: va en `Appointment.appointmentType`,
+   * que es el campo nativo de FHIR para esto (mismo criterio que
+   * `serviceType`/`serviceCategory`, ver src/fhir/appointment.ts). La extensión
+   * existe para el catálogo, que no tiene campo equivalente, y para que
+   * Administración pueda separar presencial de virtual en su P&L sin mirar el
+   * turno. Ampliar la lista de valores es compatible; renombrarla no.
+   */
+  modalidadAtencion: `${BASE}/StructureDefinition/modalidad-atencion`,
+  /**
+   * Nombre de la sala de videollamada del turno (`tc-<uuid>`, ver
+   * `src/lib/teleconsulta.ts`). **El token NO se guarda nunca**: se emite a
+   * pedido y vence con la ventana del turno. Lo que persiste es la sala.
+   */
+  teleconsultaSala: `${BASE}/StructureDefinition/teleconsulta-sala`,
 } as const;
 
 /** Sistemas de codificación / identificadores de negocio. */
@@ -220,6 +238,26 @@ export const SYSTEM = {
    * lee el Panel Bio para el acumulado de sesiones. Ver src/fhir/appointment.ts.
    */
   categoriaServicio: `${BASE}/CodeSystem/categoria-servicio`,
+  /**
+   * Modalidad de atención del turno: `Appointment.appointmentType`.
+   * Valores: `presencial` | `virtual` (`MODALIDADES` más abajo).
+   */
+  modalidadAtencion: `${BASE}/CodeSystem/modalidad-atencion`,
+  /**
+   * Especialidad del profesional: `PractitionerRole.specialty`.
+   *
+   * Es un CodeSystem propio y no SNOMED CT a propósito: la lista la define el
+   * negocio (qué se ofrece), no la nomenclatura clínica. El mapeo a SNOMED se
+   * agrega el día que lo pida el Federador o una obra social, sin tocar nada de
+   * esto — se suma un `coding` al lado.
+   */
+  especialidad: `${BASE}/CodeSystem/especialidad`,
+  /**
+   * Tipo de documento del paciente en su historia: `DocumentReference.category`.
+   * Separa el laboratorio del informe de imágenes y del informe de la consulta,
+   * que es lo que el Dashboard necesita para enrutar y el portal para agrupar.
+   */
+  documentoPaciente: `${BASE}/CodeSystem/documento-paciente`,
   comboCodigo: `${BASE}/CodeSystem/combo`,
   membresiaCodigo: `${BASE}/CodeSystem/membresia`,
   paqueteCodigo: `${BASE}/CodeSystem/paquete`,
@@ -395,6 +433,51 @@ export const TIPO_AVISO = {
    * la vista Avisos sin tener que buscar cada ficha.
    */
   huecoLiberado: 'hueco-liberado',
+  /**
+   * El paciente entró a la sala de su teleconsulta. Es el aviso que Recepción
+   * ve en tiempo real y el que dispara el llamado al profesional si tarda.
+   */
+  pacienteEnLinea: 'paciente-en-linea',
+  /** Pasó la hora y el profesional no se conectó: hay alguien esperando solo. */
+  profesionalAusente: 'profesional-ausente',
+  /** El profesional pidió que se le agende un control a este paciente. */
+  agendarControl: 'agendar-control',
+} as const;
+
+/** Modalidades de atención (lista CERRADA; `SYSTEM.modalidadAtencion`). */
+export const MODALIDADES = ['presencial', 'virtual'] as const;
+export type Modalidad = (typeof MODALIDADES)[number];
+
+/**
+ * Especialidades de los profesionales (`SYSTEM.especialidad`).
+ *
+ * Lista ABIERTA por diseño, al revés que `ORIGENES_LEAD`: el negocio suma
+ * especialidades (Andrés, 2026-09-16: "Médicos, Cardiólogos, Endocrinólogos /
+ * Diabetólogos, Hiperbaristas, Nutricionistas, etc") y cada una nueva es un
+ * renglón acá más un profesional en `src/config/medicos.ts`. Lo que NO se
+ * renombra son los códigos ya publicados: los lee el portal para agrupar la
+ * góndola y el Dashboard para enrutar la bandeja.
+ *
+ * `hiperbarista` está declarada y **todavía sin profesional asignado**: es el
+ * médico de la cámara hiperbárica, la puerta de entrada al servicio central de
+ * la casa. Pendiente de que Andrés defina quién y a qué precio.
+ */
+export const ESPECIALIDADES = {
+  cardiologia: 'Cardiología',
+  endocrinologia: 'Endocrinología y Diabetes',
+  nutricion: 'Nutrición',
+  hiperbarica: 'Medicina Hiperbárica',
+  traumatologia: 'Traumatología y Medicina del Deporte',
+  medicinaGeneral: 'Medicina General',
+} as const;
+export type EspecialidadCodigo = keyof typeof ESPECIALIDADES;
+
+/** Códigos de `SYSTEM.documentoPaciente`. */
+export const DOCUMENTOS_PACIENTE = {
+  laboratorio: 'laboratorio',
+  imagenes: 'imagenes',
+  informePrevio: 'informe-previo',
+  informeConsulta: 'informe-consulta',
 } as const;
 
 /**

@@ -386,19 +386,28 @@ al `ChargeItem` (ampliar la lista es compatible; renombrar no, misma regla que
 (`docs/decisiones-pendientes.md` § Clínico) se vuelve urgente con especialistas
 externos.
 
-## 10. Decisiones para Andrés (antes de escribir una línea)
+## 10. Decisiones
+
+### Cerradas por Andrés (2026-09-16)
+
+| Tema | Decisión |
+|---|---|
+| **Dominio** | `meet.biowellness.ar` |
+| **Precio por especialidad** | Cardiología **ARS 150.000** · Endocrinología **ARS 150.000** · Nutrición **ARS 120.000**. Aparte, **Antropometría ARS 60.000**, que es **presencial**: no se mide composición corporal por videollamada, así que es un servicio propio y no un adicional de la teleconsulta. Si alguna vez se vende junto, se arma como combo de dos servicios que ya existen |
+| **Grilla** | **Slots virtuales de 60 minutos.** R-22 **no se toca**: las consultas ya arrancan en punto, así que la grilla virtual encaja sin excepción |
+| **Cobro** | **Total y anticipado**, por ser virtual. Sin seña ni saldo: no hay mostrador donde cobrar el resto |
+| **Todo por la App** | El paciente gestiona desde el portal y completa **los pasos que ya existen** antes de poder reservar. Confirma el "no" al acceso sin portal: la invitación al portal es parte del onboarding |
+| **Recepción y la sala** | Recepción no entra nunca a la videollamada. Soporte por WhatsApp o teléfono |
+| **Especialidades** | Lista **abierta** y creciente: cardiología, endocrinología y diabetes, nutrición, medicina hiperbárica, traumatología y medicina del deporte, medicina general (`ESPECIALIDADES` en `src/fhir/identifiers.ts`). Sumar una es un renglón, no un cambio de modelo |
+
+### Abiertas
 
 | Tema | Propuesta | Por qué importa |
 |---|---|---|
-| **Cobro** | 100 % anticipado por link de MP; el turno se confirma al acreditarse | Sin mostrador no hay dónde cobrar el saldo. Cambia el circuito de seña para esta modalidad |
-| **Honorarios de los especialistas** | Usar el `split-porcentaje` por profesional que ya existe | El split de consultas ya está pendiente; con especialistas externos se vuelve urgente |
-| **Precio por especialidad** | Un precio ARS por profesional, como hoy | El del Director sigue provisorio. Faltan tres precios nuevos |
-| **Aptitud en modalidad virtual** | Consentimiento general + teleconsulta; cuestionario previo en vez del de ingreso | Sin esto la reserva se bloquea por R-20 con un cuestionario que no aplica |
-| **No-show** | A los 15 min sin paciente, Recepción marca no-show y el pago se pierde | Regla de negocio nueva, sin antecedente en R-14 |
-| **Acceso sin portal** | **No en el piloto.** Un link firmado por WhatsApp es más simple y pierde identidad verificada, presencia y prejoin | Decisión reversible; la invitación al portal pasa a ser parte del onboarding |
-| **Recepción y la sala** | Recepción no entra nunca a la videollamada | Principio 3. Soporte por WhatsApp o teléfono |
-| **Duración y grilla** | Consulta de 30 min en punto o a la media (R-22 hoy exige en punto para consultas) | Si el profesional atiende cada 30 min, R-22 tiene que admitirlo para esta modalidad |
-| **Dominio** | `meet.biowellness.ar` | Nombre visible para el paciente; es marca |
+| **Aptitud en modalidad virtual (R-20)** | ⚠️ **Supuesto en uso, sin confirmar:** R-20 queda **como está**, sin excepción para lo virtual. "Completar todos los pasos tal cual están" se lee así, y funciona: las contraindicaciones se evalúan por categoría y ninguna aplica a `CONSULTA`, así que una contraindicación de cámara no bloquea una teleconsulta | Si el supuesto es correcto, esta fila se cierra sin escribir código. Si no, hay que escribir la regla antes de la primera reserva |
+| **Honorarios de los especialistas** | Usar el `split-porcentaje` por profesional que ya existe. Mientras tanto sale como hoy, `BW_100` | Con especialistas externos el split deja de ser un pendiente teórico |
+| **No-show** | A los 15 min sin paciente, Recepción **puede** marcar no-show; el sistema habilita, no ejecuta. Qué pasa con el pago (total y anticipado) es la decisión | `habilitaNoShow` ya está implementado y testeado; falta la consecuencia comercial |
+| **Hiperbarista** | La especialidad está creada; **falta el profesional y el precio** | Es la puerta de entrada a la cámara, el servicio central de la casa |
 
 ## 11. Fases y verificación
 
