@@ -19,7 +19,11 @@ describe('Seed — composición', () => {
     // (con `status: 'retired'`): el seed hace upsert y no borra, así que
     // omitirlos los dejaría `active` en el servidor y el portal los seguiría
     // ofreciendo — que es lo que pasó dos meses con IHHT_EXPRESS/IHHT_PREMIUM.
-    expect(seed.activityDefinitions.length).toBe(38);
+    // 40 = 38 + las dos teleconsultas (cardiología del Dr. D'Alessandro y
+    // endocrinología de la Dra. Albarellos). El Dr. Carrieri NO suma servicio:
+    // existe como Practitioner pero su consulta no se publica hasta que haya
+    // precio.
+    expect(seed.activityDefinitions.length).toBe(40);
     expect(seed.activityDefinitions.filter((a) => a.status === 'retired')).toHaveLength(6);
     expect(seed.combos.length).toBe(9);
     expect(seed.membresias.length).toBe(10);
@@ -29,10 +33,17 @@ describe('Seed — composición', () => {
     expect(seed.paquetes.length).toBe(27);
     expect(seed.paquetes.filter((p) => p.status === 'retired')).toHaveLength(3);
     expect(seed.programas.length).toBe(2); // PB100D premium: mensual + 100 días
-    expect(seed.locations.length).toBe(14); // 13 + Puesto IV 2 (handoff v9)
-    // 14 salas + las 3 agendas médicas publicadas (Conrado, D'Alessandro, Dos Santos).
-    expect(seed.schedules.length).toBe(17);
-    expect(seed.practitioners.length).toBe(3);
+    // 13 del Requerimientos + Puesto IV 2 (handoff v9) + la sala de
+    // videollamada, que NO es física: existe para que el turno virtual tenga
+    // dónde pararse en la agenda, con capacidad alta porque lo que limita una
+    // teleconsulta es el profesional, no un lugar.
+    expect(seed.locations.length).toBe(15);
+    // 15 recursos + las 3 agendas médicas publicadas (Conrado, D'Alessandro,
+    // Dos Santos). Albarellos y Carrieri todavía no tienen franjas definidas.
+    expect(seed.schedules.length).toBe(18);
+    // 5 profesionales: los 3 médicos + Albarellos (endocrinología, solo virtual)
+    // + Carrieri (hiperbárica, sin servicio publicado hasta que haya precio).
+    expect(seed.practitioners.length).toBe(5);
   });
 });
 

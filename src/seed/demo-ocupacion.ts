@@ -245,8 +245,14 @@ export function planDia(fecha: string, ahora: Date, opts: OpcionesPlan = {}): Tu
   }
 
   // Consultorio: solo cuando hay médico publicado (agenda real de config).
+  //
+  // `precioConsultaARS` filtra a los que NO atienden presencial: desde la
+  // teleconsulta (2026-09-16) un profesional puede atender solo por video, y
+  // entonces no tiene servicio presencial ni ocupa el consultorio. Sin este
+  // filtro, `getServicio` tiraba "Servicio desconocido" y se caía la demo
+  // entera — lo encontraron los tests de este archivo.
   let iConsulta = 0;
-  for (const medico of MEDICOS) {
+  for (const medico of MEDICOS.filter((m) => m.precioConsultaARS !== undefined)) {
     const servicioCodigo = codigoConsulta(medico.codigo);
     const duracionMin = getServicio(servicioCodigo).duracionMin;
     for (const franja of (medico.agenda ?? []).filter((f) => f.dia === diaSemana(fecha))) {
