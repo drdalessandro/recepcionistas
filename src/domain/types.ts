@@ -220,7 +220,14 @@ export type TipoRecurso =
   | 'CRIO'
   | 'BOX_CLINICO'
   | 'CONSULTORIO'
-  | 'SALA';
+  | 'SALA'
+  /**
+   * Sala de videollamada. No es un recurso FÍSICO y por eso no limita nada: el
+   * cuello de botella de una teleconsulta es la agenda del profesional, no un
+   * lugar. Existe igual como recurso para que el turno virtual tenga dónde
+   * pararse en la agenda y en los reportes, con el mismo modelo que el resto.
+   */
+  | 'VIRTUAL';
 
 export interface RecursoFisico {
   codigo: string;

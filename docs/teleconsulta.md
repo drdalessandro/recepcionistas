@@ -61,7 +61,7 @@ forma distinta a la API, y una llamada nunca puede tirar la agenda.
 | Roles | El **profesional entra como moderador** según el claim del token y el paciente no, verificado en producción (2026-09-16). Son **tres** piezas y las tres hacen falta: `enable-auto-owner = false` en Jicofo, el módulo `token_affiliation`, y `wait_for_host_disable_auto_owners = true` — sin esta última, Jitsi promueve a moderador a **todo** el que traiga token. Receta y por qué: runbook §4.2 |
 | Nombre de la sala | Un UUID por turno (`tc-<uuid>`). **Nunca el nombre del paciente ni el id del turno**: el nombre de la sala viaja en URLs y logs |
 | Grabación y terceros | Apagados: sin grabación, sin streaming, sin avatares externos ni analytics (`disableThirdPartyRequests`) |
-| Embebido | Los dos fronts lo abren con el **IFrame API** (`external_api.js` del propio dominio). El nginx de Jitsi tiene que permitir `frame-ancestors` para el portal y el Dashboard; el iframe necesita `allow="camera; microphone; display-capture; autoplay"` |
+| Embebido | Los dos fronts lo abren con el **IFrame API** (`external_api.js` del propio dominio). El nginx de Jitsi permite `frame-ancestors` solo para `app.biowellness.ar` (portal) y `dashboard.biowellness.ar` (Dashboard); el iframe necesita `allow="camera; microphone; display-capture; autoplay"` |
 | Logs | Sin PHI: la sala es un UUID, el nombre visible es el del token y no se persiste |
 
 **El token.** Lo firma un bot con la clave del Project Secret (`JITSI_JWT_SECRET`),
@@ -393,7 +393,9 @@ externos.
 | Tema | Decisión |
 |---|---|
 | **Dominio** | `meet.biowellness.ar` |
-| **Precio por especialidad** | Cardiología **ARS 150.000** · Endocrinología **ARS 150.000** · Nutrición **ARS 120.000**. Aparte, **Antropometría ARS 60.000**, que es **presencial**: no se mide composición corporal por videollamada, así que es un servicio propio y no un adicional de la teleconsulta. Si alguna vez se vende junto, se arma como combo de dos servicios que ya existen |
+| **Precio por especialidad** | Teleconsulta de cardiología **ARS 150.000** · endocrinología **ARS 150.000** · nutrición **ARS 120.000**. Presencial: nutrición **ARS 180.000** (incluye las medidas) y **Antropometría suelta ARS 60.000**. Los números cierran: la presencial es la virtual más las medidas, que **no se pueden tomar por videollamada** |
+| **Dos productos del mismo médico** | La teleconsulta de cardiología del Dr. D'Alessandro (150.000) **no reemplaza** su evaluación presencial (120.000): son dos productos con código propio. Los 150.000 pagan además el uso de la plataforma y del tablero cardiovascular del Dashboard |
+| **Profesionales** | Cardiología: Dr. Alejandro D'Alessandro (ya estaba en el sistema). Endocrinología y diabetes: Dra. Malena Albarellos, **solo virtual** por ahora. Medicina hiperbárica: Dr. Nicolás Carrieri, **sin precio definido**, así que su `Practitioner` existe pero no se publica servicio suyo |
 | **Grilla** | **Slots virtuales de 60 minutos.** R-22 **no se toca**: las consultas ya arrancan en punto, así que la grilla virtual encaja sin excepción |
 | **Cobro** | **Total y anticipado**, por ser virtual. Sin seña ni saldo: no hay mostrador donde cobrar el resto |
 | **Todo por la App** | El paciente gestiona desde el portal y completa **los pasos que ya existen** antes de poder reservar. Confirma el "no" al acceso sin portal: la invitación al portal es parte del onboarding |
@@ -407,7 +409,9 @@ externos.
 | **Aptitud en modalidad virtual (R-20)** | ⚠️ **Supuesto en uso, sin confirmar:** R-20 queda **como está**, sin excepción para lo virtual. "Completar todos los pasos tal cual están" se lee así, y funciona: las contraindicaciones se evalúan por categoría y ninguna aplica a `CONSULTA`, así que una contraindicación de cámara no bloquea una teleconsulta | Si el supuesto es correcto, esta fila se cierra sin escribir código. Si no, hay que escribir la regla antes de la primera reserva |
 | **Honorarios de los especialistas** | Usar el `split-porcentaje` por profesional que ya existe. Mientras tanto sale como hoy, `BW_100` | Con especialistas externos el split deja de ser un pendiente teórico |
 | **No-show** | A los 15 min sin paciente, Recepción **puede** marcar no-show; el sistema habilita, no ejecuta. Qué pasa con el pago (total y anticipado) es la decisión | `habilitaNoShow` ya está implementado y testeado; falta la consecuencia comercial |
-| **Hiperbarista** | La especialidad está creada; **falta el profesional y el precio** | Es la puerta de entrada a la cámara, el servicio central de la casa |
+| **Precio de la consulta hiperbárica** | El Dr. Carrieri ya está cargado; **falta su precio**, y sin precio no se publica el servicio | Es la puerta de entrada a la cámara, el servicio central de la casa |
+| **Nutricionista** | Los tres precios están definidos; **falta el nombre de la profesional** | Sin ella no se pueden crear los tres servicios de nutrición |
+| **Franjas de los nuevos** | Albarellos y Carrieri no tienen agenda publicada, así que el portal todavía no los ofrece | La nutrición presencial y la consulta hiperbárica usan el **único** consultorio, donde ya se reparten tres médicos. Las franjas las define Andrés; `agenda:check` detecta los cruces |
 
 ## 11. Fases y verificación
 

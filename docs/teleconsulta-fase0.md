@@ -26,7 +26,7 @@
 | 6 | Tres personas con video fluido (relay por el servidor) | ⏳ pendiente |
 | 7 | Funciona en iPhone dentro de una página embebida | ⏳ pendiente |
 | 8 | Sin grabación, sin terceros, sin bienvenida, barra recortada | ✅ aplicado (§5) |
-| 9 | `frame-ancestors` con los dominios del portal y del Dashboard | ⏳ **falta el dominio del Dashboard** |
+| 9 | `frame-ancestors` con los dominios del portal y del Dashboard | ⚠️ línea lista (§5) — **falta aplicarla en el servidor** |
 | 10 | Operable por alguien que no lo instaló | ✅ §8 |
 
 ## 1. Cómo instalar Jitsi: tres caminos
@@ -382,11 +382,17 @@ castellano** es la señal de que el bloque quedó activo.
 **Desde dónde se puede embeber.** En el `server` de nginx de Jitsi:
 
 ```nginx
-add_header Content-Security-Policy "frame-ancestors 'self' https://app.biowellness.ar https://<dominio del dashboard>;" always;
+add_header Content-Security-Policy "frame-ancestors 'self' https://app.biowellness.ar https://dashboard.biowellness.ar;" always;
 ```
 
-⚠️ **Falta el dominio del Dashboard.** Sin esa línea completa, cualquier sitio
-puede embeber el servidor. Es el último pendiente de configuración de la fase.
+Los dos dominios son el portal del paciente y el Dashboard clínico
+(`dashboard.biowellness.ar`, confirmado el 2026-09-16). **Sin esta línea
+cualquier sitio de internet puede embeber el servidor de videollamadas en una
+página propia**, que es exactamente lo que se usa para engañar a alguien sobre
+con quién está hablando.
+
+⚠️ **Falta aplicarla en el servidor** (editar el `server` de nginx de Jitsi,
+`nginx -t` y recargar). Es el último pendiente de configuración de la fase.
 
 **Logs sin PHI.** Las salas son UUIDs. El nombre visible aparece en Prosody en
 nivel `debug`/`info`: dejar Prosody en `warn`.
@@ -507,7 +513,7 @@ contestadas.
 - [x] NAT del JVB configurado
 - [x] Moderador por token: las tres piezas de §4.2, verificadas con la prueba 4
 - [x] `config.js` endurecido y barra recortada
-- [ ] `frame-ancestors` con los dos dominios — **falta el dominio del Dashboard**
+- [ ] `frame-ancestors` con los dos dominios — la línea está en §5; **falta aplicarla**
 - [ ] Pruebas 5 a 9 de §7
 - [ ] Decidir el multiplexado de 443 según el resultado de la prueba 5
 - [ ] `unattended-upgrades` y SSH solo con clave

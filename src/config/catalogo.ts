@@ -13,7 +13,9 @@
  * los códigos de equipo (IPC06, COT03) salen de los títulos visibles.
  */
 import type { CategoriaServicio, Servicio, Split } from '../domain/types.js';
-import { MEDICOS, MEDICOS_POR_CODIGO, codigoConsulta } from './medicos.js';
+import { MEDICOS, MEDICOS_POR_CODIGO, codigoConsulta, codigoTeleconsulta, type Medico } from './medicos.js';
+import { ESPECIALIDADES } from '../fhir/identifiers.js';
+import { TELECONSULTA } from '../lib/teleconsulta.js';
 
 const BW100: Split = { tipo: 'BW_100' };
 const IV_TB: Split = { tipo: 'IV_TB_85_15', bw: 85, prescriptores: 15 };
@@ -317,33 +319,85 @@ export const SERVICIOS: Servicio[] = [
 ];
 
 /**
- * Consultas médicas: una por médico. Precio en ARS (pesos), 45 min de atención +
- * 15 de descanso => el slot ocupa 60 min. Todas usan el único consultorio.
+ * Consultas médicas, presenciales y por videollamada.
+ *
+ * Un profesional puede ofrecer **las dos, una o ninguna**, y cada una tiene su
+ * precio y su código: son productos distintos. Sin precio no se publica nada —
+ * un servicio sin precio confirmado en la góndola es peor que uno que todavía
+ * no está (es el caso del Dr. Carrieri).
+ *
+ * Presencial: 45 min de atención + 15 de descanso ⇒ el slot ocupa 60 min, en el
+ * único consultorio. Virtual: slots de 60 min (Andrés, 2026-09-16) y **no ocupa
+ * consultorio**; lo que limita es la agenda del profesional.
  */
 function consultasDeMedicos(): Servicio[] {
-  return MEDICOS.map((m) => {
-    const codigo = codigoConsulta(m.codigo);
-    const comercial = CONSULTAS_COMERCIAL[codigo] ?? {
-      orden: 11,
-      categoriaComercial: 'Consulta Médica',
-      descripcion: DESC_CONSULTA,
-    };
-    return {
-      codigo,
-      nombre: `Consulta médica — ${m.nombre}`,
-      categoria: 'CONSULTA' as const,
-      duracionMin: 60,
-      precioUSD: 0,
-      precioARS: m.precioConsultaARS,
-      practitionerCodigo: m.codigo,
-      requierePrescripcion: false,
-      reglaPricing: 'POR_SESION' as const,
-      split: BW100,
-      fmAplica: false,
-      ...comercial,
-      ...(m.precioProvisorio ? { nota: 'Precio provisorio (Director Médico) — confirmar' } : {}),
-    };
+  return MEDICOS.flatMap((m) => {
+    const servicios: Servicio[] = [];
+
+    if (m.precioConsultaARS !== undefined) {
+      servicios.push(consultaPresencial(m, m.precioConsultaARS));
+    }
+    if (m.precioTeleconsultaARS !== undefined) {
+      servicios.push(teleconsulta(m, m.precioTeleconsultaARS));
+    }
+    return servicios;
   });
+}
+
+/** La consulta presencial de un profesional. */
+function consultaPresencial(m: Medico, precioARS: number): Servicio {
+  const codigo = codigoConsulta(m.codigo);
+  const comercial = CONSULTAS_COMERCIAL[codigo] ?? {
+    orden: 11,
+    categoriaComercial: 'Consulta Médica',
+    descripcion: DESC_CONSULTA,
+  };
+  return {
+    codigo,
+    nombre: `Consulta médica — ${m.nombre}`,
+    categoria: 'CONSULTA' as const,
+    duracionMin: 60,
+    precioUSD: 0,
+    precioARS,
+    practitionerCodigo: m.codigo,
+    requierePrescripcion: false,
+    reglaPricing: 'POR_SESION' as const,
+    split: BW100,
+    fmAplica: false,
+    ...comercial,
+    ...(m.precioProvisorio ? { nota: 'Precio provisorio (Director Médico) — confirmar' } : {}),
+  };
+}
+
+/**
+ * La teleconsulta de un profesional.
+ *
+ * La sección de la góndola sale de su **especialidad**, no de una tabla aparte:
+ * es lo que pidió Andrés (2026-09-16) cuando dijo que los profesionales se
+ * listan por especialidad. Sumar una especialidad nueva es un renglón en
+ * `ESPECIALIDADES`, no una entrada más que mantener acá.
+ */
+function teleconsulta(m: Medico, precioARS: number): Servicio {
+  const seccion = m.especialidad ? ESPECIALIDADES[m.especialidad] : 'Consulta Médica';
+  return {
+    codigo: codigoTeleconsulta(m.codigo),
+    nombre: `${seccion} por videollamada — ${m.nombre}`,
+    categoria: 'CONSULTA' as const,
+    modalidad: 'virtual' as const,
+    duracionMin: TELECONSULTA.slotMin,
+    precioUSD: 0,
+    precioARS,
+    practitionerCodigo: m.codigo,
+    requierePrescripcion: false,
+    reglaPricing: 'POR_SESION' as const,
+    split: BW100,
+    fmAplica: false,
+    orden: 15, // después del Chequeo y las consultas presenciales
+    categoriaComercial: seccion,
+    descripcion:
+      `Consulta de ${seccion.toLowerCase()} por videollamada, desde donde estés. ` +
+      'Antes del turno podés subir tus estudios para que el profesional los revise.',
+  } as Servicio;
 }
 
 /**

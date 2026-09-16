@@ -10,7 +10,7 @@
  * gabinetes Recovery Pro comparten las 2 tumbonas Red Light, por eso van
  * desfasados.
  */
-import type { CategoriaServicio, RecursoFisico, TipoRecurso } from '../domain/types.js';
+import type { CategoriaServicio, ModalidadAtencion, RecursoFisico, TipoRecurso } from '../domain/types.js';
 
 const TUMBONAS_RECOVERY = 'TUMBONAS_RECOVERY';
 
@@ -57,6 +57,13 @@ export const RECURSOS: RecursoFisico[] = [
   { codigo: 'R_COT03', nombre: 'Crio Therapy (COT03)', tipo: 'CRIO', capacidad: 1 },
   { codigo: 'R_CAMILLA_MASAJES', nombre: 'Camilla de masajes', tipo: 'SALA', capacidad: 1 },
   { codigo: 'R_CONSULTORIO', nombre: 'Consultorio médico', tipo: 'CONSULTORIO', capacidad: 1 },
+  /**
+   * Teleconsulta: capacidad alta a propósito. Lo que limita una videollamada es
+   * la agenda del profesional (un turno presencial y uno virtual del mismo
+   * médico compiten por el mismo horario y por eso comparten Schedule), no un
+   * lugar físico. Ponerle capacidad 1 inventaría un cuello que no existe.
+   */
+  { codigo: 'R_TELECONSULTA', nombre: 'Videollamada', tipo: 'VIRTUAL', capacidad: 50 },
   { codigo: 'R_SALA_TB', nombre: 'Sala de Terapias Biológicas / IV', tipo: 'BOX_CLINICO', capacidad: 1 },
   {
     codigo: 'R_IV_2',
@@ -85,9 +92,19 @@ const CATEGORIA_A_TIPO: Record<CategoriaServicio, TipoRecurso> = {
   CONSULTA: 'CONSULTORIO',
 };
 
-/** Recursos físicos donde se puede agendar un servicio de la categoría dada. */
-export function recursosParaCategoria(categoria: CategoriaServicio): RecursoFisico[] {
-  const tipo = CATEGORIA_A_TIPO[categoria];
+/**
+ * Recursos donde se puede agendar un servicio de la categoría dada.
+ *
+ * `modalidad: 'virtual'` devuelve la sala de videollamada en vez del
+ * consultorio: la misma categoría `CONSULTA` se presta de las dos maneras y la
+ * diferencia está en el servicio, no en la categoría. Sin el parámetro, todo se
+ * comporta como siempre — el catálogo v9 entero es presencial.
+ */
+export function recursosParaCategoria(
+  categoria: CategoriaServicio,
+  modalidad: ModalidadAtencion = 'presencial',
+): RecursoFisico[] {
+  const tipo = modalidad === 'virtual' ? 'VIRTUAL' : CATEGORIA_A_TIPO[categoria];
   return RECURSOS.filter((r) => r.tipo === tipo);
 }
 
