@@ -379,11 +379,25 @@ castellano** es la señal de que el bloque quedó activo.
 > de grabar se pregunta si lo están grabando**. En una consulta médica eso no
 > es un detalle de interfaz.
 
-**Desde dónde se puede embeber.** En el `server` de nginx de Jitsi:
+**Desde dónde se puede embeber.** En `/etc/nginx/sites-available/meet.biowellness.ar.conf`,
+dentro del `server` de **443**, pegada al `Strict-Transport-Security` que el
+paquete ya deja ahí:
 
 ```nginx
-add_header Content-Security-Policy "frame-ancestors 'self' https://app.biowellness.ar https://dashboard.biowellness.ar;" always;
+    add_header Strict-Transport-Security "max-age=63072000" always;
+    add_header Content-Security-Policy "frame-ancestors 'self' https://app.biowellness.ar https://dashboard.biowellness.ar;" always;
 ```
+
+```bash
+cp /etc/nginx/sites-available/meet.biowellness.ar.conf{,.bak}
+sed -i "/add_header Strict-Transport-Security \"max-age=63072000\" always;/a\\    add_header Content-Security-Policy \"frame-ancestors 'self' https://app.biowellness.ar https://dashboard.biowellness.ar;\" always;" \
+  /etc/nginx/sites-available/meet.biowellness.ar.conf
+nginx -t && systemctl reload nginx
+```
+
+El patrón del `sed` lleva las comillas **dobles** a propósito: hay un segundo
+`Strict-Transport-Security` en `location = /_unlock`, escrito con comillas
+simples y con `includeSubDomains`, que así no se toca.
 
 Los dos dominios son el portal del paciente y el Dashboard clínico
 (`dashboard.biowellness.ar`, confirmado el 2026-09-16). **Sin esta línea
@@ -391,8 +405,31 @@ cualquier sitio de internet puede embeber el servidor de videollamadas en una
 página propia**, que es exactamente lo que se usa para engañar a alguien sobre
 con quién está hablando.
 
-⚠️ **Falta aplicarla en el servidor** (editar el `server` de nginx de Jitsi,
-`nginx -t` y recargar). Es el último pendiente de configuración de la fase.
+> **Por qué alcanza con ponerla en el `server` y no en cada `location`.**
+> En nginx `add_header` **no se hereda** en un `location` que declare sus
+> propios `add_header`: se pisan todos, no se suman. Este archivo tiene tres
+> `location` que los declaran (los assets estáticos, `/_unlock` y
+> `/conference-request/v1`), así que esos tres van a responder **sin** la CSP.
+> No importa: `frame-ancestors` gobierna el documento que se embebe, y la
+> página de la sala la sirve `location ~ ^/([^/?&:'"]+)$` → `@root_path`, que
+> **no** declara `add_header` y por lo tanto sí hereda. Un CSS o un `.js` no se
+> embeben en un iframe. Si algún día se le agrega un `add_header` a
+> `@root_path`, hay que repetir la CSP ahí.
+
+**Verificar que quedó** — contra una sala, no contra un asset:
+
+```bash
+curl -sI https://meet.biowellness.ar/tc-prueba | grep -i content-security-policy
+```
+
+Del lado del portal y del Dashboard hace falta además que **su** CSP permita el
+iframe (`frame-src` y `script-src` con `meet.biowellness.ar`): son dos permisos
+distintos, en dos servidores distintos, y hacen falta los dos.
+
+⚠️ Si alguna vez aparece un `add_header X-Frame-Options` (hoy no está, ni en el
+archivo ni en lo que trae `include /etc/jitsi/meet/jaas/*.conf`), hay que
+**sacarlo**: no admite más de un origen y el navegador que lo entiende le da
+prioridad, así que rompería el embebido en uno de los dos dominios.
 
 **Logs sin PHI.** Las salas son UUIDs. El nombre visible aparece en Prosody en
 nivel `debug`/`info`: dejar Prosody en `warn`.
