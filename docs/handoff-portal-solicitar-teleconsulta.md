@@ -15,7 +15,7 @@ Pedir una teleconsulta **usa el mismo camino que ya tienen** para una consulta
 presencial: `bw-disponibilidad` para los horarios, `bw-solicitar-turno` para el
 pedido. Lo único que cambia es el `servicioCodigo`.
 
-Cuatro cosas nuevas que sí les tocan:
+Cinco cosas nuevas que sí les tocan:
 
 1. El catálogo ahora trae servicios **virtuales**, que se reconocen por la
    extensión `modalidad-atencion` (§2).
@@ -27,6 +27,9 @@ Cuatro cosas nuevas que sí les tocan:
 4. Un profesional puede publicar **horarios de video distintos de los
    presenciales** — el Dr. D'Alessandro ya lo hace: lunes y viernes de 18 a 20.
    Cambiar de modalidad **vuelve a pedir la grilla** (§3.2).
+5. Las consultas **salen del selector "Servicio"**: ahora se reconocen por un
+   campo (`profesional`) y no por el nombre de la sección, que es lo que las
+   dejaba colarse (§2.2).
 
 Y un límite que no es técnico: **hoy solo el Dr. D'Alessandro se puede ofrecer**.
 La Dra. Albarellos ya está en el catálogo pero todavía no tiene franjas
@@ -160,6 +163,10 @@ Si van por B, usen el mismo par de palabras en **todo** el circuito —tarjeta,
 confirmación, recordatorio, "Mis turnos"— para que el paciente no tenga que
 aprender dos vocabularios.
 
+> Esto es sobre el selector **dentro** de `/consulta-medica`. Cómo se entra a
+> esa página se decidió aparte y está en §2.2: una tarjeta con dos botones, que
+> ya deja la modalidad elegida al llegar.
+
 ### De paso: el nombre sin punto
 
 En la captura, las dos entradas del Dr. D'Alessandro dicen *"Dr Alejandro"*
@@ -168,6 +175,87 @@ etiquetando con `Practitioner.name`, es esperable: su ficha es la **compartida
 con el Dashboard** y nuestro seed **no le pisa el nombre** a propósito, así que
 ahí manda la grafía que cargó el Dashboard. No es un bug nuestro; lo decimos
 para que no lo persigan.
+
+## 2.2 · Las consultas NO van en el selector de servicios
+
+Reportado desde `/get-care` (Andrés, 2026-09-17): las teleconsultas aparecen en
+el desplegable **"Servicio"**, entre las terapias, bajo secciones *Cardiología*
+y *Endocrinología y Diabetes*.
+
+### Por qué se colaban
+
+Las consultas **presenciales** no aparecen ahí, pero las virtuales sí. La única
+diferencia entre unas y otras en lo que publicamos es la sección (`topic`):
+
+| Servicio | Sección |
+|---|---|
+| Consulta presencial | `Consulta Médica` / `Consulta Director Médico` |
+| Teleconsulta | `Cardiología`, `Endocrinología y Diabetes` |
+
+Si excluyen por **nombre de sección** —que es lo único que explica la captura—
+las teleconsultas se cuelan porque publican **sección propia por especialidad**,
+que ninguna lista de exclusión podía anticipar. Y no es un caso puntual: cada
+especialidad nueva se iba a colar igual (nutrición y kinesiología ya vienen).
+
+### La regla, ahora en un campo
+
+Desde hoy cada servicio atendido por un profesional publica **quién lo
+atiende**:
+
+```ts
+const PROFESIONAL_EXT = 'https://biowellness.ar/fhir/StructureDefinition/profesional';
+const tieneProfesional = (ad) => ad.extension?.some((e) => e.url === PROFESIONAL_EXT);
+
+// El selector "Servicio" es para TERAPIAS:
+const terapias = servicios.filter((ad) => !tieneProfesional(ad));
+```
+
+`valueString` con el código del médico (`MED_DALESSANDRO`), el mismo que ya usan
+para cruzar contra `Practitioner` por
+`identifier=https://biowellness.ar/fhir/CodeSystem/medico|MED_*`. Así que además
+de filtrar les sirve para mostrar quién atiende.
+
+**Reemplaza la lista de nombres de sección**, no se suma a ella: la lista ya era
+frágil y esto es lo que la hace innecesaria. Cubre presenciales y virtuales,
+hoy y cuando entren nutrición, kinesiología e hiperbárica.
+
+> La extensión dice *quién atiende*, no *cómo se reserva*. Hoy los dos conjuntos
+> coinciden —solo las consultas tienen profesional— y la regla se apoya en eso.
+> Si algún día hubiera un servicio con profesional que se reserve por sala, les
+> avisamos y agregamos una marca propia.
+
+### La tarjeta de entrada
+
+Decidido con Andrés (2026-09-17): **una tarjeta, dos botones**, y no dos
+tarjetas. Mismo copy que hoy, con la modalidad como elección explícita:
+
+```
+ℹ️  ¿Buscás una consulta médica?
+    Elegí médico y horario disponible en un paso.
+
+    [ Presencial ]   [ Por videollamada ]
+```
+
+Por qué así y no dos tarjetas: en un teléfono son dos bloques casi idénticos
+seguidos que empujan el selector de servicios bastante abajo, y el copy se
+repite entero para cambiar una palabra. Con dos botones la decisión sigue
+siendo explícita y ocupa la mitad.
+
+Cada botón entra a `/consulta-medica` con la modalidad ya elegida; adentro se
+puede seguir cambiando (§2.1). Sugerencia de copy para el lado virtual, que
+conviene que diga **qué tiene de distinto** y no solo la palabra "virtual":
+
+> **Por videollamada** — desde donde estés, 60 min · $150.000
+
+### Antes de publicarlo: la Dra. Albarellos
+
+Su teleconsulta ya está en el catálogo y **todavía no tiene franjas**. Si la
+ofrecen hoy, el paciente llega a *"todavía no tiene horarios publicados"*
+(§3.1): degrada bien, sin pantalla rota, pero es una opción que no lleva a
+ningún lado. Dos caminos, los dos válidos:
+
+- arrancar la entrada virtual **solo con cardiología**, o
+- esperar a que Andrés defina sus franjas (un renglón y un `seed`).
 
 ## 3. Los horarios: `bw-disponibilidad` cambió (léanlo)
 
@@ -363,6 +451,9 @@ Nada de esto los bloquea para arrancar con cardiología.
       el centro.
 - [ ] En el selector, **ninguna opción tiene el mismo texto que otra**: se ve a
       simple vista cuál es presencial y cuál por videollamada (§2.1).
+- [ ] El desplegable "Servicio" de `/get-care` **no muestra ninguna consulta**,
+      ni presencial ni virtual, y el filtro es por `profesional` y no por el
+      nombre de la sección (§2.2).
 - [ ] Sin consentimiento general o sin cuestionario, el portal no deja llegar al
       pedido.
 

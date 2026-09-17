@@ -44,6 +44,26 @@ export const EXT = {
   familia: `${BASE}/StructureDefinition/familia`,
   familiaOrden: `${BASE}/StructureDefinition/familia-orden`,
   /**
+   * QUIÉN atiende este servicio (código `MED_*` del `CodeSystem/medico`).
+   *
+   * Existe para una pregunta concreta del portal: **¿este servicio se reserva
+   * desde el selector de servicios, o eligiendo profesional y horario?** Las
+   * consultas —presenciales y teleconsultas— se reservan contra la agenda
+   * publicada del profesional, así que no van en la lista de terapias.
+   *
+   * Antes eso se deducía del NOMBRE de la sección ("Consulta Médica"), y por
+   * eso las teleconsultas se colaban: publican sección propia por especialidad
+   * ("Cardiología"), que ninguna lista de exclusión podía anticipar (reportado
+   * por Andrés desde el portal, 2026-09-17). Una especialidad nueva se habría
+   * colado igual.
+   *
+   * Dice quién atiende, no cómo se reserva: hoy los dos conjuntos coinciden
+   * —solo las consultas tienen profesional— y la regla del portal se apoya en
+   * eso. Si algún día un servicio con profesional se reservara por sala, esto
+   * deja de alcanzar y hace falta una marca propia.
+   */
+  profesional: `${BASE}/StructureDefinition/profesional`,
+  /**
    * Precio de lista: lo que costaría comprando las sesiones sueltas. Es el
    * ancla del descuento en combos y paquetes ("sueltas te costarían X"). El
    * PORCENTAJE no se guarda a propósito: se deriva de `precio-usd` contra
