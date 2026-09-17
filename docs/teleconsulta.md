@@ -53,12 +53,15 @@ Nada de esto se reescribe; se extiende. Es la razón por la que el alcance es ch
 **Separada del servidor Medplum.** El video consume CPU y ancho de banda de
 forma distinta a la API, y una llamada nunca puede tirar la agenda.
 
-> **Estado real (2026-09-17):** Jitsi quedó en la misma EC2 que
-> `recepcion.biowellness.ar`, y **está decidido separarlos cuando la CPU lo
-> pida** (Andrés). Que la app de Recepción sea estática y que una teleconsulta
-> de dos personas vaya punto a punto hace que el riesgo hoy sea chico. Lo que
-> hay que mirar —y lo que hay que tocar el día de la mudanza, que no es el
-> DNS— está en el runbook §2.1.
+> **Estado real (2026-09-17):** se cumple donde importa. La **API de Medplum
+> tiene su propia EC2** (`api.medplum.com.ar`), así que una llamada no puede
+> tirar la agenda: la agenda no está en la máquina del video. Lo que sí comparte
+> instancia con Jitsi es el **front estático** de `recepcion.biowellness.ar`
+> —nginx sirviendo archivos, sin proceso detrás—, y **está decidido separarlos
+> cuando la CPU lo pida** (Andrés). Con eso, lo peor que puede pasar mientras
+> tanto es que tarde en abrir la app, no que deje de funcionar. Lo que hay que
+> mirar, y lo que hay que tocar el día de la mudanza (que no es el DNS), está
+> en el runbook §2.1.
 
 | Tema | Propuesta |
 |---|---|

@@ -64,7 +64,7 @@ El equivalente en Docker queda en §9.
 | Disco | 20 GB gp3. No se graba nada |
 | IP | **Elastic IP** — está en el DNS y en la config del JVB |
 | DNS | `A` `meet.biowellness.ar` → la Elastic IP, **antes** de instalar |
-| Convive con | **`recepcion.biowellness.ar`, en la MISMA instancia** (confirmado por Andrés, 2026-09-17). Ver abajo |
+| Convive con | El **front estático** de `recepcion.biowellness.ar`, en la misma instancia. La **API de Medplum está aparte** (`api.medplum.com.ar`, su propia EC2). Ver §2.1 |
 
 **Security group** (entrada). La fila del 80 es la que se olvida y la que
 rompe el certificado:
@@ -87,9 +87,22 @@ rompe el certificado:
 ### 2.1 · Jitsi comparte la instancia con la app de Recepción
 
 **Es así hoy y es una decisión tomada** (Andrés, 2026-09-17): en la misma EC2
-conviven el vhost de `meet.biowellness.ar` y el de `recepcion.biowellness.ar`,
-que está en producción. El plan acordado es **separarlos cuando la CPU lo pida**,
-creando una imagen y levantando `meet` aparte.
+conviven el vhost de `meet.biowellness.ar` y el de `recepcion.biowellness.ar`.
+El plan acordado es **separarlos cuando la CPU lo pida**, creando una imagen y
+levantando `meet` aparte.
+
+**Lo que comparte instancia es solo el front estático.** La **API de Medplum
+está en su propia EC2** (`api.medplum.com.ar`), y ahí es donde vive el trabajo
+de verdad: los bots, las búsquedas FHIR, los cobros. Eso acota mucho el riesgo,
+y conviene tenerlo claro para no sobreestimarlo: lo que comparte máquina con el
+video es **nginx sirviendo archivos**, sin proceso de aplicación detrás. Una vez
+que el navegador de la recepcionista cargó el bundle, **habla directo con la API
+en la otra instancia**: aunque el videobridge saturara esta, la app seguiría
+funcionando. Lo único que se degradaría es la **carga inicial** —abrir la app o
+recargar la página— y el bundle se cachea.
+
+Dicho eso, el principio de `teleconsulta.md` §2 se cumple donde importa: una
+llamada no puede tirar la agenda, porque la agenda no está acá.
 
 Dos consecuencias prácticas de la convivencia, mientras dure:
 
@@ -112,7 +125,8 @@ profesional—. El servidor entra a trabajar en dos casos:
    Este es el caso frecuente y el que no se ve venir.
 
 O sea que **la señal a vigilar no es la agenda de teleconsultas sino cuánto
-relay está haciendo el JVB**. El videobridge publica sus estadísticas
+relay está haciendo el JVB** — y lo que se resiente primero no es la app, sino
+servir el bundle a quien la abre en ese momento. El videobridge publica sus estadísticas
 (conferencias y participantes activos, bitrate) en un endpoint local; conviene
 confirmar el puerto en la instancia antes de apoyarse en él:
 
