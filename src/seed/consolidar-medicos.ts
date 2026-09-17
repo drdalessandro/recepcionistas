@@ -36,19 +36,7 @@ import { MedplumClient } from '@medplum/core';
 import type { Practitioner } from '@medplum/fhirtypes';
 import { MEDICOS } from '../config/medicos.js';
 import { SYSTEM } from '../fhir/identifiers.js';
-
-/** Nombre normalizado para matchear variantes ("D'Alessandro" ≈ "Dalessandro"). */
-function clave(nombre: string): string {
-  return nombre
-    .normalize('NFD')
-    .replace(/[̀-ͯ]/g, '')
-    .toLowerCase()
-    .replace(/[^a-z]/g, '');
-}
-
-function nombreDe(p: Practitioner): string {
-  return p.name?.[0]?.text ?? [p.name?.[0]?.given?.join(' '), p.name?.[0]?.family].filter(Boolean).join(' ');
-}
+import { claveNombre as clave, nombreDePractitioner as nombreDe } from '../fhir/practitioner.js';
 
 function requireEnv(nombre: string): string {
   const v = process.env[nombre];
@@ -92,26 +80,44 @@ async function main(): Promise<void> {
       .filter((p) => clave(nombreDe(p)) === k || tieneId(p))
       .sort((a, b) => (a.meta?.lastUpdated ?? '').localeCompare(b.meta?.lastUpdated ?? ''));
 
+    // El forzado se resuelve ANTES de cualquier atajo: si el operador nombró
+    // una ficha, hay trabajo que hacer aunque la búsqueda por nombre haya
+    // encontrado una sola.
+    const forzadoId = forzados.get(m.codigo);
+    let forzado = forzadoId ? candidatos.find((p) => p.id === forzadoId) : undefined;
+
+    if (forzadoId && !forzado) {
+      // No apareció en la búsqueda por nombre. Antes de rendirse hay que leerlo
+      // directo: la diferencia entre "no lo vemos" y "existe pero no matcheó"
+      // es la diferencia entre un problema de proyecto/permisos y uno de
+      // nombre, y se arreglan en lugares distintos.
+      const suelto = await medplum.readResource('Practitioner', forzadoId).catch(() => undefined);
+      if (!suelto) {
+        console.log(`• ${m.nombre}: ⚠️  Practitioner/${forzadoId} NO existe o no es visible con estas credenciales.`);
+        console.log('    Casi siempre significa que está en OTRO proyecto de Medplum: los identifier');
+        console.log('    no cruzan proyectos, así que no alcanza con agregarlo — hay que decidir cuál');
+        console.log('    de los dos proyectos es el dueño de la ficha del profesional.');
+        console.log(`    fichas visibles acá: ${candidatos.map((p) => p.id).join(' · ') || '(ninguna)'}`);
+        process.exitCode = 1;
+        continue;
+      }
+      // Existe y lo nombraron explícitamente: entra como candidato. El match por
+      // nombre es una heurística para DESCUBRIR duplicados, no una barrera para
+      // una orden directa del operador.
+      console.log(`• ${m.nombre}: Practitioner/${forzadoId} existe pero no matcheó por nombre — se usa igual.`);
+      console.log(`    en el server: "${nombreDe(suelto)}" → clave "${clave(nombreDe(suelto))}"`);
+      console.log(`    en el catálogo: "${m.nombre}" → clave "${clave(m.nombre)}"`);
+      candidatos.push(suelto);
+      forzado = suelto;
+    }
+
     if (candidatos.length === 0) {
       console.log(`• ${m.nombre}: sin fichas en el server (el próximo seed la crea).`);
       continue;
     }
     const unica = candidatos[0]!;
-    if (candidatos.length === 1 && tieneId(unica) && unica.active !== false) {
+    if (!forzado && candidatos.length === 1 && tieneId(unica) && unica.active !== false) {
       console.log(`• ${m.nombre}: una sola ficha (${unica.id}) — OK.`);
-      continue;
-    }
-
-    // El id forzado gana sobre la deducción por antigüedad: es una decisión
-    // que depende de datos de otro repo (quién tiene la matrícula).
-    const forzadoId = forzados.get(m.codigo);
-    const forzado = forzadoId ? candidatos.find((p) => p.id === forzadoId) : undefined;
-    if (forzadoId && !forzado) {
-      // Falla RUIDOSA: elegir otra ficha "porque el id no apareció" es
-      // exactamente lo que no se quiere en una operación que desactiva fichas.
-      console.log(`• ${m.nombre}: ⚠️  --canonico ${forzadoId} NO está entre sus fichas. Se saltea (no se toca nada).`);
-      console.log(`    fichas encontradas: ${candidatos.map((p) => p.id).join(' · ')}`);
-      process.exitCode = 1;
       continue;
     }
     const conId = candidatos.filter(tieneId);

@@ -24,7 +24,7 @@
  *
  * Contrato con el Dashboard: `docs/handoff-dashboard-teleconsulta.md` §1.
  */
-import type { Identifier, Practitioner } from '@medplum/fhirtypes';
+import type { HumanName, Identifier, Practitioner } from '@medplum/fhirtypes';
 import type { Extension } from '@medplum/fhirtypes';
 import { SYSTEM } from './identifiers.js';
 
@@ -62,4 +62,31 @@ export function fusionarPractitioner(existente: Practitioner | undefined, nuestr
     identifier: fusionarIdentifiers(existente.identifier, nuestro.identifier),
     extension: fusionarExtensiones(existente.extension, nuestro.extension),
   };
+}
+
+/** El nombre de una ficha, venga como `text` o estructurado. */
+export function nombreDePractitioner(p: Practitioner): string {
+  const n: HumanName | undefined = p.name?.[0];
+  return n?.text ?? [n?.given?.join(' '), n?.family].filter(Boolean).join(' ');
+}
+
+/**
+ * Clave para decidir si dos fichas son de la MISMA persona.
+ *
+ * Ignora tildes, puntuación y —lo que importa— **el título**. No es cosmético:
+ * este repo publica el nombre del catálogo como un `text` que lo incluye
+ * ("Dr. Alejandro D'Alessandro") y otros repos lo cargan estructurado, con el
+ * "Dr." en `prefix` (que no entra en `nombreDePractitioner`) o sin título.
+ * Comparando con el título adentro, `dralejandrodalessandro` no matchea
+ * `alejandrodalessandro`: **dos fichas de la misma persona quedaban como dos
+ * personas**, que es justo lo que el matcheo tiene que detectar.
+ */
+export function claveNombre(nombre: string): string {
+  return nombre
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z\s]/g, '')
+    .replace(/\b(dr|dra|lic|prof|md)\b/g, '')
+    .replace(/\s/g, '');
 }
