@@ -6,7 +6,7 @@
  *
  * Funciones puras (sin FHIR ni IO) para poder testearlas de punta a punta.
  */
-import type { Moneda, Servicio, Split } from '../domain/types.js';
+import type { ModalidadAtencion, Moneda, Servicio, Split } from '../domain/types.js';
 import { getServicio } from '../config/catalogo.js';
 import { getCombo } from '../config/combos.js';
 import { getMembresia } from '../config/membresias.js';
@@ -285,6 +285,23 @@ export function calcularCobro(items: ItemCobro[], opts: { tc?: number; descuento
 
 /** Fracción de seña por defecto (50%) para confirmar un turno. */
 export const FRACCION_SENA = 0.5;
+
+/** Cobro total por adelantado: no queda saldo. */
+export const FRACCION_TOTAL = 1;
+
+/**
+ * Qué fracción del total se cobra por adelantado para confirmar un turno.
+ *
+ * Presencial: la seña del 50% (R-19); el resto se cobra en el mostrador el día
+ * de la sesión. **Virtual: el 100%** (Andrés, 2026-09-16) — no hay mostrador
+ * donde cobrar el resto, y perseguir un saldo a distancia es trabajo de
+ * Recepción que el sistema puede evitar.
+ *
+ * Ausente = `presencial`: todo el catálogo v9 lo es.
+ */
+export function fraccionAnticipada(modalidad?: ModalidadAtencion): number {
+  return modalidad === 'virtual' ? FRACCION_TOTAL : FRACCION_SENA;
+}
 
 /** Total a cobrar y seña (50%) de una reserva, en ARS. */
 export function calcularSenaARS(
