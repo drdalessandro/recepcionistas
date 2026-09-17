@@ -1,0 +1,65 @@
+/**
+ * La ficha del profesional es **compartida**, y por eso se fusiona en vez de
+ * reemplazarse.
+ *
+ * Todo lo demás que publica el seed —servicios, combos, policies— es nuestro de
+ * punta a punta: el seed lo reemplaza entero y eso es lo correcto (un cambio a
+ * mano en el admin se pierde en la próxima corrida, y está documentado así).
+ * El `Practitioner` **no**: el mismo recurso lo usan el Dashboard clínico —que
+ * le carga la **matrícula**, sin la cual no se pueden firmar recetas— y este
+ * repo, que solo necesita poder encontrarlo por su código de negocio para
+ * armar turnos y agendas.
+ *
+ * Con el upsert genérico (`updateResource({ ...recurso, id })`, un PUT) la
+ * primera corrida del seed le borraría la matrícula al médico: el builder
+ * devuelve `identifier` con un solo elemento, el nuestro. El dato se pierde sin
+ * ruido y se descubre el día que alguien no puede recetar.
+ *
+ * Por eso acá se fija qué es nuestro y qué no:
+ *  - **Nuestro** (se asegura): el `identifier` del código de médico, la
+ *    extensión `tipo-contrato`, y que esté `active`.
+ *  - **Ajeno** (se preserva): absolutamente todo el resto —matrícula
+ *    (`qualification`), `telecom`, `photo`, `gender`, y los identifier de
+ *    otros sistemas.
+ *
+ * Contrato con el Dashboard: `docs/handoff-dashboard-teleconsulta.md` §1.
+ */
+import type { Identifier, Practitioner } from '@medplum/fhirtypes';
+import type { Extension } from '@medplum/fhirtypes';
+import { SYSTEM } from './identifiers.js';
+
+/** Los identifier ajenos, más el nuestro (uno solo, el que manda el catálogo). */
+function fusionarIdentifiers(existentes: Identifier[] | undefined, nuestros: Identifier[] | undefined): Identifier[] {
+  const ajenos = (existentes ?? []).filter((i) => i.system !== SYSTEM.medico);
+  return [...ajenos, ...(nuestros ?? [])];
+}
+
+/** Las extensiones ajenas, más las nuestras (las nuestras ganan por `url`). */
+function fusionarExtensiones(existentes: Extension[] | undefined, nuestras: Extension[] | undefined): Extension[] {
+  const urls = new Set((nuestras ?? []).map((e) => e.url));
+  const ajenas = (existentes ?? []).filter((e) => !urls.has(e.url));
+  return [...ajenas, ...(nuestras ?? [])];
+}
+
+/**
+ * La ficha a escribir: lo que ya había en el servidor, con lo nuestro asegurado.
+ *
+ * Sin `existente` (el médico todavía no está) devuelve la nuestra tal cual, que
+ * es el caso de una instalación nueva.
+ *
+ * **El nombre no se pisa si ya hay uno.** El Dashboard puede tenerlo
+ * estructurado (`given` / `family`) y nosotros lo publicamos como `text`:
+ * reemplazarlo sería degradar el dato para ganar nada.
+ */
+export function fusionarPractitioner(existente: Practitioner | undefined, nuestro: Practitioner): Practitioner {
+  if (!existente) {
+    return nuestro;
+  }
+  return {
+    ...existente,
+    active: true,
+    name: existente.name?.length ? existente.name : nuestro.name,
+    identifier: fusionarIdentifiers(existente.identifier, nuestro.identifier),
+    extension: fusionarExtensiones(existente.extension, nuestro.extension),
+  };
+}
