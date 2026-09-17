@@ -1,13 +1,14 @@
 # Teleconsulta — visión e integración (propuesta)
 
-> **Estado: APROBADA PARA AVANZAR (Andrés, 2026-09-16) · Fase 0 instalada.**
+> **Estado: APROBADA (Andrés, 2026-09-16) · Fase 0 instalada · Fase 1 en curso.**
 > Piloto con **Cardiología, Nutrición y Endocrinología** sobre **Jitsi Meet** en
-> una EC2 propia de AWS. Nada implementado en el repo todavía: la Fase 0 es
-> infraestructura y tiene su runbook en
-> [`teleconsulta-fase0.md`](teleconsulta-fase0.md). Las decisiones puntuales de
-> §10 se cierran **una por una** antes de la Fase 1 (`CLAUDE.md` § Gobernanza);
-> hasta que se contesten siguen abiertas. Cuando estén, de este documento salen
-> dos handoffs: uno para el portal y otro para el Dashboard (Panel Bio).
+> una EC2 propia de AWS. La Fase 0 tiene su runbook en
+> [`teleconsulta-fase0.md`](teleconsulta-fase0.md). De la Fase 1 están en `main`
+> la lógica pura, las policies, los cuatro bots y el catálogo (PRs #225, #226 y
+> #227); falta el tramo de reserva y cobro (lo enumeran los handoffs). Las
+> decisiones cerradas y las abiertas están en §10. Los dos handoffs ya salieron:
+> [`handoff-portal-teleconsulta.md`](handoff-portal-teleconsulta.md) y
+> [`handoff-dashboard-teleconsulta.md`](handoff-dashboard-teleconsulta.md).
 >
 > Interlocutores: este repo (`recepcion.biowellness.ar`, dueño del catálogo, las
 > policies y los bots), el portal del paciente (`app.biowellness.ar`) y el
@@ -98,7 +99,7 @@ Sin DNI, sin email, sin id de paciente en el token. El nombre visible es el
 | `PractitionerRole` | Se asigna a mano desde el admin (`docs/usuarios.md`) | `specialty` con un CodeSystem propio `especialidad` (`cardiologia` · `nutricion` · `endocrinologia`). El mapeo a SNOMED CT se agrega cuando el Federador o una obra social lo pidan |
 | `Schedule` + `Slot` | Agenda publicada por médico, generada por el seed | Igual. **Un turno presencial y uno virtual del mismo profesional ocupan el mismo slot**, así no hay doble reserva. Si un profesional atiende solo virtual, publica solo esa agenda |
 | `Location` | Salas físicas; el consultorio con capacidad 1 | Un recurso **virtual** `R_TELECONSULTA` (tipo `VIRTUAL`, capacidad alta). Nunca bloquea: el cuello real es la agenda del profesional. El mapeo categoría→tipo de recurso (`CONSULTA → CONSULTORIO`) pasa a depender de la modalidad |
-| `Appointment` | Servicio, categoría, participantes, extensiones de cobro | `appointmentType` = `modalidad-atencion|virtual`; extensión `teleconsulta-sala` con el UUID; `supportingInformation` → los `DocumentReference` que el paciente asoció al turno. **El token no se guarda nunca**: se emite a pedido |
+| `Appointment` | Servicio, categoría, participantes, extensiones de cobro | `appointmentType` = `modalidad-atencion|virtual`; extensión `teleconsulta-sala` con el UUID. Los PDFs que el paciente asocia al turno apuntan **desde el documento** (`DocumentReference.context.related` → el turno): el paciente no puede escribir el `Appointment`, así que `supportingInformation` no se usa. **El token no se guarda nunca**: se emite a pedido |
 | `Encounter` | Clase `AMB`, se abre al llegar | Clase **`VR`** (virtual). Se abre cuando el paciente entra a la sala; `period.start` es el dato de "cuánto esperó". `participant` con el profesional cuando entra |
 | `DocumentReference` | Consentimientos firmados; PDFs de laboratorio del portal | Laboratorio, informe de imágenes e informe previo, con `category` de un CodeSystem propio `documento-paciente` (`laboratorio` · `imagenes` · `informe-previo` · `informe-consulta`), `type` LOINC, `context.related` → el turno. El **informe del profesional** después de la consulta también va acá, con `author` = profesional |
 | `Consent` | `atencion`, `procesamiento-datos-salud`, `uso-secundario` | Código nuevo **`teleconsulta`** en `CodeSystem/consentimiento`: el paciente acepta la modalidad y sus límites. Se firma una vez en el portal, misma evidencia (`DocumentReference` enlazado por `sourceReference`) |
@@ -120,7 +121,6 @@ Forma del turno virtual (armada del código que lo escribiría, no un dump):
     { "actor": { "reference": "Patient/…" }, "status": "accepted" },
     { "actor": { "reference": "Practitioner/…" }, "status": "accepted" }
   ],
-  "supportingInformation": [{ "reference": "DocumentReference/…" }],
   "extension": [
     { "url": "https://biowellness.ar/fhir/StructureDefinition/teleconsulta-sala", "valueString": "tc-3f2a…" },
     { "url": "https://biowellness.ar/fhir/StructureDefinition/recurso-fisico", "valueString": "R_TELECONSULTA" },
@@ -130,8 +130,9 @@ Forma del turno virtual (armada del código que lo escribiría, no un dump):
 }
 ```
 
-Recepción lee este recurso entero y **no puede seguir** la referencia a
-`DocumentReference`: su policy no lo lista. Ve que hay adjuntos, no qué dicen.
+Recepción lee este recurso entero. Los adjuntos los cuenta
+`bw-estado-teleconsulta` con `DocumentReference?related=Appointment/<id>`;
+su policy no lista `DocumentReference`, así que ve que hay adjuntos, no qué dicen.
 
 ## 4. Bots
 
@@ -144,7 +145,7 @@ propuesta.**
 |---|---|---|
 | `bw-teleconsulta-token` | Verifica que el turno sea de quien pide (misma defensa que `bw-cancelar-turno`), que esté `booked` y dentro de la ventana. Devuelve `{ dominio, sala, jwt }` de vida corta. Con `rol: 'profesional'` verifica que sea el `participant` y emite moderador | Portal (rol paciente) · Dashboard (rol profesional) |
 | `bw-teleconsulta-presencia` | Registra entrada y salida de cada parte: abre el `Encounter` VR, mueve el turno a `arrived` (paciente en línea) o `checked-in` (en consulta), crea el aviso a Recepción y avisa al profesional. Idempotente por (turno, evento) | Portal y Dashboard al conectarse (IFrame API `videoConferenceJoined` / `Left`). En fase 2, el webhook de Jitsi |
-| `bw-teleconsulta-vigilante` | **Cron cada 5 min:** paciente esperando sin profesional hace más de N minutos, o turno empezado sin paciente. Deja avisos idempotentes en Avisos (`clave` por turno y tipo) | Cron |
+| `bw-teleconsulta-vigilante` | **Cron cada 10 min** (el tope de `tests/cron.test.ts`; el aviso instantáneo lo da el bot de presencia): paciente esperando sin profesional hace más de N minutos, o turno empezado sin paciente. Deja avisos idempotentes en Avisos (`clave` por turno y tipo) | Cron |
 | `bw-estado-teleconsulta` | **Solo lectura, identidad de proyecto:** `{ adjuntos: 2, cuestionarioPrevio: 'completo', pacienteEnLinea: true, profesionalEnLinea: false, esperaMin: 4 }`. Nunca el contenido. Falla cerrado | App de Recepción |
 
 Los que ya existen cambian poco:
@@ -234,8 +235,8 @@ cerrado, sin override.
 ### 6.5 Información previa (PDF desde la app)
 
 - El paciente sube PDFs desde **"Mis estudios"** del portal, que ya existe, pero
-  **asociándolos al turno** (`context.related` → `Appointment`; el turno los
-  referencia en `supportingInformation`). Cada subida lleva el `Consent`
+  **asociándolos al turno** (`context.related` → `Appointment`; el vínculo
+  vive en el documento, no en el turno). Cada subida lleva el `Consent`
   `procesamiento-datos-salud` que el portal ya crea.
 - Categorías: laboratorio, informe de imágenes, informe previo (una derivación,
   un resumen de otro médico), receta vigente.
@@ -335,7 +336,7 @@ Portal                          Medplum (bots)                       Recepción 
 - **Reportes:** teleconsultas por especialidad, tasa de no-show, minutos de
   espera del paciente (del `Encounter.period.start` contra el `start` del turno).
 
-### Portal (handoff aparte)
+### Portal — [`handoff-portal-teleconsulta.md`](handoff-portal-teleconsulta.md)
 
 - Página `/teleconsulta/:id` con el iframe de Jitsi, el botón activo en la
   ventana, y la llamada a los dos bots.
@@ -346,7 +347,7 @@ Portal                          Medplum (bots)                       Recepción 
 - Consentimiento de teleconsulta (mismo mecanismo que el general).
 - Dos tipos nuevos de campanita y su destino.
 
-### Dashboard / Panel Bio (handoff aparte)
+### Dashboard / Panel Bio — [`handoff-dashboard-teleconsulta.md`](handoff-dashboard-teleconsulta.md)
 
 - Botón **Iniciar consulta** con el token de profesional; embebido igual que el portal.
 - Ficha previa: documentos asociados al turno, cuestionario previo, vitales y
@@ -441,5 +442,5 @@ Jitsi lo cubre en fase 2 y de paso da el "salió de la llamada" real.
   alcanza con la `MedicationRequest` que el paciente ve en el portal? Es una
   pregunta para el Director Médico, no técnica.
 - **Zona horaria del cron**, pendiente desde `puesta-en-produccion.md`: el
-  vigilante corre cada 5 min y no le importa, pero el día que se agregue un
+  vigilante corre cada 10 min y no le importa, pero el día que se agregue un
   recordatorio "a las 9 de la mañana" sí.
