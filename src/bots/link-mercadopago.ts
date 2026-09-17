@@ -2,9 +2,14 @@
  * Bot · Link de pago MercadoPago (seña o saldo restante).
  *
  * Crea una preferencia de checkout de MercadoPago y devuelve el link:
- *  - concepto 'sena' (default): el 50% de seña para confirmar el turno
- *    (con el vencimiento de la tentativa si el turno lo tiene, R-19);
+ *  - concepto 'sena' (default): lo que hay que pagar para confirmar el turno
+ *    (con el vencimiento de la tentativa si el turno lo tiene, R-19). **Cuánto
+ *    es depende de la modalidad**: el 50% de seña en un turno presencial, el
+ *    **100%** en uno virtual — una teleconsulta se cobra entera por adelantado
+ *    porque no hay mostrador donde cobrar el resto. La cuenta la hace
+ *    `linkSena` leyendo el turno, no este bot;
  *  - concepto 'saldo': el 50% restante (lee el Invoice pendiente `saldo-{turno}`).
+ *    Un turno virtual no tiene saldo, así que este concepto no aplica.
  * La creación de la preferencia vive en `_shared.crearPreferenciaMP` (la misma
  * que usa el link automático de la reserva). Requiere el secret
  * MERCADOPAGO_ACCESS_TOKEN; si no está, devuelve un aviso claro (el cobro
@@ -26,7 +31,10 @@ export interface ResultadoLinkMP {
   mensaje?: string;
   /** Monto del link (seña o saldo, según concepto). */
   montoARS?: number;
-  /** Compat: monto de la seña cuando concepto = 'sena'. */
+  /**
+   * Compat: el mismo monto que `montoARS` cuando concepto = 'sena'. El nombre
+   * quedó de cuando todo era seña del 50%; en un turno virtual trae el TOTAL.
+   */
   senaARS?: number;
   url?: string;
 }
