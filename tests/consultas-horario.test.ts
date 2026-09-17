@@ -3,6 +3,7 @@ import type { MedplumClient } from '@medplum/core';
 import { getServicio } from '../src/config/catalogo.js';
 import { calcularDisponibilidad, horarioOfrecido, isoHorarioPortal } from '../src/lib/disponibilidad.js';
 import { chequearHorarioDisponible } from '../src/bots/_shared.js';
+import { handler as disponibilidad } from '../src/bots/disponibilidad.js';
 
 /**
  * Regresión de producción (22-ago-2026): `bw-solicitar-turno` rechazaba TODAS
@@ -117,5 +118,72 @@ describe('las terapias siguen usando la grilla de salas (R-13 incluida)', () => 
     // Sin practitionerCodigo el chequeo cae en disponibilidadDePaciente, que
     // toca el servidor: acá alcanza con fijar el ruteo por el campo.
     expect(CONSULTA.practitionerCodigo).toBeTruthy();
+  });
+});
+
+/**
+ * El MISMO error, del otro lado del mostrador: `bw-disponibilidad` —el bot que
+ * le da los chips al portal— le contestaba a una consulta con la grilla de los
+ * CONSULTORIOS, mientras `bw-solicitar-turno` la validaba contra la agenda del
+ * médico. El portal ofrecía horarios que el servidor después rechazaba.
+ *
+ * Con la teleconsulta se vuelve más visible: no ocupa consultorio alguno, así
+ * que la grilla que le tocaba era la de una sala en la que no va a estar.
+ */
+const TELECONSULTA = getServicio('TELECONSULTA_MED_DALESSANDRO');
+
+function evento(servicioCodigo: string): Parameters<typeof disponibilidad>[1] {
+  return { input: { pacienteRef: 'Patient/p1', servicioCodigo }, secrets: {} } as Parameters<typeof disponibilidad>[1];
+}
+
+describe('bw-disponibilidad · consultas y teleconsultas → la agenda del médico', () => {
+  it('LA TELECONSULTA NO SE MIDE CONTRA EL CONSULTORIO', async () => {
+    // El consultorio es R_CONSULTORIO y la videollamada R_TELECONSULTA: la
+    // grilla de salas no tiene nada que decir sobre este turno.
+    expect(TELECONSULTA.modalidad).toBe('virtual');
+    expect(TELECONSULTA.categoria).toBe('CONSULTA');
+    const libre = enDias(3, 16);
+    const r = await disponibilidad(fakeMedplum([isoHorarioPortal(libre)]), evento(TELECONSULTA.codigo));
+    expect(r.fuente).toBe('agenda-medico');
+    expect(r.dias?.map((d) => d.fecha)).toEqual([dia(libre)]);
+    expect(r.dias?.[0]?.horarios[0]?.inicio).toBe(isoHorarioPortal(libre));
+  });
+
+  it('ofrece un horario a 3 días: a una consulta no se le aplica la ventana R-13', async () => {
+    const libre = enDias(3, 16);
+    const r = await disponibilidad(fakeMedplum([isoHorarioPortal(libre)]), evento(CONSULTA.codigo));
+    expect(r.ok).toBe(true);
+    expect(r.ventanaHoras).toBeUndefined();
+    expect(r.dias?.[0]?.horarios[0]?.inicio).toBe(isoHorarioPortal(libre));
+  });
+
+  it('las dos modalidades del mismo médico comparten la agenda publicada', async () => {
+    // Hoy hay UN Schedule por médico (SCH_<codigo>). Reservar a las 16 en
+    // persona deja sin las 16 a la teleconsulta, y está bien: el cuello de
+    // botella es el profesional.
+    expect(TELECONSULTA.practitionerCodigo).toBe(CONSULTA.practitionerCodigo);
+    const libre = enDias(3, 16);
+    const medplum = fakeMedplum([isoHorarioPortal(libre)]);
+    const presencial = await disponibilidad(medplum, evento(CONSULTA.codigo));
+    const virtual = await disponibilidad(medplum, evento(TELECONSULTA.codigo));
+    expect(virtual.dias).toEqual(presencial.dias);
+  });
+
+  it('SIN AGENDA PUBLICADA NO INVENTA HORARIOS (y lo dice)', async () => {
+    // Distinto del chequeo de `bw-solicitar-turno`, que sin agenda deja pasar
+    // para que decida Recepción: un LISTADO que se inventa horarios manda al
+    // paciente a pedir un turno que nadie va a poder dar. Es el caso real de
+    // la Dra. Albarellos mientras no tenga franjas.
+    const sinSchedule = { searchOne: async () => undefined } as unknown as MedplumClient;
+    const r = await disponibilidad(sinSchedule, evento('TELECONSULTA_MED_ALBARELLOS'));
+    expect(r.ok).toBe(true);
+    expect(r.dias).toEqual([]);
+    expect(r.mensaje).toMatch(/todavía no tiene horarios publicados/);
+  });
+
+  it('con agenda publicada y todo tomado, el mensaje es otro', async () => {
+    const r = await disponibilidad(fakeMedplum([]), evento(TELECONSULTA.codigo));
+    expect(r.dias).toEqual([]);
+    expect(r.mensaje).toMatch(/no quedan horarios libres/);
   });
 });

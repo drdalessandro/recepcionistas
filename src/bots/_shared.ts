@@ -1046,23 +1046,51 @@ export async function chequearHorarioDisponible(
   return horarioOfrecido(disp.dias, inicio) ? { ok: true } : { ok: false, alternativas: disp.dias };
 }
 
+/**
+ * Agenda PUBLICADA de un profesional: sus `Slot` libres, agrupados por día.
+ *
+ * `publicada` distingue dos situaciones que NO son la misma y que cada quien
+ * resuelve distinto:
+ *
+ * - `publicada: false` → el médico **no tiene Schedule**. Es un hueco NUESTRO
+ *   (falta definir sus franjas), no una agenda llena. El chequeo de
+ *   `bw-solicitar-turno` lo deja pasar —que decida Recepción— pero el listado
+ *   de `bw-disponibilidad` NO puede inventar horarios: devuelve vacío y lo dice.
+ * - `publicada: true` con `dias: []` → publica agenda y está toda tomada.
+ *
+ * Ojo: devuelve los slots de las DOS modalidades juntas, porque hoy hay **una
+ * sola agenda por médico** (`SCH_<codigo>`). Un turno presencial a las 10:00
+ * deja sin 10:00 también a la teleconsulta, y está bien: el cuello de botella
+ * es el profesional, no la sala.
+ */
+export async function agendaPublicadaDeMedico(
+  medplum: MedplumClient,
+  practitionerCodigo: string,
+): Promise<{ publicada: boolean; libres: Slot[]; dias: DiaDisponible[] }> {
+  const sch = await medplum
+    .searchOne('Schedule', `identifier=${SYSTEM.recursoCodigo}|SCH_${practitionerCodigo}`)
+    .catch(() => undefined);
+  if (!sch?.id) {
+    return { publicada: false, libres: [], dias: [] };
+  }
+  const libres = await medplum
+    .searchResources('Slot', `schedule=Schedule/${sch.id}&status=free&_count=200`)
+    .catch(() => [] as Slot[]);
+  return { publicada: true, libres, dias: agruparPorDia(libres) };
+}
+
 /** Slots libres de la agenda de un médico, y si el pedido está entre ellos. */
 async function chequearAgendaMedico(
   medplum: MedplumClient,
   practitionerCodigo: string,
   inicio: Date,
 ): Promise<ChequeoHorario> {
-  const sch = await medplum
-    .searchOne('Schedule', `identifier=${SYSTEM.recursoCodigo}|SCH_${practitionerCodigo}`)
-    .catch(() => undefined);
-  if (!sch?.id) {
+  const { publicada, libres, dias } = await agendaPublicadaDeMedico(medplum, practitionerCodigo);
+  if (!publicada) {
     // Sin agenda publicada no hay nada que contradecir: que decida Recepción,
     // como con cualquier código que este chequeo no sabe resolver.
     return { ok: true };
   }
-  const libres = await medplum
-    .searchResources('Slot', `schedule=Schedule/${sch.id}&status=free&_count=200`)
-    .catch(() => [] as Slot[]);
 
   // Comparación por INSTANTE. Como texto fallaría en silencio en cuanto se
   // crucen los dos formatos de `start` que hay en el servidor.
@@ -1070,7 +1098,7 @@ async function chequearAgendaMedico(
   if (libres.some((s) => s.start && new Date(s.start).getTime() === pedido)) {
     return { ok: true };
   }
-  return { ok: false, alternativas: agruparPorDia(libres) };
+  return { ok: false, alternativas: dias };
 }
 
 /** Slots sueltos → la forma `DiaDisponible` que ya sabe pintar el portal. */
