@@ -4,8 +4,9 @@
 > Piloto con **Cardiología, Nutrición y Endocrinología** sobre **Jitsi Meet** en
 > una EC2 propia de AWS. La Fase 0 tiene su runbook en
 > [`teleconsulta-fase0.md`](teleconsulta-fase0.md). De la Fase 1 están en `main`
-> la lógica pura, las policies, los cuatro bots y el catálogo (PRs #225, #226 y
-> #227); falta el tramo de reserva y cobro (lo enumeran los handoffs). Las
+> la lógica pura, las policies, los cuatro bots, el catálogo y **la reserva y el
+> cobro del turno virtual** (PRs #225 a #229). Lo que queda para la primera
+> teleconsulta real es deploy, no código: los handoffs lo enumeran. Las
 > decisiones cerradas y las abiertas están en §10. Los dos handoffs ya salieron:
 > [`handoff-portal-teleconsulta.md`](handoff-portal-teleconsulta.md) y
 > [`handoff-dashboard-teleconsulta.md`](handoff-dashboard-teleconsulta.md).
@@ -152,12 +153,12 @@ Los que ya existen cambian poco:
 
 | Bot | Cambio |
 |---|---|
-| `bw-reservar-turno` | Entiende la modalidad: recurso virtual, genera el UUID de la sala, aplica la regla de aptitud virtual (§6.4) en vez de R-20 tal cual |
+| `bw-reservar-turno` | ✅ Entiende la modalidad: **fuerza** el recurso virtual (no lo elige el mostrador), escribe `appointmentType` y genera el UUID de la sala. R-20 queda como está (§6.4) |
 | `bw-disponibilidad` / `chequearHorarioDisponible` | Sin cambios de fondo: las consultas ya se validan contra la agenda del profesional |
-| `bw-link-mercadopago` / `confirmarReserva` | Concepto nuevo `total` (100 % anticipado, §6.3). `es-sena = false`, sin Invoice de saldo |
-| `bw-recordatorios` | Para turnos virtuales, el de 2 h cambia de texto y lleva el link; se agrega la notificación `teleconsulta-lista` |
+| `bw-link-mercadopago` / `confirmarReserva` | ✅ Cobro total anticipado: la fracción sale de `modalidadDeTurno(appt)`, `es-sena = false`, sin Invoice de saldo, y los textos no dicen "seña" |
+| `bw-recordatorios` | ✅ Para turnos virtuales el de 2 h lleva el link **al portal** (nunca a Jitsi: la sala solo abre con token) y notifica `teleconsulta-lista` |
 | `bw-estado-turno` | Incorpora `noshow`, que FHIR tiene y hoy no usamos |
-| `bw-web-push` | Títulos y destino (`/teleconsulta/<id>`) de los dos tipos nuevos |
+| `bw-web-push` | ✅ Títulos y destino (`/teleconsulta/<id>`) de los dos tipos nuevos |
 | `bw-whatsapp-entrante` | Un adjunto entrante recibe la auto-respuesta "subilo en tu portal" (§8) |
 | `bw-proponer-reserva` | Fuera de alcance: las consultas siguen mandando a Atender |
 
@@ -421,7 +422,7 @@ Cada fase se entrega verde antes de seguir (slices verticales, como el resto del
 | Fase | Contenido | Depende de | Cómo se verifica |
 |---|---|---|---|
 | **0 · Infra** | EC2 con Jitsi, dominio, TLS, JWT, coturn, endurecimiento. **Sin tocar el código.** Runbook: [`teleconsulta-fase0.md`](teleconsulta-fase0.md) | AWS y DNS | Nueve pruebas (runbook §7). **Instalado y verificado el 2026-09-16** hasta la prueba 4 (permisos reales); faltan 4G, tres personas, iPhone, token vencido y sala equivocada |
-| **1 · Piloto** | Catálogo y profesionales, policies, los cuatro bots, reserva y cobro total, recordatorio con link, Avisos nuevos, carril en la Agenda, modal del turno. Portal: página, PDFs al turno, cuestionario previo, consentimiento. Dashboard: botón y ficha previa | Las decisiones de §10 | Tests de `src/lib/teleconsulta.ts`; `npm run verify`; `policy:check`; una teleconsulta real de punta a punta con un paciente de prueba |
+| **1 · Piloto** | Catálogo y profesionales, policies, los cuatro bots, reserva y cobro total, recordatorio con link, Avisos nuevos, carril en la Agenda, modal del turno. Portal: página, PDFs al turno, cuestionario previo, consentimiento. Dashboard: botón y ficha previa. **Lo de este repo está hecho** (2026-09-17) salvo el carril y el modal; el portal entregó su Hito 1 | Las decisiones de §10 | Tests de `src/lib/teleconsulta.ts`; `npm run verify`; `policy:check`; una teleconsulta real de punta a punta con un paciente de prueba |
 | **2 · Endurecer** | Presencia desde el servidor de Jitsi por webhook (`/webhooks/jitsi`, misma receta de nginx; módulo de eventos de Prosody), no-show automático, informe post-consulta, "pasar a la historia clínica" desde Mensajes, imágenes DICOM, receta electrónica, obras sociales, *Proponer* para consultas | Lo aprendido del piloto | Ídem + prueba de reconexión y de webhook con firma |
 
 **Por qué la presencia arranca desde el front y no desde Jitsi.** El evento del

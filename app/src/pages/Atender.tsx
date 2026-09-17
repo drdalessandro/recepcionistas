@@ -872,7 +872,8 @@ function PanelReserva({
 
   const esCombo = seleccion ? COMBOS.some((c) => c.codigo === seleccion) : false;
   const servicio = !esCombo && seleccion ? SERVICIOS.find((s) => s.codigo === seleccion) : undefined;
-  const salas = servicio ? recursosParaCategoria(servicio.categoria) : [];
+  // Con la modalidad: una teleconsulta ofrece la sala virtual, no el consultorio.
+  const salas = servicio ? recursosParaCategoria(servicio.categoria, servicio.modalidad) : [];
 
   // R-03: al elegir una Terapia Biológica, el sistema pregunta si el paciente
   // ya firmó en el portal, en vez de confiar en la memoria de la recepcionista

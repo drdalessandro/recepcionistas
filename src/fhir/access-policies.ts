@@ -135,12 +135,20 @@ const ATENCION_CLINICA: NonNullable<AccessPolicy['resource']> = [
   { resourceType: 'DiagnosticReport' },
   { resourceType: 'Consent', readonly: true },
   { resourceType: 'Binary' },
-  // Ejecutar los bots de la videollamada: el token de moderador y el registro
-  // de presencia. Ningún otro.
+  // Su propia ficha profesional. Parece de más y no lo es: los bots se crean
+  // con `runAsUser`, así que `bw-teleconsulta-token` lee el `Practitioner` con
+  // los permisos de quien pide el token para poner su nombre en la sala. Sin
+  // esta entrada el médico entra a la videollamada como "Participante" —el bot
+  // no deja a nadie afuera por no poder leer un nombre— y el paciente no sabe
+  // con quién está hablando.
+  { resourceType: 'Practitioner', readonly: true },
+  // Ejecutar los bots de la videollamada: el token de moderador, el registro de
+  // presencia y el cierre de la consulta (`bw-estado-turno` deja el turno en
+  // `fulfilled` y cierra el Encounter en una sola operación). Ningún otro.
   {
     resourceType: 'Bot',
     readonly: true,
-    criteria: 'Bot?name=bw-teleconsulta-token,bw-teleconsulta-presencia',
+    criteria: 'Bot?name=bw-teleconsulta-token,bw-teleconsulta-presencia,bw-estado-turno',
   },
 ];
 

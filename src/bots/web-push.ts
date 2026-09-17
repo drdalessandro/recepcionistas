@@ -27,6 +27,7 @@ import type { BotEvent, MedplumClient } from '@medplum/core';
 import type { Communication, Extension, Patient } from '@medplum/fhirtypes';
 import webpush from 'web-push';
 import { NOTIFICACION_SYSTEM, type TipoNotificacionPortal } from './_shared.js';
+import { rutaTeleconsulta } from '../lib/teleconsulta.js';
 
 /** Extensión repetible en `Patient`, una por dispositivo. Contrato del portal. */
 export const WEB_PUSH_EXT = 'https://biowellness.ar/fhir/StructureDefinition/web-push';
@@ -37,6 +38,11 @@ const TITULOS: Record<TipoNotificacionPortal, string> = {
   'reserva-vencida': 'Se liberó tu lugar',
   'pago-recibido': 'Pago recibido',
   recordatorio: 'Recordatorio de turno',
+  'teleconsulta-lista': 'Tu videollamada',
+  // Sin decir QUÉ documento: el título lo lee cualquiera que mire la pantalla
+  // bloqueada del teléfono. "Tu laboratorio" ya sería contarle a esa persona
+  // algo de la salud del paciente (principio 3).
+  'documento-nuevo': 'Novedades de tu consulta',
   general: 'Biowellness',
 };
 
@@ -53,6 +59,12 @@ export function tipoDe(comm: Communication): string {
  */
 export function urlDestino(comm: Communication, tipo: string): string {
   const about = comm.about?.[0]?.reference ?? '';
+  // Antes que la regla general de Appointment: el aviso de la videollamada
+  // lleva a la sala, no a la ficha del turno. Es el único tap del que depende
+  // que el paciente llegue a tiempo a una consulta médica.
+  if (tipo === 'teleconsulta-lista' && about.startsWith('Appointment/')) {
+    return rutaTeleconsulta(about.slice('Appointment/'.length));
+  }
   if (about.startsWith('Appointment/') || about.startsWith('Invoice/')) {
     return '/account/membership';
   }

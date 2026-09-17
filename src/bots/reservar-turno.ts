@@ -11,11 +11,13 @@
  */
 import type { BotEvent, MedplumClient } from '@medplum/core';
 import type { Appointment, AppointmentParticipant, Slot } from '@medplum/fhirtypes';
+import { randomUUID } from 'node:crypto';
 import type { Servicio } from '../domain/types.js';
 import { getServicio, nombreServicioRecepcion } from '../config/catalogo.js';
 import type { PerfilReserva } from '../config/reglas.js';
 import { EXT, SYSTEM } from '../fhir/identifiers.js';
-import { clasificacionDeServicio } from '../fhir/appointment.js';
+import { clasificacionDeServicio, modalidadAppointmentType } from '../fhir/appointment.js';
+import { nombreSala } from '../lib/teleconsulta.js';
 import { aptitudDePaciente, cargarReservasDelDia, consumirSesionDePlan, enviarWhatsApp, extraerCodigos, linkSena, resolverSolicitudTurno, scheduleIdDeRecurso, tieneBloqueoPago, type ConsumoPlan } from './_shared.js';
 import { vencimientoSena } from '../lib/sena.js';
 
@@ -49,7 +51,7 @@ import {
   type ReservaRecurso,
   type ResultadoValidacion,
 } from '../lib/reglas-turno.js';
-import { RECURSOS_POR_CODIGO } from '../config/recursos.js';
+import { RECURSO_TELECONSULTA, RECURSOS_POR_CODIGO } from '../config/recursos.js';
 
 export interface EntradaReserva {
   pacienteRef: string; // "Patient/123"
@@ -179,6 +181,12 @@ export async function handler(
 ): Promise<ResultadoReserva> {
   const e = event.input;
   const servicio = getServicio(e.servicioCodigo);
+  const esVirtual = servicio.modalidad === 'virtual';
+  // El "lugar" de una teleconsulta no se elige: es siempre la sala virtual. Se
+  // ignora lo que venga en el input a propósito — un turno virtual apuntando al
+  // consultorio se lo trabaría por una hora a un paciente que sí tiene que venir,
+  // y el error recién se vería en la grilla del día.
+  const recursoCodigo = esVirtual ? RECURSO_TELECONSULTA : e.recursoCodigo;
   const inicio = new Date(e.inicio);
   const fin = new Date(inicio.getTime() + servicio.duracionMin * 60_000);
   const ahora = new Date();
@@ -204,7 +212,7 @@ export async function handler(
     servicio,
     inicio,
     fin,
-    recursoCodigo: e.recursoCodigo,
+    recursoCodigo,
     ocupantes: e.ocupantes,
     contraindicacionesActivas,
     prescripcionActiva: e.prescripcionActiva ?? false,
@@ -222,11 +230,11 @@ export async function handler(
   }
 
   // Crear Slot ocupado + Appointment.
-  const scheduleId = await scheduleIdDeRecurso(medplum, e.recursoCodigo);
+  const scheduleId = await scheduleIdDeRecurso(medplum, recursoCodigo);
   if (!scheduleId) {
     return {
       ok: false,
-      bloqueos: [{ regla: 'R-07', nivel: 'bloqueo', mensaje: `El recurso ${e.recursoCodigo} no tiene agenda (Schedule).` }],
+      bloqueos: [{ regla: 'R-07', nivel: 'bloqueo', mensaje: `El recurso ${recursoCodigo} no tiene agenda (Schedule).` }],
       advertencias: resultado.advertencias,
       creado: false,
     };
@@ -254,7 +262,7 @@ export async function handler(
     start: inicio.toISOString(),
     end: fin.toISOString(),
     extension: [
-      { url: EXT.recursoFisico, valueString: e.recursoCodigo },
+      { url: EXT.recursoFisico, valueString: recursoCodigo },
       { url: EXT.ocupantes, valueInteger: e.ocupantes ?? 1 },
     ],
   });
@@ -300,14 +308,24 @@ export async function handler(
     description: nombreServicioRecepcion(servicio),
     // Qué se HACE, en los campos nativos de FHIR (el Panel Bio cuenta acá).
     ...clasificacionDeServicio(e.servicioCodigo),
+    // CÓMO se hace. Solo se escribe cuando es virtual: agregarle `presencial` a
+    // los miles de turnos que ya existen no diría nada nuevo, y `modalidadDeTurno`
+    // ya lee la ausencia como presencial.
+    ...(esVirtual ? { appointmentType: modalidadAppointmentType('virtual') } : {}),
     start: inicio.toISOString(),
     end: fin.toISOString(),
     slot: slotRefs,
     participant,
     extension: [
-      { url: EXT.recursoFisico, valueString: e.recursoCodigo },
+      { url: EXT.recursoFisico, valueString: recursoCodigo },
       { url: EXT.ocupantes, valueInteger: e.ocupantes ?? 1 },
       { url: EXT.itemTipo, valueCode: 'servicio' },
+      // La sala de la videollamada, creada ACÁ y una sola vez: es lo único del
+      // circuito de teleconsulta que persiste (el token se emite a pedido y no
+      // se guarda nunca). Un UUID y no el id del turno ni el nombre del paciente:
+      // este string viaja en URLs, en el historial del navegador y en los logs
+      // del servidor de video, que es infraestructura fuera de Medplum.
+      ...(esVirtual ? [{ url: EXT.teleconsultaSala, valueString: nombreSala(randomUUID()) }] : []),
       { url: EXT.itemCodigo, valueString: e.servicioCodigo },
       // R-03: en las TB queda registrado de dónde salió la afirmación del
       // consentimiento (verificado en el portal vs declarado en el mostrador).
@@ -340,11 +358,14 @@ export async function handler(
     // No cargar nunca el secret TWILIO_CONTENT_SID_RESERVA_TENTATIVA
     // (ver src/seed/crear-plantillas.ts).
     const link = await linkSena(medplum, event.secrets, appointment).catch(() => undefined);
-    const monto = link ? `$${link.senaARS.toLocaleString('es-AR')}` : 'del 50%';
+    const monto = link ? `$${link.senaARS.toLocaleString('es-AR')}` : esVirtual ? 'de la consulta' : 'del 50%';
+    // La teleconsulta se cobra entera: decirle "seña" a un pago del 100% deja
+    // al paciente esperando un saldo que no existe.
+    const queAbona = esVirtual ? `aboná la consulta (${monto})` : `aboná la seña de ${monto}`;
     await enviarWhatsApp(medplum, event.secrets, {
       template: 'reserva-tentativa',
       pacienteRef: e.pacienteRef,
-      body: `Reservamos tu turno de ${nombreServicioRecepcion(servicio)} para el ${fmtFechaHora.format(inicio)}. Para confirmarlo aboná la seña de ${monto}${
+      body: `Reservamos tu turno de ${nombreServicioRecepcion(servicio)} para el ${fmtFechaHora.format(inicio)}. Para confirmarlo ${queAbona}${
         link?.url ? ` acá: ${link.url}` : ' (recepción te pasa el medio de pago)'
       } — tenés tiempo hasta las ${fmtHoraCorta.format(vence)}; después el lugar se libera.`,
     });

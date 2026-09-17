@@ -15,6 +15,9 @@
 import type { BotEvent, MedplumClient } from '@medplum/core';
 import type { Appointment } from '@medplum/fhirtypes';
 import { SYSTEM } from '../fhir/identifiers.js';
+import { modalidadDeTurno } from '../fhir/appointment.js';
+import { PORTAL_URL } from '../lib/onboarding.js';
+import { rutaTeleconsulta } from '../lib/teleconsulta.js';
 import { recordatorioDue, VENTANA_MAX_MS, type TipoRecordatorio } from '../lib/recordatorios.js';
 import { enviarWhatsApp, notificarPortal } from './_shared.js';
 
@@ -49,9 +52,22 @@ const fmtHora = new Intl.DateTimeFormat('es-AR', {
   timeZone: 'America/Argentina/Buenos_Aires',
 });
 
-function cuerpo(tipo: TipoRecordatorio, descripcion: string, inicio: Date): string {
+function cuerpo(tipo: TipoRecordatorio, descripcion: string, inicio: Date, linkSala?: string): string {
   if (tipo === '2h') {
+    // Virtual: el de 2 h es el mensaje que TRAE el link. Es el único momento en
+    // que el paciente recibe por dónde entrar, así que además le pide probar
+    // cámara y micrófono — descubrir que el micrófono no anda a la hora en punto
+    // es perder la consulta entera.
+    if (linkSala) {
+      return (
+        `Biowellness: ¡tu videollamada de ${descripcion} es hoy a las ${fmtHora.format(inicio)}! ` +
+        `Entrá desde acá: ${linkSala} — podés entrar 15 minutos antes para probar cámara y micrófono.`
+      );
+    }
     return `Biowellness: ¡tu turno de ${descripcion} es hoy a las ${fmtHora.format(inicio)}! Te esperamos en un rato.`;
+  }
+  if (linkSala) {
+    return `Biowellness: te recordamos tu videollamada de ${descripcion} el ${fmtFechaHora.format(inicio)}. El link para entrar te lo mandamos 2 horas antes.`;
   }
   return `Biowellness: te recordamos tu turno de ${descripcion} el ${fmtFechaHora.format(inicio)}. ¡Te esperamos!`;
 }
@@ -103,22 +119,34 @@ export async function handler(
     const pacienteRef = appt.participant?.find((p) => p.actor?.reference?.startsWith('Patient/'))?.actor?.reference;
     const descripcion = (appt.description ?? 'tu turno').split(' · ')[0] ?? 'tu turno';
 
+    // Videollamada: el link va SIEMPRE al portal, nunca a la sala de Jitsi. La
+    // sala solo se abre con un token que se emite a pedido y que caduca; un link
+    // directo por WhatsApp sería un link que no funciona, y encima reenviable.
+    const esVirtual = modalidadDeTurno(appt) === 'virtual';
+    const linkSala = esVirtual ? `${PORTAL_URL}${rutaTeleconsulta(appt.id!)}` : undefined;
+    const texto = cuerpo(tipo, descripcion, inicio, linkSala);
+
     await enviarWhatsApp(medplum, event.secrets, {
-      template: `recordatorio-${tipo}`,
+      // Las plantillas aprobadas de recordatorio dicen "turno" y no llevan link.
+      // Para las videollamadas se usa un nombre SIN secret cargado, que cae a la
+      // genérica con el cuerpo entero (mismo camino que `reserva-tentativa`).
+      template: esVirtual ? `recordatorio-${tipo}-virtual` : `recordatorio-${tipo}`,
       identifier: { system: SYSTEM.communication, value: key },
       pacienteRef,
       // Plantillas: {{1}} servicio · {{2}} hora (2h) / fecha y hora (48h).
       variables: [descripcion, tipo === '2h' ? fmtHora.format(inicio) : fmtFechaHora.format(inicio)],
-      body: cuerpo(tipo, descripcion, inicio),
+      body: texto,
     });
 
-    // Campanita del portal (misma idempotencia que el WhatsApp, con su propia clave).
+    // Campanita del portal (misma idempotencia que el WhatsApp, con su propia
+    // clave). El de 2 h de una videollamada va con su tipo propio: es el que el
+    // portal manda a la sala y el que el web push titula "Tu videollamada".
     await notificarPortal(medplum, {
-      tipo: 'recordatorio',
+      tipo: esVirtual && tipo === '2h' ? 'teleconsulta-lista' : 'recordatorio',
       pacienteRef,
       about: `Appointment/${appt.id}`,
       identifier: { system: SYSTEM.communication, value: `portal-${key}` },
-      texto: cuerpo(tipo, descripcion, inicio),
+      texto,
     });
 
     if (tipo === '2h') {

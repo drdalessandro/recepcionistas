@@ -31,6 +31,7 @@ import { estadoConsentimiento, type RegistroConsentimiento } from '../lib/consen
 import { evaluarScreening } from '../lib/screening.js';
 import { indiceSolicitudAResolver } from '../lib/solicitudes.js';
 import { esPlanBW, estadoDeCoverage, planCodigoDeCoverage } from '../fhir/coverage.js';
+import { modalidadDeTurno } from '../fhir/appointment.js';
 import {
   calcularDisponibilidad,
   horarioOfrecido,
@@ -42,13 +43,13 @@ import {
   type SolicitudPendiente,
 } from '../lib/disponibilidad.js';
 import { MERCADOPAGO, type PerfilReserva } from '../config/reglas.js';
-import type { IntensidadMembresia, Servicio } from '../domain/types.js';
+import type { IntensidadMembresia, ModalidadAtencion, Servicio } from '../domain/types.js';
 import { resolverTC } from '../config/tipo-cambio.js';
 import { CATEGORIA_COMERCIAL, getServicio, nombreServicioRecepcion } from '../config/catalogo.js';
 import { getMembresia } from '../config/membresias.js';
 import { claveSemana, perteneceASemana } from '../lib/semana-membresia.js';
 import { getPaquete } from '../config/paquetes.js';
-import { calcularSenaARS, type ItemCobro, type LineaCobro, type TipoItemCobro } from '../lib/pricing.js';
+import { calcularSenaARS, fraccionAnticipada, type ItemCobro, type LineaCobro, type TipoItemCobro } from '../lib/pricing.js';
 import { lineaComercialDeItem } from '../lib/cobros.js';
 import { cicloMes, motivoNoDisponible, parseClavePlan, saldoPlan } from '../lib/planes.js';
 import { evaluarCancelacion, type ReservaRecurso } from '../lib/reglas-turno.js';
@@ -1295,6 +1296,17 @@ export interface PreferenciaMP {
 }
 
 /**
+ * Cómo se llama lo que el paciente paga por adelantado.
+ *
+ * Está acá y no repetido en cada lugar porque este texto lo ve el paciente en
+ * el checkout de MercadoPago, Administración en el Invoice y el contador en el
+ * ChargeItem: si los tres no dicen lo mismo, la conciliación se hace a mano.
+ */
+function conceptoAnticipado(modalidad: ModalidadAtencion, descripcion: string): string {
+  return modalidad === 'virtual' ? `Consulta por videollamada · ${descripcion}` : `Seña 50% · ${descripcion}`;
+}
+
+/**
  * Crea una preferencia de checkout de MercadoPago y devuelve el link de pago.
  * Compartida por el link manual (bw-link-mercadopago) y el link automático de
  * la reserva tentativa (R-19). Con `expira`, el link deja de aceptar pagos en
@@ -1394,10 +1406,17 @@ export async function linkSena(
     throw new Error('El turno no tiene ítem asociado para calcular la seña.');
   }
   const tc = opts?.tc ?? (await leerTcVigente(medplum));
-  const { senaARS } = calcularSenaARS([{ tipo: itemTipo as ItemCobro['tipo'], codigo: itemCodigo }], { tc });
+  // La fracción sale del TURNO, no de un parámetro: una teleconsulta se cobra
+  // entera por adelantado y no hay mostrador donde cobrar el resto, así que un
+  // llamador que se olvidara de pasarla dejaría un saldo que nadie va a cobrar.
+  const modalidad = modalidadDeTurno(appt);
+  const { senaARS } = calcularSenaARS([{ tipo: itemTipo as ItemCobro['tipo'], codigo: itemCodigo }], {
+    tc,
+    fraccion: fraccionAnticipada(modalidad),
+  });
   const venceIso = appt.extension?.find((e) => e.url === EXT.venceSena)?.valueDateTime;
   const pref = await crearPreferenciaMP(secrets, {
-    titulo: `Seña 50% · ${appt.description ?? itemCodigo}`,
+    titulo: conceptoAnticipado(modalidad, appt.description ?? itemCodigo),
     montoARS: senaARS,
     // Compat con el webhook: las señas viajan con el appointmentId pelado.
     referencia: appt.id,
@@ -1487,8 +1506,15 @@ export async function confirmarReserva(
   }
 
   const tc = opts.tc ?? (await leerTcVigente(medplum));
-  const { totalARS, senaARS } = calcularSenaARS([{ tipo: itemTipo as ItemCobro['tipo'], codigo: itemCodigo }], { tc });
+  const modalidad = modalidadDeTurno(appt);
+  const { totalARS, senaARS } = calcularSenaARS([{ tipo: itemTipo as ItemCobro['tipo'], codigo: itemCodigo }], {
+    tc,
+    fraccion: fraccionAnticipada(modalidad),
+  });
 
+  // Virtual: el anticipo ES el total, así que `saldoARS` da 0 y más abajo no se
+  // emite el Invoice de saldo. No hay rama aparte para eso: la misma cuenta que
+  // deja 50% pendiente en un turno presencial deja 0 en uno virtual.
   const saldoARS = totalARS - senaARS;
   const claveSena = `sena-${opts.appointmentId}`;
   const claveSaldo = `saldo-${opts.appointmentId}`;
@@ -1566,7 +1592,7 @@ export async function confirmarReserva(
   // ChargeItems ni WhatsApp. El ganador se reconoce porque el Invoice volvió
   // con SU timestamp (`date`, precisión de ms).
   const fecha = new Date().toISOString();
-  const descripcionSena = `Seña 50% · ${appt.description ?? itemCodigo}`;
+  const descripcionSena = conceptoAnticipado(modalidad, appt.description ?? itemCodigo);
   const invoice = await medplum.createResourceIfNoneExist<Invoice>(
     {
       resourceType: 'Invoice',
@@ -1588,7 +1614,10 @@ export async function confirmarReserva(
       totalNet: { value: senaARS, currency: 'ARS' },
       totalGross: { value: senaARS, currency: 'ARS' },
       extension: [
-        { url: EXT.esSena, valueBoolean: true },
+        // `es-sena` dice si queda algo por cobrar. En una teleconsulta NO: este
+        // Invoice es el cobro completo, y marcarlo como seña le haría creer a
+        // Administración que falta la otra mitad.
+        { url: EXT.esSena, valueBoolean: modalidad !== 'virtual' },
         { url: EXT.tcAplicado, valueDecimal: tc },
         ...(opts.medioPago ? [extMedioPago(opts.medioPago)] : []),
       ],
@@ -1678,14 +1707,24 @@ export async function confirmarReserva(
 
   const saldoTexto =
     saldoARS > 0 ? `$${saldoARS.toLocaleString('es-AR')} (se abona el día de la sesión)` : 'sin saldo pendiente';
+  const montoTexto = `$${senaARS.toLocaleString('es-AR')}`;
   await enviarWhatsApp(medplum, secrets, {
-    template: 'turno-confirmado',
+    // La plantilla aprobada por Meta dice "seña" en su texto fijo, y en una
+    // teleconsulta eso sería falso: no hay saldo. Para los virtuales se manda
+    // un nombre de plantilla SIN secret cargado, que cae a la genérica
+    // ({{1}} = el cuerpo entero) — el mismo camino que `reserva-tentativa`
+    // después de los diez rechazos de Meta. No cargar nunca un ContentSid para
+    // `turno-confirmado-virtual`: volvería a decir "seña".
+    template: modalidad === 'virtual' ? 'turno-confirmado-virtual' : 'turno-confirmado',
     pacienteRef,
     // Plantilla aprobada: {{1}} turno · {{2}} seña · {{3}} saldo (ver docs/whatsapp-plantillas.md).
-    variables: [appt.description ?? 'tu sesión', `$${senaARS.toLocaleString('es-AR')}`, saldoTexto],
-    body: `Biowellness: ¡tu turno quedó confirmado! ${appt.description ?? ''}. Recibimos la seña de $${senaARS.toLocaleString('es-AR')}${
-      saldoARS > 0 ? ` (saldo restante: $${saldoARS.toLocaleString('es-AR')}, se abona el día de la sesión)` : ''
-    }. ¡Te esperamos!`,
+    variables: [appt.description ?? 'tu sesión', montoTexto, saldoTexto],
+    body:
+      modalidad === 'virtual'
+        ? `Biowellness: ¡tu videollamada quedó confirmada! ${appt.description ?? ''}. Recibimos el pago de ${montoTexto}. El link para entrar te llega 2 horas antes, desde tu portal. ¡Te esperamos!`
+        : `Biowellness: ¡tu turno quedó confirmado! ${appt.description ?? ''}. Recibimos la seña de ${montoTexto}${
+            saldoARS > 0 ? ` (saldo restante: $${saldoARS.toLocaleString('es-AR')}, se abona el día de la sesión)` : ''
+          }. ¡Te esperamos!`,
   });
 
   // Campanita del portal: confirmación de la reserva + constancia del pago de la
@@ -2318,7 +2357,16 @@ export async function consumirSesionDePlan(
 /** CodeSystem compartido con el portal. NO cambiar sin tocar el portal. */
 export const NOTIFICACION_SYSTEM = 'https://biowellness.ar/fhir/CodeSystem/notificacion';
 
-export type TipoNotificacionPortal = 'reserva-confirmada' | 'reserva-vencida' | 'pago-recibido' | 'recordatorio' | 'general';
+export type TipoNotificacionPortal =
+  | 'reserva-confirmada'
+  | 'reserva-vencida'
+  | 'pago-recibido'
+  | 'recordatorio'
+  /** El link de la videollamada ya está disponible (sale con el aviso de 2 h). */
+  | 'teleconsulta-lista'
+  /** El profesional dejó un informe, una orden o una receta después de atender. */
+  | 'documento-nuevo'
+  | 'general';
 
 const fmtTurnoNotif = new Intl.DateTimeFormat('es-AR', {
   weekday: 'long',

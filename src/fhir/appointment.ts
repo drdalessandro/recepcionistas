@@ -17,8 +17,9 @@
  * la categoría en el turno, quien cuenta no necesita mantener una tabla de
  * equivalencias ni se rompe cuando el catálogo suma un servicio nuevo.
  */
-import type { CodeableConcept } from '@medplum/fhirtypes';
+import type { Appointment, CodeableConcept } from '@medplum/fhirtypes';
 import { CATEGORIA_COMERCIAL, getServicio } from '../config/catalogo.js';
+import type { ModalidadAtencion } from '../domain/types.js';
 import { SYSTEM } from './identifiers.js';
 
 export interface ClasificacionServicio {
@@ -45,4 +46,35 @@ export function clasificacionDeServicio(servicioCodigo: string): ClasificacionSe
       },
     ],
   };
+}
+
+/**
+ * `appointmentType` del turno: **cómo** se presta, presencial o por videollamada.
+ *
+ * Va en el campo nativo y no en una extensión nuestra por el mismo motivo que
+ * `serviceType`: FHIR tiene el campo, y quien lee el turno de afuera (el Panel
+ * Bio, el portal, Administración) no debería tener que aprenderse una extensión
+ * para saber si la consulta fue por video. También es el campo por el que se
+ * busca: `Appointment?appointment-type=<system>|virtual`.
+ */
+export function modalidadAppointmentType(modalidad: ModalidadAtencion): CodeableConcept {
+  return {
+    coding: [{ system: SYSTEM.modalidadAtencion, code: modalidad }],
+    text: modalidad === 'virtual' ? 'Por videollamada' : 'Presencial',
+  };
+}
+
+/**
+ * Modalidad de un turno ya creado. **Ausente = `presencial`**: todos los turnos
+ * anteriores a la teleconsulta lo son, y tratarlos de otra manera cambiaría
+ * retroactivamente cómo se cobran.
+ *
+ * Es la función por la que el cobro decide si pide seña o el total (ver
+ * `fraccionAnticipada` en `src/lib/pricing.ts`): que salga del TURNO y no de un
+ * parámetro es lo que evita que un llamador se olvide de pasarla y le cobre a
+ * una teleconsulta la mitad, sin saldo que reclamar después.
+ */
+export function modalidadDeTurno(appt: Appointment): ModalidadAtencion {
+  const code = appt.appointmentType?.coding?.find((c) => c.system === SYSTEM.modalidadAtencion)?.code;
+  return code === 'virtual' ? 'virtual' : 'presencial';
 }

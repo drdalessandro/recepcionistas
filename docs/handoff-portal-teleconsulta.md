@@ -8,11 +8,11 @@
 > infraestructura y por qué de cada decisión en
 > [`teleconsulta-fase0.md`](teleconsulta-fase0.md).
 >
-> **Estado (2026-09-17):** los dos bots que el portal llama están en `main`,
-> testeados y listados en su AccessPolicy. **Faltan cuatro piezas de nuestro
-> lado** para que una teleconsulta se pueda probar de punta a punta, y están
-> enumeradas en §9 con su orden. Nada de lo que está acá va a cambiar de forma:
-> pueden construir contra este documento.
+> **Estado (2026-09-17, segunda revisión).** El portal contestó con el Hito 1
+> construido y cuatro preguntas: **están las cuatro contestadas en §12**, y lo
+> que dependía de nosotros ya está implementado. De los ocho pendientes de §9
+> quedan tres, todos de deploy o de textos de terceros. La tabla de §0 está al
+> día.
 >
 > Interlocutor: repo del portal del paciente (`app.biowellness.ar`). Este repo:
 > `recepcion.biowellness.ar`.
@@ -56,10 +56,10 @@
 | Servidor `meet.biowellness.ar` con token y moderador por token | EC2 | ✅ verificado (runbook §7, pruebas 1–4) |
 | `frame-ancestors` con `app.biowellness.ar` | nginx de Jitsi | ⏳ falta aplicar en el servidor |
 | Deploy de los bots + Project Secrets `JITSI_*` | `npm run deploy:bots` | ⏳ |
-| `bw-reservar-turno` genera la sala y marca la modalidad | `src/bots/reservar-turno.ts` | ⏳ **sin esto no hay turnos virtuales** |
-| Extensión `modalidad-atencion` en la `ActivityDefinition` | `src/seed/builders.ts` | ⏳ |
-| Recordatorio de 2 h con link + campanita `teleconsulta-lista` | `src/bots/recordatorios.ts` | ⏳ |
-| Tipos `teleconsulta-lista` y `documento-nuevo` en el CodeSystem de notificación | `src/bots/_shared.ts` | ⏳ |
+| `bw-reservar-turno` genera la sala y marca la modalidad | `src/bots/reservar-turno.ts` | ✅ **implementado** (2026-09-17) |
+| Extensión `modalidad-atencion` en la `ActivityDefinition` (`valueCode`) | `src/seed/builders.ts` | ✅ implementado — falta correr el seed |
+| Recordatorio de 2 h con link + campanita `teleconsulta-lista` | `src/bots/recordatorios.ts` | ✅ implementado |
+| Tipos `teleconsulta-lista` y `documento-nuevo` + títulos y destino del web push | `src/bots/_shared.ts`, `web-push.ts` | ✅ implementado |
 | Cuestionario previo por especialidad (`Questionnaire`) | seed | ⏳ (este repo es el dueño de los `Questionnaire`) |
 | Código `teleconsulta` en `CodeSystem/consentimiento` | `src/fhir/identifiers.ts` | ⏳ |
 | Nutrición (tres servicios) | catálogo | ⏳ bloqueado: falta el nombre de la profesional |
@@ -90,9 +90,10 @@ const sala = appt.extension?.find((e) => e.url === SALA)?.valueString; // "tc-3f
 **En la góndola**, el servicio virtual es una `ActivityDefinition` más:
 `topic` es la especialidad ("Cardiología", "Endocrinología y Diabetes"), el
 precio va en `precio-ars` como en toda consulta, y la duración es 60. La
-extensión `modalidad-atencion = virtual` en la `ActivityDefinition` **todavía no
-se publica** (§9); cuando esté, es la forma de mostrar el ícono de cámara en la
-tarjeta. Mientras no esté, no lo inventen del código.
+extensión `modalidad-atencion` en la `ActivityDefinition` ya está definida y es
+**`valueCode`** (§12, pregunta 3): se publica **solo en los servicios virtuales**
+—la ausencia es `presencial`— y es la forma de mostrar el ícono de cámara en la
+tarjeta. Llega al servidor con la próxima corrida del seed.
 
 ## 2. Reservar: no hay nada nuevo
 
@@ -340,12 +341,16 @@ click). Lo dejamos como plan B, no como diseño.
   subir después del turno (el Dashboard lo enruta igual). Lo ideal es antes.
 - **`type` (LOINC) es opcional** y no lo lee nadie del lado nuestro: lo que
   enruta es `category`. Si ya ponen un LOINC, déjenlo.
+- **La doble `category` que propusieron va bien** (§12, pregunta 3): dejen la
+  suya (`CodeSystem/documento`, que rutea al agente de archivos) y sumen la
+  nuestra. Nada de nuestro lado busca por `category`: el conteo y el ruteo van
+  por `related`. Lo único que mira la categoría es la exclusión del informe del
+  profesional, que ustedes no escriben.
 - **No escriban `Appointment.supportingInformation`.** No pueden (su policy
   tiene `Appointment` de solo lectura) y no hace falta: el vínculo vive en el
-  documento. Recepción cuenta los adjuntos del turno con
-  `bw-estado-teleconsulta` buscando `DocumentReference?related=Appointment/<id>`
-  (**hoy el bot cuenta `supportingInformation`; se cambia de nuestro lado, §9**),
-  y el Dashboard los lee con la misma búsqueda. Recepción ve **cuántos** hay,
+  documento. Recepción cuenta los adjuntos del turno con `bw-estado-teleconsulta`
+  buscando `DocumentReference?related=Appointment/<id>` (**ya implementado**), y
+  el Dashboard los lee con la misma búsqueda. Recepción ve **cuántos** hay,
   nunca cuáles.
 - El `Consent` `procesamiento-datos-salud` sigue igual, uno por documento.
 
@@ -417,25 +422,34 @@ señal que le llega es "adjuntó 2 documentos". Si un paciente pregunta por chat
 "¿vieron mi laboratorio?", Recepción puede contestar "lo tiene el médico" sin
 haberlo abierto. Eso es a propósito (principio 3 de `CLAUDE.md`).
 
-## 9. Lo que falta de nuestro lado, en orden
+## 9. Lo que falta de nuestro lado
 
-| # | Qué | Por qué los frena |
+Los cinco primeros de la lista original están **implementados** (2026-09-17) y
+esperan deploy. Lo que queda:
+
+| # | Qué | Quién destraba |
 | --- | --- | --- |
-| 1 | `bw-reservar-turno`: para un servicio con `modalidad = virtual`, escribir `appointmentType`, generar `tc-<uuid>` en `teleconsulta-sala` y usar el recurso `R_TELECONSULTA` | **Hasta esto, no existe ningún turno con sala** y el bot de token rechaza todo con "Ese turno no es una videollamada" |
-| 2 | Deploy de los cuatro bots + Project Secrets `JITSI_BASE_URL`, `JITSI_APP_ID`, `JITSI_JWT_SECRET` + `frame-ancestors` en el nginx de Jitsi | Sin esto, `bw-teleconsulta-token` contesta "no está configurada" y el iframe no carga |
-| 3 | `bw-estado-teleconsulta`: contar por `DocumentReference?related=` en vez de `supportingInformation` | Sin esto Recepción ve "0 adjuntos" aunque hayan subido tres |
-| 4 | Seed: extensión `modalidad-atencion` en la `ActivityDefinition` | El ícono de cámara en la góndola |
-| 5 | Cobro total anticipado (`es-sena = false`, sin Invoice de saldo) | Hoy el link saldría por el 50 % |
-| 6 | Recordatorio de 2 h con el link + `teleconsulta-lista`; tipos nuevos en `TipoNotificacionPortal` y títulos en `bw-web-push` | Sin esto la campanita no se enciende |
-| 7 | `Questionnaire` previo por especialidad; código `teleconsulta` en `COD_CONSENTIMIENTO` | Esperan textos del Director Médico |
-| 8 | Emisor de `documento-nuevo` (bot por `Subscription` sobre lo que escribe el Dashboard) | Fase 1, después del primer cierre real |
+| 1 | `npm run deploy:bots` + Project Secrets `JITSI_BASE_URL` / `JITSI_APP_ID` / `JITSI_JWT_SECRET` en staging | Nosotros |
+| 2 | `frame-ancestors 'self' https://app.biowellness.ar https://dashboard.biowellness.ar` en el nginx de `meet.biowellness.ar` | Nosotros |
+| 3 | `Questionnaire` previo por especialidad · código `teleconsulta` en `COD_CONSENTIMIENTO` | Esperan textos del Director Médico y de cada especialista |
+| 4 | Emisor de `documento-nuevo` (bot por `Subscription` sobre lo que escribe el Dashboard) | Nosotros, después del primer cierre real |
 
-**Para que puedan empezar hoy**, sin esperar el 1: creamos a mano en staging un
-turno virtual de un paciente de prueba, con `appointmentType`, la extensión
-`teleconsulta-sala` y el `Practitioner` del Dr. D'Alessandro como
-`participant`, y les pasamos el id. Con los bots deployados en staging (2),
-la página se puede construir entera contra ese turno. Pidan el id cuando
-tengan la página montada.
+**El turno de prueba ya no hay que pedirlo**: hay un seed que lo crea.
+
+```bash
+npm run seed:prueba-teleconsulta
+```
+
+Deja un turno **`booked`** (pagado y confirmado) del paciente de prueba con el
+Dr. D'Alessandro, con `appointmentType`, sala `tc-<uuid>` y los dos
+`participant`, e imprime el `appointmentId`, el `pacienteRef` y la URL de la
+página. **El turno empieza 10 minutos después de correrlo**, a propósito: con
+la ventana de acceso cerrada el botón no se habilita y parece roto. Volver a
+correrlo borra el anterior y crea uno nuevo con otra sala.
+
+Si tienen un paciente de prueba **con login al portal** (el nuestro no tiene
+usuario, así que no sirve para probar la página), pásennos su id y lo usamos:
+`PRUEBA_TELECONSULTA_PATIENT_ID=<id> npm run seed:prueba-teleconsulta`.
 
 ## 10. Checklist de aceptación (de su lado)
 
@@ -451,6 +465,97 @@ tengan la página montada.
 - [ ] El espejo de la policy en `portal/docs/medplum/` está actualizado con los dos bots.
 
 ## 11. Preguntas para el portal
+
+**Contestadas las cuatro** (respuesta del portal, 2026-09-17): la ruta es
+`/teleconsulta/:id` y ya está fijada en el código (`rutaTeleconsulta`); la
+prueba de iPhone se hace con el turno del seed; "Mis estudios" ya escribe
+`category` con un sistema propio (ver §12); y el turno de prueba ahora lo crea
+un seed (§9).
+
+Queda **una sola pregunta abierta**, chica pero concreta:
+
+- **¿Cuál es la ruta de "Estudios"?** El web push de `documento-nuevo` necesita
+  a dónde mandar el tap. Hoy `urlDestino` lo manda a la raíz (`/`) porque
+  adivinar una ruta que no existe sería peor: un push que abre un 404 es peor
+  que uno que abre el inicio. Con la ruta, es un renglón.
+
+## 12. Respuestas a las preguntas del portal (2026-09-17)
+
+### 1 · La góndola: la teleconsulta va en Servicios (decidido por Andrés)
+
+De nuestro lado ya está: el servicio virtual se publica con `topic` = la
+**especialidad** ("Cardiología", "Endocrinología y Diabetes"), `orden: 15`
+—después del Chequeo y las consultas presenciales— y su propia `description` en
+voz de paciente. El filtro `/consulta/i` y el CTA son de ustedes.
+
+Una advertencia sobre ese filtro: el problema no es solo que `TELECONSULTA_MED_*`
+contenga la palabra `CONSULTA`. **Filtrar por el texto del código es el bug**, y
+va a volver a morder con el próximo código que agreguemos. Los códigos son
+identificadores opacos: lo que distingue a una consulta con médico es que el
+servicio tiene `practitionerCodigo`, y eso viaja al portal. Si prefieren no
+depender de eso, la extensión `modalidad-atencion` sirve para el ícono pero no
+para esta decisión.
+
+### 2 · Elegir la modalidad al reservar: **sí, el código es la única diferencia**
+
+Confirmado leyendo el camino completo, no de memoria. `bw-solicitar-turno`
+recibe la misma `SolicitudTurno` de siempre y lo único que hace con el código es
+`getServicio(terapiaCodigo)` y pasárselo a `chequearHorarioDisponible`, que
+**bifurca por `servicio.practitionerCodigo`** — no por la modalidad ni por la
+categoría. Como `CONSULTA_MED_X` y `TELECONSULTA_MED_X` tienen el **mismo**
+`practitionerCodigo`, los dos se validan contra la misma agenda publicada
+(`Schedule SCH_MED_X` + sus `Slot` libres).
+
+Eso tiene una consecuencia que conviene que conozcan, porque es la que hace que
+el selector funcione: **la grilla de horarios es la misma para las dos
+modalidades**. Un médico publica UNA agenda; si a las 10:00 ya tiene una consulta
+presencial, ese horario tampoco está para una virtual. Es a propósito —el médico
+es el cuello de botella, no la sala— y es lo que evita que se duplique.
+
+Así que el selector "Presencial / Por videollamada" puede cambiar solo el
+`terapiaCodigo` **sin volver a pedir la grilla**. Lo que sí cambia es el precio
+(150.000 vs 120.000 en cardiología) y la duración (60 min la virtual), que ya
+vienen en la `ActivityDefinition` de cada uno.
+
+### 3 · La extensión `modalidad-atencion`: **`valueCode`**
+
+`https://biowellness.ar/fhir/StructureDefinition/modalidad-atencion`,
+**`valueCode`**, valores `presencial` | `virtual` (lista cerrada). Es el mismo
+criterio que `regla-pricing`, `split` y `tipo-contrato`: lista acotada → `code`.
+
+```ts
+const MODALIDAD_EXT = 'https://biowellness.ar/fhir/StructureDefinition/modalidad-atencion';
+const esVirtual = ad.extension?.find((e) => e.url === MODALIDAD_EXT)?.valueCode === 'virtual';
+```
+
+**Solo se publica en los servicios virtuales.** La ausencia es `presencial`:
+escribirla en los 40 servicios del catálogo no agregaría información y obligaría
+a un `seed` completo para nada.
+
+Sobre la doble `category` de "Mis estudios": **adelante**. No tocamos
+`CodeSystem/documento` ni sus códigos, y nada nuestro busca por `category` —
+`bw-estado-teleconsulta` y el Dashboard van por `related`. Lo único que mira la
+categoría es que el conteo de Recepción **excluye `informe-consulta`** (el
+informe que deja el profesional no es "el paciente adjuntó algo").
+
+### 4 · `informe-consulta` sin pantalla
+
+De acuerdo con dejarlo para el Hito 2 y que mientras tanto `documento-nuevo`
+lleve a Estudios. Nuestro emisor todavía no existe (§9), así que no van a
+recibir notificaciones de este tipo hasta que el Dashboard empiece a escribir
+informes: no hay apuro.
+
+### 5 · El copy de "seña"
+
+Tenían razón en que no hay nada que cambiar del lado del portal, y **lo de
+nuestro lado ya está hecho**: para un turno virtual, el WhatsApp de reserva dice
+*"aboná la consulta ($150.000)"* y el de confirmación *"Recibimos el pago de
+$150.000"*, sin la palabra "seña" y sin mencionar saldo. El Invoice se emite con
+`es-sena = false` y **no se crea el Invoice de saldo**, así que el turno tampoco
+aparece en "Pagos pendientes". Si en algún momento muestran el link de pago
+dentro de la app, el concepto que van a ver es *"Consulta por videollamada · …"*.
+
+
 
 1. **La ruta.** ¿`/teleconsulta/:id` les sirve, o la página vive dentro de la
    del turno? El WhatsApp de 2 h y el web push la llevan escrita.

@@ -21,7 +21,7 @@
  */
 import type { BotEvent, MedplumClient } from '@medplum/core';
 import type { Encounter } from '@medplum/fhirtypes';
-import { EXT } from '../fhir/identifiers.js';
+import { DOCUMENTOS_PACIENTE, EXT, SYSTEM } from '../fhir/identifiers.js';
 import { esNombreSala, habilitaNoShow, minutosDeEspera } from '../lib/teleconsulta.js';
 
 export interface EntradaEstadoTeleconsulta {
@@ -41,6 +41,34 @@ export interface ResultadoEstadoTeleconsulta {
   /** ¿Recepción ya puede marcar no-show? Habilita; no ejecuta. */
   puedeMarcarNoShow?: boolean;
   mensaje?: string;
+}
+
+/**
+ * Cuántos documentos le asoció el paciente a este turno.
+ *
+ * El vínculo vive **en el documento** (`context.related` → el turno) y no en
+ * `Appointment.supportingInformation`: el paciente tiene el turno de solo
+ * lectura en su AccessPolicy, así que no puede escribirlo. Contar por
+ * `supportingInformation` daba 0 siempre — el número se veía bien y estaba
+ * vacío, que es la peor forma de estar mal.
+ *
+ * **No cuenta el informe del profesional** (`informe-consulta`): la señal que
+ * Recepción necesita es "el médico tiene con qué trabajar", y el informe que
+ * el médico escribió después no es eso. Se piden solo las categorías con
+ * `_elements` para no traerse los adjuntos: el bot no abre ninguno.
+ */
+async function contarAdjuntos(medplum: MedplumClient, appointmentId: string): Promise<number> {
+  const docs = await medplum
+    .searchResources('DocumentReference', `related=Appointment/${appointmentId}&_count=100&_elements=category`)
+    .catch(() => []);
+  return docs.filter(
+    (d) =>
+      !(d.category ?? []).some((c) =>
+        (c.coding ?? []).some(
+          (k) => k.system === SYSTEM.documentoPaciente && k.code === DOCUMENTOS_PACIENTE.informeConsulta,
+        ),
+      ),
+  ).length;
 }
 
 export async function handler(
@@ -65,12 +93,7 @@ export async function handler(
       p.individual?.reference?.startsWith('Practitioner/'),
     );
 
-    // Los adjuntos se CUENTAN de la referencia del propio turno. No se abre
-    // ninguno y no se devuelve ni el título: el número es toda la señal que
-    // Recepción necesita.
-    const adjuntos = (appt.supportingInformation ?? []).filter((r) =>
-      r.reference?.startsWith('DocumentReference/'),
-    ).length;
+    const adjuntos = await contarAdjuntos(medplum, id);
 
     const ahora = new Date();
     const inicio = appt.start ? new Date(appt.start) : undefined;

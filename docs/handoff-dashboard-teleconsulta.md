@@ -7,10 +7,11 @@
 > lee. Visión completa en [`teleconsulta.md`](teleconsulta.md); infraestructura
 > en [`teleconsulta-fase0.md`](teleconsulta-fase0.md).
 >
-> **Estado (2026-09-17):** los bots están en `main` y las policies de
-> Cardiología, Endocrinología y Nutrición ya los listan. **Hay tres cosas de
-> nuestro lado que faltan y los frenan** (§7), la primera de las cuales es que
-> todavía no se generan turnos con sala. Las formas de acá no cambian.
+> **Estado (2026-09-17, segunda revisión).** Ya se generan turnos virtuales con
+> sala, y las dos entradas que faltaban en las policies de especialidad
+> (`Practitioner` y `bw-estado-turno`) están puestas: **el cierre del §5.1 es el
+> camino bueno desde el día uno**. Además hay un seed que les deja un turno de
+> prueba listo (§7). Lo que queda es deploy nuestro y textos de terceros.
 >
 > Interlocutor: repo del dashboard clínico (`dashboard.biowellness.ar`, Panel
 > Bio). Este repo: `recepcion.biowellness.ar`.
@@ -49,8 +50,9 @@
 | Policies "Cardiología — Clínico limitado", "Endocrinología — Clínico limitado", "Nutrición — Clínico limitado" con `Encounter`, `DocumentReference`, `ServiceRequest`, `MedicationRequest`, `DiagnosticReport`, `Consent` (lectura), `Binary` y los dos bots | ✅ en `main` — se aplican con `npm run seed` |
 | `Practitioner` de la Dra. Albarellos (endocrinología) y el Dr. Carrieri (hiperbárica) | ✅ en `main` — el `PractitionerRole` con la especialidad se asigna a mano (`docs/usuarios.md`) |
 | `frame-ancestors` con `dashboard.biowellness.ar` en el nginx de Jitsi | ⏳ falta aplicar |
-| `bw-reservar-turno` genera la sala | ⏳ **sin esto no hay turnos virtuales** |
-| `Practitioner` de lectura y `bw-estado-turno` en las policies de especialidad | ⏳ dos renglones nuestros |
+| Turno virtual de prueba (`npm run seed:prueba-teleconsulta`) | ✅ listo para correr (§7) |
+| `bw-reservar-turno` genera la sala | ✅ **implementado** (2026-09-17) |
+| `Practitioner` de lectura y `bw-estado-turno` en las policies de especialidad | ✅ implementado — se aplican con `npm run seed` |
 | `Subscription` (websocket) en las policies de especialidad | ⏳ si lo piden (§2) |
 | Emisor de la campanita `documento-nuevo` al paciente | ⏳ nuestro, por `Subscription` sobre lo que ustedes escriben |
 | `Questionnaire` previo por especialidad | ⏳ seed, esperando textos |
@@ -302,11 +304,10 @@ await medplum.executeBot(botEstadoTurno, { appointmentId, estado: 'fulfilled' })
 
 `bw-estado-turno` es el mismo bot con el que el mostrador cierra un turno
 presencial: pone el `Appointment` en `fulfilled`, cierra el `Encounter`
-(`finished`, `period.end`) y libera el `Slot`. **Falta listarlo en las policies
-de especialidad** (§7; hoy solo tienen los dos de teleconsulta): hasta que
-esté, cierren solo el `Encounter` (`status: 'finished'`, `period.end`), que sí
-pueden escribir, y Recepción cierra el turno desde su modal como con los
-presenciales. Con el bot en la policy, el paso de Recepción desaparece.
+(`finished`, `period.end`) y libera el `Slot`. **Ya está en las policies de
+especialidad** (2026-09-17), así que este es el camino desde el día uno: no
+hace falta el rodeo de cerrar solo el `Encounter` y que Recepción cierre el
+turno. Llega al servidor con la próxima corrida del seed.
 
 No marcar `cancelled` ni `noshow` desde el Dashboard: **ambos tienen efecto
 sobre plata cobrada** y son de Recepción, que puede haber hablado con el
@@ -400,15 +401,35 @@ con el botón de reservar. Tienen `Task` en la policy.
 
 ## 7. Lo que falta de nuestro lado
 
-| # | Qué | Por qué los frena |
+Los tres primeros de la lista original están **implementados** (2026-09-17).
+Lo que queda:
+
+| # | Qué | Quién destraba |
 | --- | --- | --- |
-| 1 | `bw-reservar-turno`: para un servicio virtual, escribir `appointmentType`, generar `tc-<uuid>` y usar `R_TELECONSULTA` | **Sin esto no existe ningún turno con sala.** Para que arranquen, creamos a mano uno de prueba en staging con el `Practitioner` del Dr. D'Alessandro y les pasamos el id |
-| 2 | Deploy de los bots + Project Secrets `JITSI_*` + `frame-ancestors` con `dashboard.biowellness.ar` (y un dominio de staging si lo piden) | Sin esto el token no sale y el iframe no carga |
-| 3 | En las policies de especialidad: `Practitioner` de lectura y `bw-estado-turno` en `Bot?name=` | Sin `Practitioner`, el bot de token no puede leer el nombre y el profesional aparece como "Participante" en la sala. Sin `bw-estado-turno`, cierran solo el `Encounter` (§5.1) |
-| 4 | `Subscription` en las policies de especialidad | Solo si quieren "paciente en línea" por websocket (§2) |
-| 5 | `Questionnaire` previo por especialidad; código `teleconsulta` en `COD_CONSENTIMIENTO` | Esperan textos de los especialistas y del Director Médico |
-| 6 | Emisor de `documento-nuevo` al paciente | Después del primer cierre real |
-| 7 | `PractitionerRole` con `specialty` para Albarellos y Carrieri; usuarios del Dashboard con el perfil correcto (§1) | Es manual, desde el admin; lo hacemos juntos en la primera prueba |
+| 1 | `npm run deploy:bots` + Project Secrets `JITSI_*` + `npm run seed` (las policies nuevas) | Nosotros |
+| 2 | `frame-ancestors` con `dashboard.biowellness.ar` —y un dominio de staging si lo piden— en el nginx de Jitsi | Nosotros + su respuesta a §9.1 |
+| 3 | `Subscription` en las policies de especialidad | Solo si quieren "paciente en línea" por websocket (§2) |
+| 4 | `Questionnaire` previo por especialidad; código `teleconsulta` en `COD_CONSENTIMIENTO` | Esperan las preguntas de cada especialista y el texto del Director Médico |
+| 5 | Emisor de `documento-nuevo` al paciente | Nosotros, después del primer cierre real |
+| 6 | `PractitionerRole` con `specialty` para Albarellos y Carrieri; usuarios del Dashboard con el perfil correcto (§1) | Manual, desde el admin: lo hacemos juntos en la primera prueba |
+
+**El turno de prueba ya está**, y lo crea un seed:
+
+```bash
+npm run seed:prueba-teleconsulta
+```
+
+Deja un turno **`booked`** del paciente de prueba con el Dr. D'Alessandro —con
+`appointmentType`, sala `tc-<uuid>` y los dos `participant`— e imprime el
+`appointmentId` y el `practitionerRef` que necesitan para pedir el token de
+moderador. **El turno empieza 10 minutos después de correrlo**: con la ventana
+de acceso cerrada el botón no se habilita y parece roto. Volver a correrlo borra
+el anterior (y su `Encounter`) y crea uno nuevo.
+
+El `practitionerRef` que imprime es **el `Practitioner` canónico** del §1: si el
+usuario del Dashboard con el que prueban apunta a otro, el bot va a rechazar el
+token y ahí van a ver el problema del §1 en vivo, que es el mejor momento para
+verlo.
 
 ## 8. Checklist de aceptación (de su lado)
 
@@ -418,7 +439,7 @@ con el botón de reservar. Tienen `Task` en la policy.
 - [ ] Al entrar, el turno pasa a `checked-in` y en el panel de participantes el profesional tiene los controles de moderador sobre el paciente, y no al revés.
 - [ ] Con la sala vacía se ve "El paciente todavía no se conectó"; desaparece cuando entra.
 - [ ] La ficha previa lista los `DocumentReference` con `related` = el turno y abre el PDF.
-- [ ] Cerrar deja el turno `fulfilled` (o, mientras falte el bot en la policy, el `Encounter` `finished`).
+- [ ] Cerrar con `bw-estado-turno` deja el turno `fulfilled` y el `Encounter` `finished`.
 - [ ] Una `ServiceRequest` y una `MedicationRequest` creadas desde el cierre aparecen en el portal del paciente de prueba.
 - [ ] El `Task` de control aparece en Avisos de Recepción con el botón de reservar, y apretar dos veces no lo duplica.
 - [ ] `api.dispose()` al salir: el micrófono se apaga.
@@ -429,7 +450,7 @@ con el botón de reservar. Tienen `Task` en la policy.
    probar el embebido, o agregamos uno a `frame-ancestors`? Con `localhost` no
    va a cargar.
 2. **Websocket o refresco** para "paciente en línea" (§2).
-3. **El cierre**: ¿prefieren esperar el bot en la policy (un renglón nuestro,
-   sale con el tramo 3 de §7) o arrancar cerrando solo el `Encounter`?
+3. ~~**El cierre**~~: resuelto — `bw-estado-turno` ya está en sus policies, así
+   que cierren con el bot directamente (§5.1).
 4. **Las preguntas del cuestionario previo** de cardiología, endocrinología y
    nutrición: quién las define y cuándo, para publicarlas.

@@ -6,6 +6,9 @@
  * internet. Un test que pasa "en el medio" de la ventana no prueba nada.
  */
 import { describe, expect, it } from 'vitest';
+import type { Appointment } from '@medplum/fhirtypes';
+import { modalidadAppointmentType, modalidadDeTurno } from '../src/fhir/appointment.js';
+import { FRACCION_SENA, calcularSenaARS, fraccionAnticipada } from '../src/lib/pricing.js';
 import {
   TELECONSULTA,
   accesoPermitido,
@@ -16,6 +19,7 @@ import {
   minutosDeEspera,
   motivoSinAcceso,
   nombreSala,
+  rutaTeleconsulta,
   ventanaAcceso,
 } from '../src/lib/teleconsulta.js';
 
@@ -168,5 +172,53 @@ describe('minutos de espera', () => {
 describe('parámetros', () => {
   it('la grilla virtual es de 60 minutos (Andrés, 2026-09-16)', () => {
     expect(TELECONSULTA.slotMin).toBe(60);
+  });
+});
+
+describe('El turno virtual: modalidad, cobro y ruta del portal', () => {
+  it('modalidadDeTurno: la ausencia de appointmentType es PRESENCIAL', () => {
+    // Los miles de turnos anteriores a la teleconsulta no tienen el campo, y
+    // leerlos como virtuales les cambiaría retroactivamente el cobro.
+    expect(modalidadDeTurno({ resourceType: 'Appointment', status: 'booked', participant: [] })).toBe('presencial');
+    expect(
+      modalidadDeTurno({
+        resourceType: 'Appointment',
+        status: 'booked',
+        participant: [],
+        appointmentType: { coding: [{ system: 'https://otro.ar/sistema', code: 'virtual' }] },
+      }),
+    ).toBe('presencial');
+  });
+
+  it('modalidadDeTurno lee lo que escribe modalidadAppointmentType (ida y vuelta)', () => {
+    for (const modalidad of ['presencial', 'virtual'] as const) {
+      const appt: Appointment = {
+        resourceType: 'Appointment',
+        status: 'booked',
+        participant: [],
+        appointmentType: modalidadAppointmentType(modalidad),
+      };
+      expect(modalidadDeTurno(appt)).toBe(modalidad);
+    }
+  });
+
+  it('La teleconsulta se cobra ENTERA por adelantado; la presencial, la seña', () => {
+    expect(fraccionAnticipada('virtual')).toBe(1);
+    expect(fraccionAnticipada('presencial')).toBe(FRACCION_SENA);
+    // Sin modalidad (todo el catálogo v9) se comporta como siempre.
+    expect(fraccionAnticipada(undefined)).toBe(FRACCION_SENA);
+  });
+
+  it('Cobrada entera, una teleconsulta no deja saldo', () => {
+    const items = [{ tipo: 'servicio' as const, codigo: 'TELECONSULTA_MED_DALESSANDRO' }];
+    const { totalARS, senaARS } = calcularSenaARS(items, { fraccion: fraccionAnticipada('virtual') });
+    expect(senaARS).toBe(totalARS);
+    expect(totalARS - senaARS).toBe(0);
+    // Y es el precio de lista, no la mitad: 150.000 (Andrés, 2026-09-16).
+    expect(totalARS).toBe(150_000);
+  });
+
+  it('rutaTeleconsulta es la ruta que confirmó el portal', () => {
+    expect(rutaTeleconsulta('abc-123')).toBe('/teleconsulta/abc-123');
   });
 });
