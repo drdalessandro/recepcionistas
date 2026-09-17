@@ -95,7 +95,14 @@ extensión `modalidad-atencion` en la `ActivityDefinition` ya está definida y e
 —la ausencia es `presencial`— y es la forma de mostrar el ícono de cámara en la
 tarjeta. Llega al servidor con la próxima corrida del seed.
 
-## 2. Reservar: no hay nada nuevo
+## 2. Reservar: casi nada nuevo
+
+> **Actualizado 2026-09-17.** El circuito completo de *pedir* una teleconsulta,
+> con el detalle del catálogo, los horarios y los textos, está en
+> [`handoff-portal-solicitar-teleconsulta.md`](handoff-portal-solicitar-teleconsulta.md).
+> Cambió una cosa desde que se escribió esta sección: `bw-disponibilidad` le
+> contestaba a las consultas con la grilla de los consultorios en vez de la
+> agenda del profesional. Ya está arreglado y la respuesta ahora trae `fuente`.
 
 El pedido entra por `bw-disponibilidad` + `bw-solicitar-turno`, igual que
 cualquier consulta. Los chips salen de la agenda publicada del profesional

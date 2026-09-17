@@ -14,6 +14,7 @@ import type { Appointment, AppointmentParticipant, Slot } from '@medplum/fhirtyp
 import { randomUUID } from 'node:crypto';
 import type { Servicio } from '../domain/types.js';
 import { getServicio, nombreServicioRecepcion } from '../config/catalogo.js';
+import { codigoAgenda } from '../config/medicos.js';
 import type { PerfilReserva } from '../config/reglas.js';
 import { EXT, SYSTEM } from '../fhir/identifiers.js';
 import { clasificacionDeServicio, modalidadAppointmentType } from '../fhir/appointment.js';
@@ -290,7 +291,7 @@ export async function handler(
     // completar lo libera solo (los flujos existentes recorren appointment.slot).
     const schMedico = await medplum.searchOne(
       'Schedule',
-      `identifier=${SYSTEM.recursoCodigo}|SCH_${servicio.practitionerCodigo}`,
+      `identifier=${SYSTEM.recursoCodigo}|${codigoAgenda(servicio.practitionerCodigo, servicio.modalidad)}`,
     );
     if (schMedico?.id) {
       const slotMedico = await medplum.searchOne(

@@ -423,7 +423,7 @@ externos.
 | **No-show** | A los 15 min sin paciente, Recepción **puede** marcar no-show; el sistema habilita, no ejecuta. Qué pasa con el pago (total y anticipado) es la decisión | `habilitaNoShow` ya está implementado y testeado; falta la consecuencia comercial |
 | **Precio de la consulta hiperbárica** | El Dr. Carrieri ya está cargado; **falta su precio**, y sin precio no se publica el servicio | Es la puerta de entrada a la cámara, el servicio central de la casa |
 | **Nutricionista** | Los tres precios están definidos; **falta el nombre de la profesional** | Sin ella no se pueden crear los tres servicios de nutrición |
-| **Franjas de los nuevos** | Albarellos y Carrieri no tienen agenda publicada, así que el portal todavía no los ofrece | La nutrición presencial y la consulta hiperbárica usan el **único** consultorio, donde ya se reparten tres médicos. Las franjas las define Andrés; `agenda:check` detecta los cruces |
+| **Franjas de los nuevos** | Albarellos y Carrieri no tienen agenda publicada, así que el portal todavía no los ofrece (el Dr. D'Alessandro sí: teleconsulta lunes y viernes 18-20, agenda de video aparte de la presencial, 2026-09-17) | La nutrición presencial y la consulta hiperbárica usan el **único** consultorio, donde ya se reparten tres médicos. Las franjas las define Andrés; `agenda:check` detecta los cruces |
 
 ## 11. Fases y verificación
 

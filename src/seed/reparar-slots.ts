@@ -37,6 +37,8 @@ import { MedplumClient } from '@medplum/core';
 import type { Appointment, Coding, Slot } from '@medplum/fhirtypes';
 import { ESTADOS_SIN_SALA, conEsperaDeCuota, scheduleIdDeRecurso } from '../bots/_shared.js';
 import { EXT, SYSTEM } from '../fhir/identifiers.js';
+import { modalidadDeTurno } from '../fhir/appointment.js';
+import { codigoAgenda } from '../config/medicos.js';
 
 function requireEnv(nombre: string): string {
   const v = process.env[nombre];
@@ -282,8 +284,16 @@ async function ocuparAgendaMedico(medplum: MedplumClient, medicoId: string, r: R
     if (!codigo) {
       return false;
     }
+    // Qué agenda del médico, según la modalidad DEL TURNO: un profesional
+    // puede publicar horarios de video aparte de los presenciales, y reparar
+    // una teleconsulta contra la agenda presencial marcaría ocupada la hora
+    // equivocada (o crearía un slot que no corresponde) en la agenda que sí
+    // ve el paciente presencial.
     const sch = await conEsperaDeCuota(() =>
-      medplum.searchOne('Schedule', `identifier=${SYSTEM.recursoCodigo}|SCH_${codigo}`),
+      medplum.searchOne(
+        'Schedule',
+        `identifier=${SYSTEM.recursoCodigo}|${codigoAgenda(codigo, modalidadDeTurno(r.appointment))}`,
+      ),
     );
     if (!sch?.id) {
       return false;

@@ -5,9 +5,9 @@
  */
 import { describe, it, expect } from 'vitest';
 import { reconciliarSlots, solapamientosDeAgendas } from '../src/lib/agenda-medicos.js';
-import { MEDICOS, MEDICOS_POR_CODIGO, codigoConsulta } from '../src/config/medicos.js';
+import { MEDICOS, MEDICOS_POR_CODIGO, codigoAgenda, codigoConsulta } from '../src/config/medicos.js';
 import { getServicio } from '../src/config/catalogo.js';
-import { horarioDeAgendaMedico } from '../src/seed/builders.js';
+import { buildScheduleMedico, buildSlotMedico, esScheduleDeMedico, horarioDeAgendaMedico } from '../src/seed/builders.js';
 import { generarSlots } from '../src/lib/slots.js';
 import { HORARIO_SEMANAL } from '../src/config/horario.js';
 
@@ -166,5 +166,97 @@ describe('reconciliarSlots — cambiar una agenda no deja horarios fantasma', ()
       { desde, hasta },
     );
     expect(r.aBorrar).toEqual([]);
+  });
+});
+
+/**
+ * Agenda de VIDEO separada de la presencial (Andrés, 2026-09-17: el Dr.
+ * D'Alessandro atiende teleconsulta cardiológica lunes y viernes de 18 a 20).
+ *
+ * El campo `agendaTeleconsulta` existía desde el 16-sep con un docstring que
+ * prometía justo esto, y **no lo usaba nadie**: las dos modalidades caían en el
+ * mismo `Schedule`. Lo que fija esta batería es que ahora sí son dos agendas y,
+ * sobre todo, que activarlas no rompe nada de lo que ya estaba publicado.
+ */
+describe('Agenda de teleconsulta: dos agendas por profesional', () => {
+  const dalessandro = MEDICOS_POR_CODIGO.get('MED_DALESSANDRO')!;
+
+  it('Las franjas son lunes y viernes de 18 a 20', () => {
+    expect(dalessandro.agendaTeleconsulta).toEqual([
+      { dia: 1, desde: '18:00', hasta: '20:00' },
+      { dia: 5, desde: '18:00', hasta: '20:00' },
+    ]);
+  });
+
+  it('`codigoAgenda` manda a Schedules distintos según la modalidad', () => {
+    expect(codigoAgenda('MED_DALESSANDRO')).toBe('SCH_MED_DALESSANDRO');
+    expect(codigoAgenda('MED_DALESSANDRO', 'presencial')).toBe('SCH_MED_DALESSANDRO');
+    expect(codigoAgenda('MED_DALESSANDRO', 'virtual')).toBe('SCH_TELE_MED_DALESSANDRO');
+  });
+
+  it('SIN franjas de video, la modalidad NO cambia nada (las dos comparten agenda)', () => {
+    // Es lo que hace que activar esto sea seguro: para todos los demás
+    // profesionales el comportamiento es byte por byte el de antes.
+    expect(MEDICOS_POR_CODIGO.get('MED_CONRADO')?.agendaTeleconsulta).toBeUndefined();
+    expect(codigoAgenda('MED_CONRADO', 'virtual')).toBe('SCH_MED_CONRADO');
+    expect(codigoAgenda('MED_CONRADO', 'presencial')).toBe('SCH_MED_CONRADO');
+  });
+
+  it('El horario de video trae lunes y viernes, y el presencial NO los trae', () => {
+    const video = horarioDeAgendaMedico(dalessandro, 'virtual');
+    expect(video.filter((d) => d.abierto).map((d) => d.dia)).toEqual([1, 5]);
+    const presencial = horarioDeAgendaMedico(dalessandro);
+    expect(presencial.filter((d) => d.abierto).map((d) => d.dia)).toEqual([2, 3, 4]);
+  });
+
+  it('EL IDENTIFIER DE LOS SLOTS PRESENCIALES NO CAMBIA', () => {
+    // El alta de slots es un create condicional POR IDENTIFIER. Si el de la
+    // agenda presencial cambiara, la próxima corrida del seed duplicaría cada
+    // slot ya publicado en vez de reconocerlo.
+    const desc = {
+      recursoCodigo: 'MED_DALESSANDRO',
+      inicio: '2026-09-22T16:00:00-03:00',
+      fin: '2026-09-22T17:00:00-03:00',
+      estado: 'free' as const,
+    };
+    const presencial = buildSlotMedico(dalessandro, desc, 'Schedule/x');
+    expect(presencial.identifier?.[0]?.value).toBe('MED_DALESSANDRO|2026-09-22T16:00:00-03:00');
+
+    const video = buildSlotMedico(dalessandro, desc, 'Schedule/y', 'virtual');
+    expect(video.identifier?.[0]?.value).toBe('TELE_MED_DALESSANDRO|2026-09-22T16:00:00-03:00');
+    // Distintos: si no, un médico que atienda las dos modalidades a la misma
+    // hora tendría dos slots peleando por el mismo identifier.
+    expect(video.identifier?.[0]?.value).not.toBe(presencial.identifier?.[0]?.value);
+  });
+
+  it('`limpiar` NO puede borrar la agenda de video', () => {
+    // `esScheduleDeMedico` es lo único que salva a las agendas de médicos de
+    // `npm run limpiar -- --apply`: no llevan la extensión `recurso-fisico`, así
+    // que sin reconocerlas por identifier las daría por ajenas y las BORRARÍA
+    // con todos sus slots. Ya pasó de faltar una vez; con la de video sería otra.
+    expect(esScheduleDeMedico(buildScheduleMedico(dalessandro, 'virtual'))).toBe(true);
+    expect(esScheduleDeMedico(buildScheduleMedico(dalessandro))).toBe(true);
+  });
+
+  it('El viernes de video NO es una superposición de consultorio con el Dr. Conrado', () => {
+    // Conrado atiende presencial los viernes 17-20 y ahora D'Alessandro da
+    // video los viernes 18-20. No se pisan: una videollamada no ocupa el
+    // consultorio. Si `agenda:check` lo reportara, avisaría de un conflicto
+    // que no existe y el ruido haría ignorar los que sí.
+    expect(MEDICOS_POR_CODIGO.get('MED_CONRADO')?.agenda).toEqual([{ dia: 5, desde: '17:00', hasta: '20:00' }]);
+    const viernes = solapamientosDeAgendas(MEDICOS).filter((c) => c.dia === 5);
+    expect(viernes).toEqual([]);
+  });
+
+  it('El seed publica un Schedule por agenda, y se distinguen en el admin', () => {
+    const video = buildScheduleMedico(dalessandro, 'virtual');
+    expect(video.identifier?.[0]?.value).toBe('SCH_TELE_MED_DALESSANDRO');
+    expect(video.identifier?.[1]?.value).toBe('bw-sched-tele-dalessandro');
+    expect(video.comment).toContain('Teleconsulta');
+    // El presencial queda igual que siempre (mismo identifier, sin comment).
+    const presencial = buildScheduleMedico(dalessandro);
+    expect(presencial.identifier?.[0]?.value).toBe('SCH_MED_DALESSANDRO');
+    expect(presencial.identifier?.[1]?.value).toBe('bw-sched-dalessandro');
+    expect(presencial.comment).toBeUndefined();
   });
 });
