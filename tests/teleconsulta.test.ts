@@ -9,6 +9,8 @@ import { describe, expect, it } from 'vitest';
 import type { Appointment } from '@medplum/fhirtypes';
 import { modalidadAppointmentType, modalidadDeTurno } from '../src/fhir/appointment.js';
 import { FRACCION_SENA, calcularSenaARS, fraccionAnticipada } from '../src/lib/pricing.js';
+import { SERVICIOS } from '../src/config/catalogo.js';
+import { RECURSOS } from '../src/config/recursos.js';
 import {
   TELECONSULTA,
   accesoPermitido,
@@ -260,7 +262,7 @@ describe('dominioJitsi — el secret con nombre engañoso', () => {
 describe('El email del recordatorio de la videollamada', () => {
   const mail = emailRecordatorioTeleconsulta({
     hora: '15:00',
-    servicio: 'Cardiología por videollamada — Dr. Alejandro Sergio D\'Alessandro',
+    servicio: 'Teleconsulta de Cardiología — Dr. Alejandro Sergio D\'Alessandro',
     link: 'https://app.biowellness.ar/teleconsulta/abc-123',
   });
 
@@ -283,5 +285,38 @@ describe('El email del recordatorio de la videollamada', () => {
 
   it('Invita a responder: es el mail que más se responde y llega 2 h antes', () => {
     expect(mail.cuerpo).toMatch(/respond[eé]/i);
+  });
+});
+
+describe('El servicio virtual se tiene que poder ENCONTRAR en el mostrador', () => {
+  const virtual = SERVICIOS.filter((s) => s.modalidad === 'virtual');
+
+  it('Hay servicios virtuales publicados', () => {
+    expect(virtual.length).toBeGreaterThan(0);
+  });
+
+  it('EL NOMBRE EMPIEZA CON "Teleconsulta"', () => {
+    // El buscador del modal de reserva filtra por este texto. Con "Cardiología
+    // por videollamada", la recepcionista que tipeaba "teleconsulta" —la palabra
+    // que usa todo el mundo, y la del código del servicio— no encontraba nada y
+    // el botón de reservar quedaba gris sin explicar por qué.
+    for (const s of virtual) {
+      expect(s.nombre.toLowerCase()).toMatch(/^teleconsulta/);
+    }
+  });
+
+  it('…y trae la especialidad y el profesional, que es lo otro que se busca', () => {
+    const cardio = virtual.find((s) => s.codigo === 'TELECONSULTA_MED_DALESSANDRO');
+    expect(cardio?.nombre).toContain('Cardiología');
+    expect(cardio?.nombre).toContain("D'Alessandro");
+  });
+
+  it('La sala virtual no es una sesión grupal: su capacidad no son ocupantes', () => {
+    // El modal leía la capacidad 50 como "personas por reserva" y ofrecía armar
+    // una teleconsulta de 50. Acá queda fijado que el recurso es de tipo VIRTUAL,
+    // que es por lo que el modal lo saltea.
+    const sala = RECURSOS.find((r) => r.codigo === 'R_TELECONSULTA');
+    expect(sala?.tipo).toBe('VIRTUAL');
+    expect(sala?.capacidad).toBeGreaterThan(1);
   });
 });

@@ -187,6 +187,12 @@ export async function handler(
   // consultorio se lo trabaría por una hora a un paciente que sí tiene que venir,
   // y el error recién se vería en la grilla del día.
   const recursoCodigo = esVirtual ? RECURSO_TELECONSULTA : e.recursoCodigo;
+  // Y una videollamada es de UNA persona, pase lo que pase. El recurso virtual
+  // tiene capacidad 50 para no limitar cuántas llamadas conviven, no para que
+  // entren 50 a una: leído del otro modo, `validarRecursos` dejaría pasar una
+  // teleconsulta de 3 ocupantes y el número ensuciaría los reportes sin que
+  // nadie lo note. El front ya no lo ofrece; acá no se puede aunque lo mande.
+  const ocupantes = esVirtual ? 1 : e.ocupantes;
   const inicio = new Date(e.inicio);
   const fin = new Date(inicio.getTime() + servicio.duracionMin * 60_000);
   const ahora = new Date();
@@ -213,7 +219,7 @@ export async function handler(
     inicio,
     fin,
     recursoCodigo,
-    ocupantes: e.ocupantes,
+    ocupantes,
     contraindicacionesActivas,
     prescripcionActiva: e.prescripcionActiva ?? false,
     consentimientoFirmado: e.consentimientoFirmado ?? false,
@@ -263,7 +269,7 @@ export async function handler(
     end: fin.toISOString(),
     extension: [
       { url: EXT.recursoFisico, valueString: recursoCodigo },
-      { url: EXT.ocupantes, valueInteger: e.ocupantes ?? 1 },
+      { url: EXT.ocupantes, valueInteger: ocupantes ?? 1 },
     ],
   });
 
@@ -318,7 +324,7 @@ export async function handler(
     participant,
     extension: [
       { url: EXT.recursoFisico, valueString: recursoCodigo },
-      { url: EXT.ocupantes, valueInteger: e.ocupantes ?? 1 },
+      { url: EXT.ocupantes, valueInteger: ocupantes ?? 1 },
       { url: EXT.itemTipo, valueCode: 'servicio' },
       // La sala de la videollamada, creada ACÁ y una sola vez: es lo único del
       // circuito de teleconsulta que persiste (el token se emite a pedido y no

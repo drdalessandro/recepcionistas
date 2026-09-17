@@ -70,6 +70,12 @@ export const RECURSOS: RecursoFisico[] = [
    * la agenda del profesional (un turno presencial y uno virtual del mismo
    * médico compiten por el mismo horario y por eso comparten Schedule), no un
    * lugar físico. Ponerle capacidad 1 inventaría un cuello que no existe.
+   *
+   * ⚠️ **Acá `capacidad` significa otra cosa que en las salas físicas.** En la
+   * Multiplaza son personas que entran JUNTAS a la misma sesión; acá son
+   * videollamadas que pueden convivir. Quien lea este número como "ocupantes
+   * por reserva" va a ofrecer teleconsultas de 50 personas — le pasó al modal
+   * de reserva (2026-09-17), que ahora saltea el tipo `VIRTUAL`.
    */
   { codigo: RECURSO_TELECONSULTA, nombre: 'Videollamada', tipo: 'VIRTUAL', capacidad: 50 },
   { codigo: 'R_SALA_TB', nombre: 'Sala de Terapias Biológicas / IV', tipo: 'BOX_CLINICO', capacidad: 1 },

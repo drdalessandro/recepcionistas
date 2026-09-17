@@ -231,7 +231,14 @@ export function ReservaModal({
           }}
         />
 
-        {recurso && recurso.capacidad > 1 && (
+        {/*
+          La sala virtual NO ofrece "Personas". Su capacidad 50 significa
+          "cuántas videollamadas pueden convivir", no "cuánta gente entra a
+          una": son dos cosas distintas en el mismo campo, y leído como lo
+          segundo el modal le ofrecía a la recepcionista armar una teleconsulta
+          de hasta 50 personas. Una consulta es el paciente y su profesional.
+        */}
+        {recurso && recurso.tipo !== 'VIRTUAL' && recurso.capacidad > 1 && (
           <Select
             label="Personas"
             description={
