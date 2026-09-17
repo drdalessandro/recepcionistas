@@ -437,7 +437,8 @@ esperan deploy. Lo que queda:
 **El turno de prueba ya no hay que pedirlo**: hay un seed que lo crea.
 
 ```bash
-npm run seed:prueba-teleconsulta
+npm run seed:prueba-teleconsulta              # turno PAGO: para probar la página
+npm run seed:prueba-teleconsulta -- --impago  # turno impago + link de MercadoPago
 ```
 
 Deja un turno **`booked`** (pagado y confirmado) del paciente de prueba con el

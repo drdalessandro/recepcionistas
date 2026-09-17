@@ -2,9 +2,17 @@
  * Seed de prueba de la TELECONSULTA, para que el portal y el Dashboard puedan
  * construir contra un turno real sin esperar a que Recepción reserve uno.
  *
- *   npm run seed:prueba-teleconsulta -- --dry-run   → muestra qué crearía (sin red)
  *   npm run seed:prueba-teleconsulta                → deja el turno PAGO, listo para entrar
- *   npm run seed:prueba-teleconsulta -- --con-pago  → deja el turno IMPAGO + link de MercadoPago
+ *   npm run seed:prueba-teleconsulta -- --pagado    → lo mismo, dicho en voz alta
+ *   npm run seed:prueba-teleconsulta -- --impago    → turno IMPAGO + link de MercadoPago
+ *   npm run seed:prueba-teleconsulta -- --dry-run   → muestra qué crearía (sin red)
+ *
+ * `--pagado` y `--con-pago` son alias de los dos modos y existen por claridad:
+ * el default —turno pago, para repetir la prueba de la sala sin pasar por
+ * MercadoPago cada vez— es el que más se usa, y en un runbook se lee mejor
+ * escrito que como la ausencia de una opción. `--con-pago` significa "con el
+ * paso del pago", o sea **impago**, que es lo contrario de lo que sugiere a
+ * primera vista: por eso `--impago` dice lo mismo sin ambigüedad.
  *
  * Deja **un turno virtual `booked`** —o sea, pago y confirmado— del paciente de
  * prueba con el Dr. D'Alessandro, con su `appointmentType`, su sala `tc-<uuid>`
@@ -140,9 +148,25 @@ function requireEnv(nombre: string): string {
   return v;
 }
 
+/** Los dos modos, con sus alias. Pedirlos juntos es un error, no una preferencia. */
+function modoPago(argv: string[]): { conPago: boolean; error?: string } {
+  const impago = argv.includes('--con-pago') || argv.includes('--impago');
+  const pagado = argv.includes('--pagado');
+  if (impago && pagado) {
+    return { conPago: false, error: 'No se puede pedir --pagado y --impago a la vez: son los dos modos opuestos.' };
+  }
+  return { conPago: impago };
+}
+
 async function main(): Promise<void> {
   const dryRun = process.argv.includes('--dry-run');
-  const conPago = process.argv.includes('--con-pago');
+  const modo = modoPago(process.argv);
+  if (modo.error) {
+    console.error(`✗ ${modo.error}`);
+    process.exitCode = 1;
+    return;
+  }
+  const conPago = modo.conPago;
   const ahora = new Date();
   const servicio = getServicio(SERVICIO);
 
