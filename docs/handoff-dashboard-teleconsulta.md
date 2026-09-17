@@ -460,11 +460,20 @@ Lo que queda:
 | 6 | `PractitionerRole` con `specialty` para Albarellos y Carrieri | Manual, desde el admin: lo hacemos juntos en la primera prueba |
 | 7 | Consolidar las fichas duplicadas de cada profesional (§1.1) | Nosotros, con el id de la ficha del Dashboard que nos pasen |
 
-**El turno de prueba ya está**, y lo crea un seed:
+**El turno de prueba ya está**, y lo crea un seed, en dos modos:
 
 ```bash
-npm run seed:prueba-teleconsulta
+npm run seed:prueba-teleconsulta              # turno PAGO: para probar la sala
+npm run seed:prueba-teleconsulta -- --pagado  # lo mismo, dicho en voz alta
+npm run seed:prueba-teleconsulta -- --impago  # turno impago + link de MercadoPago
 ```
+
+El **primero es el que van a usar siempre**: deja el turno `booked` —pago y
+confirmado— así se puede repetir la prueba de la sala cuantas veces haga falta
+sin pasar por MercadoPago. El modo impago sirve para probar el cobro
+(`--con-pago` es su alias viejo; significa "con el paso del pago", que es
+justo lo contrario de lo que parece, y por eso ahora también se llama
+`--impago`).
 
 Deja un turno **`booked`** del paciente de prueba con el Dr. D'Alessandro —con
 `appointmentType`, sala `tc-<uuid>` y los dos `participant`— e imprime el
