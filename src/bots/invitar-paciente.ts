@@ -23,6 +23,7 @@ import {
   type CanalInvitacion,
 } from '../lib/onboarding.js';
 import { enviarEmail, enviarWhatsApp, resolverProjectId } from './_shared.js';
+import { remitenteEmail } from '../config/email.js';
 
 export interface EntradaInvitarPaciente {
   pacienteRef: string; // "Patient/123"
@@ -205,9 +206,11 @@ export async function handler(
       }
     } else if (e.canal === 'email') {
       const m = mensajeInvitacion(display, link);
-      // Remitente con marca (la dirección sigue siendo la identidad SES verificada).
-      // Configurable con el secret EMAIL_FROM.
-      const from = event.secrets['EMAIL_FROM']?.valueString ?? 'Biowellness San Isidro <hola@medplum.com.ar>';
+      // Remitente con marca (la dirección tiene que ser una identidad SES
+      // verificada). El default era `hola@medplum.com.ar` —el dominio del
+      // PROVEEDOR—: un paciente que recibe el acceso a su historia desde un
+      // dominio que no reconoce tiene todos los motivos para marcarlo como spam.
+      const from = remitenteEmail(event.secrets['EMAIL_FROM']?.valueString);
       const comm = await enviarEmail(medplum, {
         to: email,
         asunto: m.asunto,

@@ -262,3 +262,52 @@ export function minutosDeEspera(entroEl: Date | undefined, profesionalEnLinea: b
   }
   return Math.max(0, Math.floor((ahora.getTime() - entroEl.getTime()) / MINUTO_MS));
 }
+
+export interface EmailTeleconsulta {
+  asunto: string;
+  cuerpo: string;
+}
+
+/**
+ * El email del recordatorio de 2 h de una videollamada.
+ *
+ * **Por qué email además del WhatsApp, que ya lleva el link.** Una consulta por
+ * video sale mejor en una computadora —pantalla grande, cámara a la altura de
+ * los ojos, mejor micrófono— y el WhatsApp llega al teléfono. Abrirlo en la
+ * compu significa WhatsApp Web, escanear un QR, o mandarse el link a uno mismo.
+ * El email ya está abierto en la computadora del paciente: es el canal que
+ * lleva el link a la pantalla donde conviene atenderse. No es redundante, es el
+ * mismo dato por la puerta que corresponde.
+ *
+ * **El asunto no dice la especialidad, el cuerpo sí.** Un asunto se lee en la
+ * notificación del teléfono, en la pantalla bloqueada y por encima del hombro;
+ * el cuerpo hay que abrirlo. "Cardiología" en el asunto le cuenta a cualquiera
+ * que mire el teléfono del paciente algo de su salud. Mismo criterio que el
+ * título del web push (`bw-web-push`), que dice "Novedades de tu consulta" sin
+ * decir de qué.
+ */
+export function emailRecordatorioTeleconsulta(d: {
+  hora: string;
+  servicio: string;
+  link: string;
+}): EmailTeleconsulta {
+  return {
+    asunto: `Tu videollamada de hoy a las ${d.hora} · Biowellness`,
+    cuerpo: [
+      `Hola, te recordamos tu videollamada de hoy a las ${d.hora}:`,
+      '',
+      d.servicio,
+      '',
+      `Para entrar: ${d.link}`,
+      '',
+      `Podés entrar desde ${TELECONSULTA.accesoAntesMin} minutos antes para probar la cámara y el micrófono.`,
+      'Te recomendamos usar una computadora con buena conexión, y auriculares si estás en un lugar con ruido.',
+      '',
+      'Si tenés estudios para que el profesional vea antes de la consulta, podés subirlos desde tu portal.',
+      '',
+      'Si tenés cualquier problema para entrar, respondé este mail o escribinos por WhatsApp.',
+      '',
+      'Biowellness San Isidro',
+    ].join('\n'),
+  };
+}

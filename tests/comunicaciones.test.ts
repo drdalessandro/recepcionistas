@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
+import { EMAIL_FROM, remitenteEmail } from '../src/config/email.js';
 import type { BotEvent, MedplumClient } from '@medplum/core';
 import { crearAlertaRecepcion, enviarWhatsApp, enviarEmail, notificarPortal, NOTIFICACION_SYSTEM } from '../src/bots/_shared.js';
 import { COD, EXT, SYSTEM, TIPO_AVISO } from '../src/fhir/identifiers.js';
@@ -364,5 +365,27 @@ describe('crearAlertaRecepcion · los avisos tienen que ser ENCONTRABLES', () =>
     expect(input.find((i) => i.type.text === 'texto')?.valueString).toBe('Hola!');
     // Los datos vacíos no ensucian el Task.
     expect(input.some((i) => i.type.text === 'perfil')).toBe(false);
+  });
+});
+
+describe('remitenteEmail — el paciente tiene que reconocer quién le escribe', () => {
+  it('Sin secret cargado sale del dominio de Biowellness, no del proveedor', () => {
+    // El default anterior era `hola@medplum.com.ar`: el dominio del PROVEEDOR.
+    // Un paciente que recibe el acceso a su historia desde un dominio que no
+    // reconoce tiene todos los motivos para marcarlo como spam — y esa queja le
+    // pega a la reputación de TODOS los emails de la cuenta, no solo a ese.
+    expect(remitenteEmail(undefined)).toBe(EMAIL_FROM);
+    expect(remitenteEmail(undefined)).toContain('@biowellness.ar');
+  });
+
+  it('Un secret en blanco cuenta como ausente', () => {
+    // Cargado sin querer con un espacio, dejaría los emails sin `From` válido
+    // y SES los rechaza enteros.
+    expect(remitenteEmail('   ')).toBe(EMAIL_FROM);
+    expect(remitenteEmail('')).toBe(EMAIL_FROM);
+  });
+
+  it('Con secret, manda el secret', () => {
+    expect(remitenteEmail('Otra Cosa <hola@otro.ar>')).toBe('Otra Cosa <hola@otro.ar>');
   });
 });

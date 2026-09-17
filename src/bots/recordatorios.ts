@@ -17,9 +17,9 @@ import type { Appointment } from '@medplum/fhirtypes';
 import { SYSTEM } from '../fhir/identifiers.js';
 import { modalidadDeTurno } from '../fhir/appointment.js';
 import { PORTAL_URL } from '../lib/onboarding.js';
-import { rutaTeleconsulta } from '../lib/teleconsulta.js';
+import { emailRecordatorioTeleconsulta, rutaTeleconsulta } from '../lib/teleconsulta.js';
 import { recordatorioDue, VENTANA_MAX_MS, type TipoRecordatorio } from '../lib/recordatorios.js';
-import { enviarWhatsApp, notificarPortal } from './_shared.js';
+import { enviarEmail, enviarWhatsApp, notificarPortal } from './_shared.js';
 
 export interface EntradaRecordatorios {
   /** Fecha de referencia ISO (default: ahora). Útil para pruebas/reprocesos. */
@@ -148,6 +148,30 @@ export async function handler(
       identifier: { system: SYSTEM.communication, value: `portal-${key}` },
       texto,
     });
+
+    // Email, SOLO para la videollamada de 2 h. Una consulta por video sale
+    // mejor en una computadora, y el WhatsApp llega al teléfono: el email es el
+    // canal que lleva el link a la pantalla donde conviene atenderse. Para un
+    // turno presencial no agrega nada —el paciente viene igual— y sumar un
+    // canal por las dudas es ruido que después nadie apaga.
+    //
+    // Best-effort: el WhatsApp y la campanita ya salieron. Que SES falle no
+    // puede dejar el recordatorio sin mandar, y la guardia de idempotencia de
+    // arriba cubre todo el bloque.
+    if (esVirtual && tipo === '2h' && linkSala) {
+      const mail = emailRecordatorioTeleconsulta({
+        hora: fmtHora.format(inicio),
+        servicio: descripcion,
+        link: linkSala,
+      });
+      await enviarEmail(medplum, {
+        asunto: mail.asunto,
+        cuerpo: mail.cuerpo,
+        template: 'recordatorio-2h-virtual',
+        pacienteRef,
+        about: `Appointment/${appt.id}`,
+      }).catch(() => undefined);
+    }
 
     if (tipo === '2h') {
       enviados2++;
