@@ -71,6 +71,12 @@ export function buildActivityDefinition(s: Servicio): ActivityDefinition {
   if (s.modalidad === 'virtual') {
     ext.push({ url: EXT.modalidadAtencion, valueCode: s.modalidad });
   }
+  // QUIÉN atiende. Su presencia es lo que le dice al portal que este servicio
+  // NO va en el selector de servicios: se pide eligiendo profesional y horario
+  // contra su agenda publicada. Ver el docstring de `EXT.profesional`.
+  if (s.practitionerCodigo) {
+    ext.push({ url: EXT.profesional, valueString: s.practitionerCodigo });
+  }
   // Posición en la góndola del portal (ascendente; sin extensión cae al final).
   if (s.orden != null) {
     ext.push({ url: EXT.orden, valueInteger: s.orden });

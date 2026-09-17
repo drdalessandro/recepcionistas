@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { buildScheduleMedico, buildSeed, buildSlotMedico, esScheduleDeMedico, horarioDeAgendaMedico } from '../src/seed/builders.js';
 import { generarSlots } from '../src/lib/slots.js';
-import { getServicio } from '../src/config/catalogo.js';
+import { getServicio, TODOS_LOS_SERVICIOS } from '../src/config/catalogo.js';
 import { MEDICOS, tieneAgendaTeleconsulta } from '../src/config/medicos.js';
 import { SYSTEM } from '../src/fhir/identifiers.js';
 import { EXT, INTAKE_QUESTIONNAIRE_URL } from '../src/fhir/identifiers.js';
@@ -57,6 +57,56 @@ describe('Seed — ActivityDefinition (servicios)', () => {
       const precio = ad.extension?.find((e) => e.url === EXT.precioUsd);
       expect(typeof precio?.valueDecimal).toBe('number');
     }
+  });
+
+  /**
+   * El selector de servicios del portal es para TERAPIAS. Las consultas se
+   * piden eligiendo profesional y horario, contra la agenda publicada.
+   *
+   * El portal lo deducía del NOMBRE de la sección ("Consulta Médica"), y por
+   * eso las teleconsultas se colaban: publican sección propia por especialidad
+   * ("Cardiología", "Endocrinología y Diabetes"), que ninguna lista de
+   * exclusión podía anticipar — y una especialidad nueva se habría colado
+   * igual (reportado por Andrés desde el portal, 2026-09-17).
+   */
+  describe('qué servicios NO van en el selector de servicios', () => {
+    const conProfesional = (ad: (typeof seed.activityDefinitions)[number]): string | undefined =>
+      ad.extension?.find((e) => e.url === EXT.profesional)?.valueString;
+
+    it('TODA consulta declara profesional, presencial y virtual', () => {
+      for (const s of TODOS_LOS_SERVICIOS.filter((x) => x.practitionerCodigo)) {
+        const ad = seed.activityDefinitions.find((a) => a.name === s.codigo)!;
+        expect(conProfesional(ad), `${s.codigo} sin profesional`).toBe(s.practitionerCodigo);
+      }
+    });
+
+    it('LAS TELECONSULTAS QUEDAN FUERA por la misma regla que las presenciales', () => {
+      // Es el caso que motivó todo: las dos modalidades del mismo médico, cada
+      // una en su sección, y las dos reconocibles sin mirar el nombre.
+      expect(conProfesional(seed.activityDefinitions.find((a) => a.name === 'TELECONSULTA_MED_DALESSANDRO')!)).toBe(
+        'MED_DALESSANDRO',
+      );
+      expect(conProfesional(seed.activityDefinitions.find((a) => a.name === 'CONSULTA_MED_DALESSANDRO')!)).toBe(
+        'MED_DALESSANDRO',
+      );
+    });
+
+    it('Una terapia NO declara profesional (se reserva por sala)', () => {
+      for (const codigo of ['HBOT_MONO', 'CHEQUEO_BW']) {
+        const ad = seed.activityDefinitions.find((a) => a.name === codigo);
+        if (ad) {
+          expect(conProfesional(ad), `${codigo} no debería tener profesional`).toBeUndefined();
+        }
+      }
+    });
+
+    it('La sección sola NO alcanza: las teleconsultas no están en "Consulta Médica"', () => {
+      // Fija POR QUÉ hace falta la extensión. Si alguien "arregla" esto
+      // devolviéndolas a la sección de consultas, este test lo cuenta.
+      const tele = seed.activityDefinitions.find((a) => a.name === 'TELECONSULTA_MED_DALESSANDRO')!;
+      expect(tele.topic?.[0]?.text).toBe('Cardiología');
+      expect(tele.topic?.[0]?.text).not.toBe('Consulta Médica');
+    });
   });
 
   it('Chequeo Biowellness: precio-ars de consulta y descripción en voz de paciente (portal)', () => {
@@ -457,5 +507,24 @@ describe('Seed — agendas de médicos (portal → Consulta médica)', () => {
         expect(tipos).toContain('Questionnaire');
       }
     });
+  });
+});
+
+/**
+ * El archivo de extensiones existe para REGISTRAR el modelo de datos, y se
+ * había quedado atrás: `modalidad-atencion` se escribe desde el 16-sep en el
+ * servicio y desde el 17-sep en la agenda, pero su StructureDefinition no
+ * estaba en la tabla. El valor viajaba igual —Medplum no exige la definición—
+ * así que nada fallaba y nadie se enteraba.
+ */
+describe('Las extensiones del contrato con el portal están REGISTRADAS', () => {
+  const urls = new Set(seed.structureDefinitions.map((sd) => sd.url));
+
+  it('modalidad-atencion, que es de donde el portal saca virtual vs presencial', () => {
+    expect(urls.has(EXT.modalidadAtencion)).toBe(true);
+  });
+
+  it('profesional, que es de donde saca qué NO va en el selector de servicios', () => {
+    expect(urls.has(EXT.profesional)).toBe(true);
   });
 });

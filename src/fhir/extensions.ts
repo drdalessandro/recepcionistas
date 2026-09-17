@@ -45,6 +45,12 @@ const SPECS: SpecExtension[] = [
   { url: EXT.orden, nombre: 'orden', contexto: ['ActivityDefinition'], tipoValor: 'integer', descripcion: 'Posición en la góndola del portal (ascendente; sin extensión cae al final).' },
   { url: EXT.familia, nombre: 'familia', contexto: ['ActivityDefinition'], tipoValor: 'string', descripcion: 'Viñeta bajo la que el portal agrupa el servicio dentro de su sección (p. ej. "PRP"). Sin familia, el servicio se muestra suelto.' },
   { url: EXT.familiaOrden, nombre: 'familia-orden', contexto: ['ActivityDefinition'], tipoValor: 'integer', descripcion: 'Orden de la viñeta dentro de la sección (1-based). Viaja porque el portal no puede deducirlo.' },
+  { url: EXT.profesional, nombre: 'profesional', contexto: ['ActivityDefinition'], tipoValor: 'string', descripcion: 'Código MED_* del profesional que atiende el servicio. Su presencia es lo que le dice al portal que el turno se pide eligiendo profesional y horario, no desde el selector de servicios.' },
+  // `modalidad-atencion` se escribía desde el 16-sep en el servicio y desde el
+  // 17-sep en la agenda, pero su StructureDefinition NO estaba en esta tabla:
+  // el valor viajaba igual (Medplum no exige la definición) y el modelo de
+  // datos quedaba sin registrar, que es justo para lo que existe este archivo.
+  { url: EXT.modalidadAtencion, nombre: 'modalidad-atencion', contexto: ['ActivityDefinition', 'Schedule'], tipoValor: 'code', descripcion: 'Cómo se presta: presencial | virtual (lista cerrada). Solo se publica en lo virtual; la ausencia es presencial.' },
   // PlanDefinition (combos)
   { url: EXT.secuenciaOrdenada, nombre: 'secuencia-ordenada', contexto: ['PlanDefinition'], tipoValor: 'boolean', descripcion: 'El combo tiene secuencia ordenada (HBOT primero).' },
   { url: EXT.descuentoCombo, nombre: 'descuento-combo', contexto: ['PlanDefinition'], tipoValor: 'decimal', descripcion: 'Descuento del combo sobre lista.' },
