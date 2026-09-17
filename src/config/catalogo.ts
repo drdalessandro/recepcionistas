@@ -381,7 +381,14 @@ function teleconsulta(m: Medico, precioARS: number): Servicio {
   const seccion = m.especialidad ? ESPECIALIDADES[m.especialidad] : 'Consulta Médica';
   return {
     codigo: codigoTeleconsulta(m.codigo),
-    nombre: `${seccion} por videollamada — ${m.nombre}`,
+    // Empieza con "Teleconsulta" a propósito. El buscador del modal de reserva
+    // filtra por este texto: con "Cardiología por videollamada" la recepcionista
+    // que tipeaba "teleconsulta" —la palabra que usa todo el mundo acá, y la del
+    // código del servicio— no encontraba NADA, y el botón de reservar quedaba
+    // gris sin explicar por qué (reportado por Andrés, 2026-09-17). El nombre
+    // tiene que traer las palabras con las que alguien lo va a buscar: la
+    // modalidad, la especialidad y el apellido.
+    nombre: `Teleconsulta de ${seccion} — ${m.nombre}`,
     categoria: 'CONSULTA' as const,
     modalidad: 'virtual' as const,
     duracionMin: TELECONSULTA.slotMin,
