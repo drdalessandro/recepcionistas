@@ -114,3 +114,17 @@ export function datosNoRegenerables(p: Practitioner): string[] {
   }
   return señales;
 }
+
+/**
+ * ¿La ficha tiene matrícula (`qualification`)?
+ *
+ * Es un subconjunto de {@link datosNoRegenerables}, y existe sólo para **hablar
+ * con precisión**: el freno de `medicos:consolidar` decía "la ficha con la
+ * matrícula" aunque lo que hubiera encontrado fueran identifier de otro sistema
+ * y ninguna matrícula (el caso real del Dr. Conrado). Quien lee un freno está
+ * por decidir a mano qué ficha sobrevive: el mensaje tiene que nombrar lo que
+ * de verdad está en juego, no lo más grave que podría estarlo.
+ */
+export function tieneMatricula(p: Practitioner): boolean {
+  return (p.qualification ?? []).length > 0;
+}
