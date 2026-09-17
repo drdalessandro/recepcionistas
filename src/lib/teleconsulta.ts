@@ -126,6 +126,27 @@ export function motivoSinAcceso(inicio: Date, fin: Date, ahora: Date): string | 
   return undefined;
 }
 
+/**
+ * El dominio del servidor de video, como lo quiere Jitsi: **solo el host**.
+ *
+ * El secret se llama `JITSI_BASE_URL` y el nombre engaña: no es una URL, es el
+ * host pelado (`meet.biowellness.ar`). Va al claim `sub` del token, y Prosody
+ * lo compara contra el nombre del `VirtualHost`: con `https://` adelante o una
+ * barra al final **no matchea y el token se rechaza**, con un error del lado
+ * del servidor que desde el portal se ve como "no se pudo entrar".
+ *
+ * En vez de pedirle a quien carga el secret que recuerde esa sutileza, se
+ * acepta cualquiera de las dos formas y se normaliza. Es la misma idea que
+ * `aE164Argentino` con los teléfonos de la ficha: el dato entra como la gente
+ * lo escribe y el sistema lo deja como lo necesita la integración.
+ */
+export function dominioJitsi(valor: string): string {
+  return valor
+    .trim()
+    .replace(/^[a-z]+:\/\//i, '') // https:// · http://
+    .replace(/\/+$/, ''); // barra(s) final(es)
+}
+
 export interface ClaimsToken {
   iss: string;
   aud: 'jitsi';

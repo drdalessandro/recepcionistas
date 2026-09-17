@@ -26,7 +26,7 @@ import type { BotEvent, MedplumClient } from '@medplum/core';
 import type { Appointment } from '@medplum/fhirtypes';
 import { createHmac } from 'node:crypto';
 import { EXT } from '../fhir/identifiers.js';
-import { claimsToken, esNombreSala, motivoSinAcceso, type RolSala } from '../lib/teleconsulta.js';
+import { claimsToken, dominioJitsi, esNombreSala, motivoSinAcceso, type RolSala } from '../lib/teleconsulta.js';
 
 export interface EntradaToken {
   appointmentId: string;
@@ -81,7 +81,10 @@ export async function handler(medplum: MedplumClient, event: BotEvent<EntradaTok
     return { ok: false, mensaje: 'Faltan datos para entrar a la videollamada.' };
   }
 
-  const dominio = event.secrets['JITSI_BASE_URL']?.valueString;
+  // `JITSI_BASE_URL` tiene nombre de URL y es el HOST (`meet.biowellness.ar`):
+  // va al claim `sub`, que Prosody compara contra el VirtualHost. Se normaliza
+  // en vez de exigir que quien carga el secret se acuerde (ver `dominioJitsi`).
+  const dominio = dominioJitsi(event.secrets['JITSI_BASE_URL']?.valueString ?? '');
   const appId = event.secrets['JITSI_APP_ID']?.valueString;
   const secret = event.secrets['JITSI_JWT_SECRET']?.valueString;
   if (!dominio || !appId || !secret) {

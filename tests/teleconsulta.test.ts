@@ -14,6 +14,7 @@ import {
   accesoPermitido,
   avisoDue,
   claimsToken,
+  dominioJitsi,
   esNombreSala,
   habilitaNoShow,
   minutosDeEspera,
@@ -220,5 +221,37 @@ describe('El turno virtual: modalidad, cobro y ruta del portal', () => {
 
   it('rutaTeleconsulta es la ruta que confirmó el portal', () => {
     expect(rutaTeleconsulta('abc-123')).toBe('/teleconsulta/abc-123');
+  });
+});
+
+describe('dominioJitsi — el secret con nombre engañoso', () => {
+  it('El host pelado pasa igual', () => {
+    expect(dominioJitsi('meet.biowellness.ar')).toBe('meet.biowellness.ar');
+  });
+
+  it('Acepta la URL completa, que es lo que invita a escribir el nombre del secret', () => {
+    // Con el esquema adelante, el claim `sub` no matchea el VirtualHost de
+    // Prosody y el token se rechaza: el error aparece lejos de la causa.
+    for (const v of [
+      'https://meet.biowellness.ar',
+      'http://meet.biowellness.ar',
+      'https://meet.biowellness.ar/',
+      '  https://meet.biowellness.ar//  ',
+    ]) {
+      expect(dominioJitsi(v)).toBe('meet.biowellness.ar');
+    }
+  });
+
+  it('El dominio normalizado es el que viaja en el token', () => {
+    const claims = claimsToken({
+      appId: 'biowellness-teleconsulta',
+      dominio: dominioJitsi('https://meet.biowellness.ar/'),
+      sala: nombreSala(UUID),
+      nombre: 'Ana',
+      rol: 'paciente',
+      inicio: INICIO,
+      fin: FIN,
+    });
+    expect(claims.sub).toBe('meet.biowellness.ar');
   });
 });

@@ -260,6 +260,30 @@ apt install -y jitsi-meet-tokens
 | Application ID | `biowellness-teleconsulta` — es el `iss` del token, fijo |
 | Application secret | El hexadecimal generado. Vive en **dos** lugares: este servidor y, en la Fase 1, el Project Secret `JITSI_JWT_SECRET` de Medplum |
 
+**Los tres Project Secrets de Medplum** (Fase 1), con el nombre exacto que lee
+`bw-teleconsulta-token`. `JITSI_*` es una abreviatura para nombrarlos juntos, no
+un nombre:
+
+| Secret | Valor | Tiene que coincidir con |
+|---|---|---|
+| `JITSI_BASE_URL` | `meet.biowellness.ar` | el `VirtualHost` de Prosody |
+| `JITSI_APP_ID` | `biowellness-teleconsulta` | `app_id` |
+| `JITSI_JWT_SECRET` | el hexadecimal de `openssl rand -hex 32` | `app_secret` |
+
+> ⚠️ **`JITSI_BASE_URL` tiene nombre de URL y es el HOST pelado.** Va al claim
+> `sub`, que Prosody compara contra el nombre del `VirtualHost`: con `https://`
+> adelante el token se rechaza del lado del servidor y desde el portal se ve
+> como "no se pudo entrar", lejos de la causa. El bot **normaliza** el valor
+> (`dominioJitsi` en `src/lib/teleconsulta.ts`), así que las dos formas
+> funcionan; el nombre igual engaña y por eso está anotado acá.
+
+**Cómo verificar que quedaron bien.** Los Project Secrets no se pueden leer por
+API —a propósito—, así que la única prueba real es **ejecutar el bot**. Eso lo
+hace solo `npm run seed:prueba-teleconsulta`: crea el turno de prueba, pide el
+token y muestra los claims `iss`, `sub` y `room` que salieron, más un link
+directo a la sala. Si contesta *"La videollamada no está configurada"*, falta
+alguno de los tres.
+
 Si el diálogo no aparece: `dpkg-reconfigure jitsi-meet-tokens`, o editar a mano
 `/etc/prosody/conf.avail/meet.biowellness.ar.cfg.lua`. Falta **una línea que el
 paquete no escribe** y que no hay que dejar librada al default de la versión:
