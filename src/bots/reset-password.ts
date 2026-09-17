@@ -37,6 +37,7 @@ import {
   validarEntradaReset,
 } from '../lib/reset-password.js';
 import { enviarEmail, resolverProjectId } from './_shared.js';
+import { remitenteEmail } from '../config/email.js';
 
 export interface EntradaResetPassword {
   email?: string;
@@ -149,7 +150,7 @@ export async function handler(
       cuerpo: m.texto,
       template: 'reset-password',
       to: email,
-      from: 'Biowellness <info@biowellness.ar>',
+      from: remitenteEmail(event.secrets['EMAIL_FROM']?.valueString),
     });
     return RESPUESTA_GENERICA;
   } catch (err) {

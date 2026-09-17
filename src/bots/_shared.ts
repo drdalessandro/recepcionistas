@@ -43,6 +43,7 @@ import {
   type SolicitudPendiente,
 } from '../lib/disponibilidad.js';
 import { MERCADOPAGO, type PerfilReserva } from '../config/reglas.js';
+import { EMAIL_FROM, EMAIL_RESPUESTAS } from '../config/email.js';
 import type { IntensidadMembresia, ModalidadAtencion, Servicio } from '../domain/types.js';
 import { resolverTC } from '../config/tipo-cambio.js';
 import { CATEGORIA_COMERCIAL, getServicio, nombreServicioRecepcion } from '../config/catalogo.js';
@@ -417,6 +418,12 @@ export async function enviarEmail(
     about?: string;
     /** Remitente con nombre visible (debe ser una identidad SES verificada). */
     from?: string;
+    /**
+     * A dónde contesta el paciente. Por defecto `EMAIL_RESPUESTAS`: un email
+     * operativo que nadie puede responder es una puerta cerrada, y el del
+     * recordatorio de una videollamada es justo el que más se responde.
+     */
+    replyTo?: string;
   },
 ): Promise<Communication> {
   // Mismo modo avión que enviarWhatsApp: a un paciente demo no le sale email
@@ -442,7 +449,8 @@ export async function enviarEmail(
         to,
         subject: params.asunto,
         text: params.cuerpo,
-        ...(params.from ? { from: params.from } : {}),
+        from: params.from ?? EMAIL_FROM,
+        replyTo: params.replyTo ?? EMAIL_RESPUESTAS,
       });
       status = 'completed';
     } catch (err) {

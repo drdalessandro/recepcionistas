@@ -15,6 +15,7 @@ import {
   avisoDue,
   claimsToken,
   dominioJitsi,
+  emailRecordatorioTeleconsulta,
   esNombreSala,
   habilitaNoShow,
   minutosDeEspera,
@@ -253,5 +254,34 @@ describe('dominioJitsi — el secret con nombre engañoso', () => {
       fin: FIN,
     });
     expect(claims.sub).toBe('meet.biowellness.ar');
+  });
+});
+
+describe('El email del recordatorio de la videollamada', () => {
+  const mail = emailRecordatorioTeleconsulta({
+    hora: '15:00',
+    servicio: 'Cardiología por videollamada — Dr. Alejandro Sergio D\'Alessandro',
+    link: 'https://app.biowellness.ar/teleconsulta/abc-123',
+  });
+
+  it('EL ASUNTO NO DICE LA ESPECIALIDAD', () => {
+    // Un asunto se lee en la pantalla bloqueada y por encima del hombro; el
+    // cuerpo hay que abrirlo. "Cardiología" ahí le cuenta algo de la salud del
+    // paciente a cualquiera que mire su teléfono.
+    expect(mail.asunto).not.toMatch(/cardiolog|endocrinolog|nutrici/i);
+    expect(mail.asunto).toContain('15:00');
+  });
+
+  it('El cuerpo sí, y sobre todo lleva el link', () => {
+    expect(mail.cuerpo).toContain('https://app.biowellness.ar/teleconsulta/abc-123');
+    expect(mail.cuerpo).toContain('Cardiología');
+  });
+
+  it('Dice desde cuándo se puede entrar, con el número de la regla', () => {
+    expect(mail.cuerpo).toContain(`${TELECONSULTA.accesoAntesMin} minutos antes`);
+  });
+
+  it('Invita a responder: es el mail que más se responde y llega 2 h antes', () => {
+    expect(mail.cuerpo).toMatch(/respond[eé]/i);
   });
 });
