@@ -14,6 +14,14 @@ import type { CategoriaServicio, ModalidadAtencion, RecursoFisico, TipoRecurso }
 
 const TUMBONAS_RECOVERY = 'TUMBONAS_RECOVERY';
 
+/**
+ * La sala de videollamada. Es un código y no una elección: un turno virtual va
+ * SIEMPRE acá, lo pida quien lo pida (`bw-reservar-turno` lo fuerza). Si el
+ * mostrador pudiera elegir, una teleconsulta terminaría ocupando el consultorio
+ * —el único que hay— y trabándoselo a un paciente que sí necesita venir.
+ */
+export const RECURSO_TELECONSULTA = 'R_TELECONSULTA';
+
 export const RECURSOS: RecursoFisico[] = [
   { codigo: 'R_HBOT_MONO', nombre: 'Cámara Hiperbárica Monoplaza', tipo: 'HBOT', capacidad: 1 },
   {
@@ -63,7 +71,7 @@ export const RECURSOS: RecursoFisico[] = [
    * médico compiten por el mismo horario y por eso comparten Schedule), no un
    * lugar físico. Ponerle capacidad 1 inventaría un cuello que no existe.
    */
-  { codigo: 'R_TELECONSULTA', nombre: 'Videollamada', tipo: 'VIRTUAL', capacidad: 50 },
+  { codigo: RECURSO_TELECONSULTA, nombre: 'Videollamada', tipo: 'VIRTUAL', capacidad: 50 },
   { codigo: 'R_SALA_TB', nombre: 'Sala de Terapias Biológicas / IV', tipo: 'BOX_CLINICO', capacidad: 1 },
   {
     codigo: 'R_IV_2',

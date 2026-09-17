@@ -76,7 +76,9 @@ export function ReservaModal({
   const serviciosCompatibles = useMemo(
     () =>
       preset
-        ? SERVICIOS.filter((s) => recursosParaCategoria(s.categoria).some((r) => r.codigo === preset.recursoCodigo))
+        ? SERVICIOS.filter((s) =>
+            recursosParaCategoria(s.categoria, s.modalidad).some((r) => r.codigo === preset.recursoCodigo),
+          )
         : [],
     [preset],
   );

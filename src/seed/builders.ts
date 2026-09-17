@@ -63,6 +63,14 @@ export function buildActivityDefinition(s: Servicio): ActivityDefinition {
   if (s.precioARS != null) {
     ext.push({ url: EXT.precioArs, valueDecimal: s.precioARS });
   }
+  // Cómo se presta. `valueCode` y no `valueString` porque la lista es CERRADA
+  // (`MODALIDADES`), igual que `regla-pricing` o `split`: un código de una lista
+  // acotada se valida, un string libre no. Solo se publica en los servicios
+  // virtuales — la ausencia es `presencial`, que es todo el catálogo v9, y
+  // escribirla en los 40 servicios no agregaría información.
+  if (s.modalidad === 'virtual') {
+    ext.push({ url: EXT.modalidadAtencion, valueCode: s.modalidad });
+  }
   // Posición en la góndola del portal (ascendente; sin extensión cae al final).
   if (s.orden != null) {
     ext.push({ url: EXT.orden, valueInteger: s.orden });
