@@ -36,7 +36,12 @@ import { MedplumClient } from '@medplum/core';
 import type { Practitioner } from '@medplum/fhirtypes';
 import { MEDICOS } from '../config/medicos.js';
 import { SYSTEM } from '../fhir/identifiers.js';
-import { claveNombre as clave, datosNoRegenerables, nombreDePractitioner as nombreDe } from '../fhir/practitioner.js';
+import {
+  claveNombre as clave,
+  datosNoRegenerables,
+  nombreDePractitioner as nombreDe,
+  tieneMatricula,
+} from '../fhir/practitioner.js';
 
 function requireEnv(nombre: string): string {
   const v = process.env[nombre];
@@ -136,12 +141,25 @@ async function main(): Promise<void> {
     if (!forzado) {
       const perdibles = candidatos.filter((p) => p.id !== canonico.id && datosNoRegenerables(p).length > 0);
       if (perdibles.length > 0 && datosNoRegenerables(canonico).length === 0) {
-        console.log('    ⚠️  FRENO: la ficha que quedaría activa NO tiene matrícula y alguna de las otras SÍ.');
+        // El mensaje nombra lo que DE VERDAD encontró. Decir "matrícula" cuando
+        // lo perdible son identifier de otro sistema manda a revisar el
+        // Dashboard por una matrícula que no existe, y deja creer que el otro
+        // caso es menos grave de lo que es.
+        const hayMatricula = perdibles.some(tieneMatricula);
+        console.log(
+          hayMatricula
+            ? '    ⚠️  FRENO: la ficha que quedaría activa NO tiene matrícula y alguna de las otras SÍ.'
+            : '    ⚠️  FRENO: alguna de las otras fichas tiene datos que el seed no puede regenerar, y la que quedaría activa no.',
+        );
         for (const p of perdibles) {
           console.log(`        ${p.id} (${p.meta?.lastUpdated?.slice(0, 10)}): ${datosNoRegenerables(p).join(' · ')}`);
         }
         console.log(`    → Decidí vos cuál gana:  --canonico ${m.codigo}=<id>`);
-        console.log('      (desactivar la ficha con la matrícula deja al profesional sin poder recetar)');
+        console.log(
+          hayMatricula
+            ? '      (desactivar la ficha con la matrícula deja al profesional sin poder recetar)'
+            : '      (desactivarla tira identifier que cargó otro sistema; el seed no los vuelve a escribir)',
+        );
         process.exitCode = 1;
         continue;
       }

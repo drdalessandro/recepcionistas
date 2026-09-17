@@ -11,6 +11,7 @@ import {
   datosNoRegenerables,
   fusionarPractitioner,
   nombreDePractitioner,
+  tieneMatricula,
 } from '../src/fhir/practitioner.js';
 import { buildPractitioner } from '../src/seed/builders.js';
 import { MEDICOS } from '../src/config/medicos.js';
@@ -133,6 +134,25 @@ describe('datosNoRegenerables — qué ficha no se puede desactivar a ciegas', (
         telecom: [{ system: 'phone', value: '+5491100000000' }],
       }),
     ).toEqual([]);
+  });
+
+  it('IDENTIFIER DE OTRO SISTEMA NO ES MATRÍCULA', () => {
+    // El caso real del Dr. Conrado: el freno saltó por un identifier ajeno y el
+    // mensaje habló de "la ficha con la matrícula", que no existía. Quien lee un
+    // freno decide a mano qué ficha sobrevive; el texto tiene que nombrar lo que
+    // está en juego de verdad.
+    const conAjeno: Practitioner = {
+      resourceType: 'Practitioner',
+      identifier: [{ system: MATRICULA, value: 'MN 12345' }],
+    };
+    expect(datosNoRegenerables(conAjeno)).toHaveLength(1);
+    expect(tieneMatricula(conAjeno)).toBe(false);
+  });
+
+  it('La matrícula sí es matrícula', () => {
+    expect(tieneMatricula({ resourceType: 'Practitioner', qualification: [{ code: { text: 'Cardiología' } }] })).toBe(
+      true,
+    );
   });
 });
 
