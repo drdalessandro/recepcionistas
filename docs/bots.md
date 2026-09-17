@@ -253,6 +253,18 @@ min). Cuanto más seguido corra, más cerca de las 48 h / 2 h exactas sale el av
 la idempotencia evita duplicados. Necesita los mismos secretos de Twilio que
 `bw-enviar-whatsapp`.
 
+**Turnos virtuales.** El de 2 h es el mensaje que TRAE el link de la
+videollamada, y por eso el texto cambia: lleva `app.biowellness.ar/teleconsulta/<id>`
+y le pide al paciente entrar 15 minutos antes a probar cámara y micrófono. El
+link va **al portal, nunca a la sala de Jitsi**: la sala solo se abre con un
+token que se emite a pedido y caduca con el turno, así que un link directo sería
+un link roto —y reenviable—. La campanita de ese aviso sale con el tipo
+`teleconsulta-lista`, que es el que el web push titula "Tu videollamada" y manda
+a la página de la sala. Las plantillas aprobadas por Meta dicen "turno" y no
+llevan link, así que los virtuales usan un nombre de plantilla **sin secret
+cargado** (`recordatorio-2h-virtual`) y salen por la genérica con el cuerpo
+entero; cargarle un ContentSid rompería el link.
+
 ## Vigilante de teleconsultas
 
 `bw-teleconsulta-vigilante` corre **cada 10 minutos** (`*/10 * * * *`), aunque el

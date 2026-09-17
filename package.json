@@ -18,6 +18,7 @@
     "seed": "tsx src/seed/index.ts",
     "seed:prueba-recordatorios": "tsx src/seed/prueba-recordatorios.ts",
     "seed:prueba-espera": "tsx src/seed/prueba-espera.ts",
+    "seed:prueba-teleconsulta": "tsx src/seed/prueba-teleconsulta.ts",
     "seed:prueba-agenda-semanal": "tsx src/seed/prueba-agenda-semanal.ts",
     "datos-demo": "tsx src/seed/datos-demo.ts",
     "demo:ocupacion": "tsx src/seed/demo-ocupacion.ts",
