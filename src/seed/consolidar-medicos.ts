@@ -36,7 +36,7 @@ import { MedplumClient } from '@medplum/core';
 import type { Practitioner } from '@medplum/fhirtypes';
 import { MEDICOS } from '../config/medicos.js';
 import { SYSTEM } from '../fhir/identifiers.js';
-import { claveNombre as clave, nombreDePractitioner as nombreDe } from '../fhir/practitioner.js';
+import { claveNombre as clave, datosNoRegenerables, nombreDePractitioner as nombreDe } from '../fhir/practitioner.js';
 
 function requireEnv(nombre: string): string {
   const v = process.env[nombre];
@@ -127,12 +127,36 @@ async function main(): Promise<void> {
         ` (${canonico.meta?.lastUpdated?.slice(0, 10)})${forzado ? ' [forzada]' : ''}`,
     );
 
+    // SALVAGUARDA. Si una ficha que se va a desactivar tiene datos que este repo
+    // no puede regenerar —la matrícula, sobre todo— y la canónica no los tiene,
+    // el script está por elegir la ficha equivocada. No puede saber cuál es la
+    // buena: la matrícula la carga el Dashboard y acá no se modela. Así que
+    // **no elige**: lo dice y frena, salvo que el operador ya haya decidido con
+    // `--canonico`, que es la forma de afirmar "sé cuál quiero".
+    if (!forzado) {
+      const perdibles = candidatos.filter((p) => p.id !== canonico.id && datosNoRegenerables(p).length > 0);
+      if (perdibles.length > 0 && datosNoRegenerables(canonico).length === 0) {
+        console.log('    ⚠️  FRENO: la ficha que quedaría activa NO tiene matrícula y alguna de las otras SÍ.');
+        for (const p of perdibles) {
+          console.log(`        ${p.id} (${p.meta?.lastUpdated?.slice(0, 10)}): ${datosNoRegenerables(p).join(' · ')}`);
+        }
+        console.log(`    → Decidí vos cuál gana:  --canonico ${m.codigo}=<id>`);
+        console.log('      (desactivar la ficha con la matrícula deja al profesional sin poder recetar)');
+        process.exitCode = 1;
+        continue;
+      }
+    }
+
     for (const p of candidatos) {
       if (p.id === canonico.id) {
         const necesitaId = !tieneId(p);
         const necesitaActivar = p.active === false;
         if (necesitaId || necesitaActivar) {
-          console.log(`    ↳ ${p.id}: ${necesitaId ? '+identifier ' : ''}${necesitaActivar ? '+active' : ''}`);
+          const señales = datosNoRegenerables(p);
+          console.log(
+            `    ↳ ${p.id}: ${necesitaId ? '+identifier ' : ''}${necesitaActivar ? '+active' : ''}` +
+              (señales.length > 0 ? `  (conserva ${señales.join(' · ')})` : ''),
+          );
           if (aplicar) {
             await medplum.updateResource<Practitioner>({
               ...p,
@@ -146,7 +170,11 @@ async function main(): Promise<void> {
         }
         continue;
       }
-      console.log(`    ↳ ${p.id} (${p.meta?.lastUpdated?.slice(0, 10)}): active:false${tieneId(p) ? ' y se le quita el identifier' : ''}`);
+      const señales = datosNoRegenerables(p);
+      console.log(
+        `    ↳ ${p.id} (${p.meta?.lastUpdated?.slice(0, 10)}): active:false${tieneId(p) ? ' y se le quita el identifier' : ''}` +
+          (señales.length > 0 ? `  ⚠️ tiene ${señales.join(' · ')}` : ''),
+      );
       if (aplicar) {
         await medplum.updateResource<Practitioner>({
           ...p,

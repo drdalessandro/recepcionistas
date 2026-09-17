@@ -90,3 +90,27 @@ export function claveNombre(nombre: string): string {
     .replace(/\b(dr|dra|lic|prof|md)\b/g, '')
     .replace(/\s/g, '');
 }
+
+/**
+ * Señales de que una ficha tiene datos que **este repo no puede regenerar**.
+ *
+ * Existe para una decisión concreta: al consolidar duplicados, desactivar la
+ * ficha equivocada tira la matrícula del profesional. El script no puede saber
+ * cuál es la buena —la matrícula la carga el Dashboard y acá no se modela—,
+ * pero sí puede **mostrar cuál la tiene** y negarse a elegir a ciegas.
+ *
+ * `telecom` no cuenta: es contacto, se vuelve a cargar en un minuto. Cuentan la
+ * matrícula (`qualification`) y los identifier de otros sistemas, que son los
+ * que representan algo emitido por un tercero.
+ */
+export function datosNoRegenerables(p: Practitioner): string[] {
+  const señales: string[] = [];
+  const ajenos = (p.identifier ?? []).filter((i) => i.system !== SYSTEM.medico);
+  if (ajenos.length > 0) {
+    señales.push(`${ajenos.length} identifier de otro sistema`);
+  }
+  if ((p.qualification ?? []).length > 0) {
+    señales.push(`${p.qualification!.length} qualification (matrícula/título)`);
+  }
+  return señales;
+}

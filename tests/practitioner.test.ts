@@ -6,7 +6,12 @@
  */
 import { describe, expect, it } from 'vitest';
 import type { Practitioner } from '@medplum/fhirtypes';
-import { claveNombre, fusionarPractitioner, nombreDePractitioner } from '../src/fhir/practitioner.js';
+import {
+  claveNombre,
+  datosNoRegenerables,
+  fusionarPractitioner,
+  nombreDePractitioner,
+} from '../src/fhir/practitioner.js';
 import { buildPractitioner } from '../src/seed/builders.js';
 import { EXT, SYSTEM } from '../src/fhir/identifiers.js';
 
@@ -101,5 +106,31 @@ describe('claveNombre — dos fichas de la misma persona tienen que matchear', (
       nombreDePractitioner({ resourceType: 'Practitioner', name: [{ given: ['Ana'], family: 'Pérez' }] }),
     ).toBe('Ana Pérez');
     expect(nombreDePractitioner({ resourceType: 'Practitioner' })).toBe('');
+  });
+});
+
+describe('datosNoRegenerables — qué ficha no se puede desactivar a ciegas', () => {
+  it('La matrícula y los identifier de otros sistemas cuentan', () => {
+    expect(
+      datosNoRegenerables({
+        resourceType: 'Practitioner',
+        identifier: [{ system: MATRICULA, value: 'MN 12345' }],
+        qualification: [{ code: { text: 'Cardiología' } }],
+      }),
+    ).toHaveLength(2);
+  });
+
+  it('Una ficha que solo tiene lo nuestro no tiene nada que perder', () => {
+    // Es la que crea el seed: su único dato es el código, que se regenera solo.
+    expect(datosNoRegenerables(buildPractitioner('MED_DALESSANDRO'))).toEqual([]);
+  });
+
+  it('El contacto NO cuenta: se vuelve a cargar en un minuto', () => {
+    expect(
+      datosNoRegenerables({
+        resourceType: 'Practitioner',
+        telecom: [{ system: 'phone', value: '+5491100000000' }],
+      }),
+    ).toEqual([]);
   });
 });
