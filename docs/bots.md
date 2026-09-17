@@ -55,6 +55,10 @@ deployan al runtime **`awslambda`** de Medplum (configurable con la env
 | `bw-borrador-respuesta` | **Solo lectura**: redacta el borrador de la próxima respuesta de un hilo de Mensajes, con el contexto del paciente que Recepción ya ve (turno, plan, saldo, bloqueo) y **sin nada clínico**. Lo envía una persona, nunca el bot. Si el tema necesita a un humano, lo dice en vez de sugerir. Requiere el secret `ANTHROPIC_API_KEY`. | `executeBot` desde el botón **Sugerir** de Mensajes. |
 | `bw-proponer-reserva` | **Solo lectura** (Nivel 4, [`agente-solicitudes.md`](agente-solicitudes.md)): para una solicitud del portal, **propone la reserva concreta** —servicio, sala, horario, personas y por qué— eligiendo ENTRE los horarios reales del paciente (`disponibilidadDePaciente`, con R-07/R-13/R-22 puestas) y con la misma ficha resumida **sin nada clínico** del borrador. Lo que devuelve el modelo se valida contra la oferta (`validarSalida`): un horario que no estaba en la lista no se propone. Nunca reserva: Recepción confirma con el botón **Reservar** y la reserva la hace `bw-reservar-turno`. Primera rebanada: sesiones sueltas; consultas, IV/TB y combos mandan a Atender. Requiere el secret `ANTHROPIC_API_KEY`. | `executeBot` desde el botón **Proponer** de Solicitudes. |
 | `bw-preferencia-semanal` | Guarda en el `Coverage` la preferencia semanal de la membresía (días con nombre + hora, R-21) y prende/apaga la asignación automática. Valida días abiertos y avisa si la cantidad de días no coincide con la frecuencia del plan. Apagar **pausa** (no borra) la preferencia. Pasa por bot porque el `Coverage` es de solo lectura para el mostrador y el portal. Con `pacienteRef` (el portal lo manda SIEMPRE) verifica que la membresía sea de ese paciente antes de escribir — misma defensa que `bw-cancelar-turno`. | `executeBot` (Atender → Planes → **Preferencia semanal**) y desde el **portal** (Membresía → Agenda semanal). |
+| `bw-teleconsulta-token` | **La puerta de la teleconsulta.** Emite el JWT (HS256, firmado con `JITSI_JWT_SECRET`) para UNA sala y UNA persona, solo si quien pide es `participant` del turno, el turno está confirmado y está dentro de la ventana (15 min antes → 60 min después del fin). `rol: 'profesional'` sale con `affiliation: owner` (moderador); `paciente`, `member`. Mismo mensaje para "no existe" y "no es tuyo". Las reglas son puras (`src/lib/teleconsulta.ts`). Requiere `JITSI_BASE_URL` / `JITSI_APP_ID` / `JITSI_JWT_SECRET`. | `executeBot` desde el **portal** (paciente) y el **Dashboard** (profesional). Ver [`handoff-portal-teleconsulta.md`](handoff-portal-teleconsulta.md) y [`handoff-dashboard-teleconsulta.md`](handoff-dashboard-teleconsulta.md). |
+| `bw-teleconsulta-presencia` | Registra que alguien **entró** a la sala: abre el `Encounter` de clase `VR`, pasa el turno a `arrived` (paciente) o `checked-in` (profesional) y, si el paciente está esperando solo, deja el aviso `paciente-en-linea` en **Avisos** + WhatsApp a Recepción. Idempotente por (turno, quién). Detecta la entrada, no la salida (eso llega con el webhook de Jitsi, Fase 2). | `executeBot` al evento `videoConferenceJoined` del iframe, desde el portal y el Dashboard. |
+| `bw-teleconsulta-vigilante` | **Cron:** detecta lo que NO pasa — profesional sin conectar a los 5 min con el paciente esperando (`profesional-ausente`), paciente sin entrar a los 10 (`paciente-ausente`) — y deja el aviso idempotente en **Avisos**. **Avisa, no actúa**: no cancela ni marca no-show. | `cronString` del Bot (cada 10 min). |
+| `bw-estado-teleconsulta` | **Solo lectura, identidad de proyecto:** lo operativo de una videollamada para el modal del turno — quién está conectado, cuántos minutos espera el paciente, **cuántos** documentos adjuntó (nunca cuáles) y si ya se puede marcar no-show. Mismo molde que `bw-estado-seguridad`: Recepción no tiene `DocumentReference` en su policy y no lo necesita. | `executeBot` desde el modal del turno (app de Recepción). |
 | `bw-agenda-semanal` | **Cron R-21:** recorre las membresías activas con la agenda semanal prendida y reserva cada sesión de la semana **apenas se abre su ventana R-13** (reusa `bw-reservar-combo` con `perfil`, que valida todo — la escalera FM > Intensivo > Standard da la prioridad sola). Hora ocupada → alternativa más cercana del mismo día + campanita al socio; día lleno → aviso en **Avisos** + campanita; bloqueo estructural (R-02/R-10/R-11/R-20) → aviso y no insiste. Sin WhatsApp por sesión (los recordatorios 48 h / 2 h salen igual). Idempotente: correrlo cada hora es seguro. | `cronString` del Bot (cada hora). |
 
 ## Lista de espera: qué pasa cuando se libera un lugar
@@ -248,6 +252,18 @@ Configurar el `cronString` del Bot **una vez** (p. ej. `*/30 * * * *` = cada 30
 min). Cuanto más seguido corra, más cerca de las 48 h / 2 h exactas sale el aviso;
 la idempotencia evita duplicados. Necesita los mismos secretos de Twilio que
 `bw-enviar-whatsapp`.
+
+## Vigilante de teleconsultas
+
+`bw-teleconsulta-vigilante` corre **cada 10 minutos** (`*/10 * * * *`), aunque el
+umbral del profesional ausente sea de 5. No es una contradicción: el aviso de
+que el paciente **entró** lo da `bw-teleconsulta-presencia` en el instante, así
+que Recepción ya sabe que hay alguien en la sala; el vigilante solo escala y
+detecta ausencias, y eso tolera un tick de retraso. El tope de 10 minutos es el
+de `tests/cron.test.ts` (máximo 144 corridas por día): el bus de Medplum se paga
+por uso. La decisión de cuándo avisar es pura (`avisoDue` en
+`src/lib/teleconsulta.ts`), con ventanas "hacia arriba" como los recordatorios:
+si una corrida se saltea, la siguiente lo detecta igual.
 
 ## Agenda semanal de membresías (R-21)
 

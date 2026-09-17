@@ -119,6 +119,8 @@ Pantallas del esqueleto:
 - [`docs/pasarelas-de-pago.md`](docs/pasarelas-de-pago.md) — evaluación de Clover frente a MercadoPago: probabilidad de uso, matriz y camino rápido
 - [`docs/teleconsulta.md`](docs/teleconsulta.md) — teleconsulta (Cardiología · Nutrición · Endocrinología) sobre Jitsi en EC2: visión, modelo FHIR, bots, circuito de punta a punta y decisiones pendientes
 - [`docs/teleconsulta-fase0.md`](docs/teleconsulta-fase0.md) — runbook de la Fase 0: Jitsi en una EC2 propia (paquetes Debian vs Docker vs JaaS), JWT, moderador por token, endurecimiento, pruebas de aceptación y las trampas de la instalación real
+- [`docs/handoff-portal-teleconsulta.md`](docs/handoff-portal-teleconsulta.md) — handoff al portal: la página de la videollamada, el token, la presencia, la sala de espera (del portal, no de Jitsi), los PDFs asociados al turno y las notificaciones nuevas
+- [`docs/handoff-dashboard-teleconsulta.md`](docs/handoff-dashboard-teleconsulta.md) — handoff al Dashboard: Iniciar consulta como moderador, la ficha previa, el cierre con órdenes/recetas/informe y el aviso de control a Recepción
 - [`CLAUDE.md`](CLAUDE.md) — convenciones y guía para el desarrollo
 
 ---
