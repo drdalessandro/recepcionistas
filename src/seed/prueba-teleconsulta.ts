@@ -3,7 +3,8 @@
  * construir contra un turno real sin esperar a que Recepción reserve uno.
  *
  *   npm run seed:prueba-teleconsulta -- --dry-run   → muestra qué crearía (sin red)
- *   npm run seed:prueba-teleconsulta                → deja el turno en Medplum
+ *   npm run seed:prueba-teleconsulta                → deja el turno PAGO, listo para entrar
+ *   npm run seed:prueba-teleconsulta -- --con-pago  → deja el turno IMPAGO + link de MercadoPago
  *
  * Deja **un turno virtual `booked`** —o sea, pago y confirmado— del paciente de
  * prueba con el Dr. D'Alessandro, con su `appointmentType`, su sala `tc-<uuid>`
@@ -25,6 +26,24 @@
  * Volver a correrlo BORRA el turno anterior y crea uno nuevo (con sala nueva):
  * así la prueba siempre arranca de cero, igual que `seed:prueba-espera`.
  *
+ * ## `--con-pago`: probar el cobro, no la sala
+ *
+ * Sin la opción, el turno nace `booked` —pago y confirmado— para poder entrar a
+ * la sala enseguida. Con `--con-pago` nace **`pending`**, que es como lo deja una
+ * reserva real sin plan (R-19), y el seed pide el link de MercadoPago por el
+ * **total**: una teleconsulta se cobra entera por adelantado (Andrés,
+ * 2026-09-16), así que el link es por $150.000 y no por la mitad.
+ *
+ * El circuito que se ejercita es el mismo que el de un paciente de verdad:
+ * pagar el link → MercadoPago notifica al webhook → `confirmarReserva` pasa el
+ * turno a `booked`, emite el Invoice **sin** Invoice de saldo y manda el
+ * WhatsApp y la campanita. Recién ahí el bot del token deja entrar a la sala:
+ * un turno impago no entra a la consulta.
+ *
+ * Por eso con `--con-pago` el turno arranca más tarde (`EMPIEZA_EN_MIN_PAGO`):
+ * el vencimiento de la tentativa nunca pasa del inicio del turno, así que con
+ * 10 minutos el link vencería antes de que nadie llegue a pagarlo.
+ *
  * ⚠️ El paciente de prueba tiene que poder loguearse en el portal. Si ya tienen
  * uno, pasarlo en `PRUEBA_TELECONSULTA_PATIENT_ID` y este seed lo usa en vez de
  * crear el suyo (que no tiene usuario y no sirve para probar la página).
@@ -41,6 +60,9 @@ import { getServicio } from '../config/catalogo.js';
 import { codigoTeleconsulta } from '../config/medicos.js';
 import { nombreSala, rutaTeleconsulta, TELECONSULTA } from '../lib/teleconsulta.js';
 import { PORTAL_URL } from '../lib/onboarding.js';
+import { vencimientoSena } from '../lib/sena.js';
+import { fraccionAnticipada } from '../lib/pricing.js';
+import type { ResultadoLinkMP } from '../bots/link-mercadopago.js';
 
 /** El servicio de la prueba: la teleconsulta de cardiología (la primera que se vendió). */
 const MEDICO = 'MED_DALESSANDRO';
@@ -54,15 +76,30 @@ const ID_TURNO = 'teleconsulta-turno';
 /** Minutos hasta el inicio: la ventana de acceso ya abierta al terminar el seed. */
 const EMPIEZA_EN_MIN = 10;
 
-function construirTurno(ahora: Date, pacienteRef: string, profesional: Practitioner | undefined): Appointment {
+/**
+ * Con `--con-pago`, el turno arranca más lejos. El vencimiento de la tentativa
+ * es `min(ahora + 2 h, inicio del turno)` (R-19), así que un turno que empieza
+ * en 10 minutos da un link que vence en 10 minutos: no alcanza para abrir
+ * MercadoPago y pagar, y `bw-vencer-tentativas` liberaría el lugar en el medio
+ * de la prueba.
+ */
+const EMPIEZA_EN_MIN_PAGO = 90;
+
+function construirTurno(
+  ahora: Date,
+  pacienteRef: string,
+  profesional: Practitioner | undefined,
+  conPago: boolean,
+): Appointment {
   const servicio = getServicio(SERVICIO);
-  const inicio = new Date(ahora.getTime() + EMPIEZA_EN_MIN * 60_000);
+  const inicio = new Date(ahora.getTime() + (conPago ? EMPIEZA_EN_MIN_PAGO : EMPIEZA_EN_MIN) * 60_000);
   const fin = new Date(inicio.getTime() + servicio.duracionMin * 60_000);
   return {
     resourceType: 'Appointment',
     // `booked` = confirmado y pagado. Con cobro total anticipado, un turno
-    // `pending` no entra a la sala: el bot del token lo rechaza.
-    status: 'booked',
+    // `pending` no entra a la sala: el bot del token lo rechaza — que es
+    // justamente lo que `--con-pago` deja probar.
+    status: conPago ? 'pending' : 'booked',
     description: servicio.nombre,
     ...clasificacionDeServicio(SERVICIO),
     appointmentType: modalidadAppointmentType('virtual'),
@@ -87,6 +124,10 @@ function construirTurno(ahora: Date, pacienteRef: string, profesional: Practitio
       { url: EXT.itemTipo, valueCode: 'servicio' },
       { url: EXT.itemCodigo, valueString: SERVICIO },
       { url: EXT.teleconsultaSala, valueString: nombreSala(randomUUID()) },
+      // Vencimiento de la tentativa (R-19). Lo lee `linkSena` para que el link
+      // de MercadoPago expire con el turno, y `bw-vencer-tentativas` para
+      // liberar el lugar si no se paga.
+      ...(conPago ? [{ url: EXT.venceSena, valueDateTime: vencimientoSena(ahora, inicio).toISOString() }] : []),
     ],
   };
 }
@@ -101,18 +142,27 @@ function requireEnv(nombre: string): string {
 
 async function main(): Promise<void> {
   const dryRun = process.argv.includes('--dry-run');
+  const conPago = process.argv.includes('--con-pago');
   const ahora = new Date();
+  const servicio = getServicio(SERVICIO);
 
-  console.log('=== Seed de prueba · teleconsulta ===');
-  console.log(`  • Servicio : ${SERVICIO} (${getServicio(SERVICIO).nombre})`);
-  console.log(`  • Turno    : booked, empieza en ${EMPIEZA_EN_MIN} min`);
+  console.log(`=== Seed de prueba · teleconsulta${conPago ? ' (con cobro)' : ''} ===`);
+  console.log(`  • Servicio : ${SERVICIO} (${servicio.nombre})`);
+  console.log(
+    `  • Turno    : ${conPago ? 'pending (impago)' : 'booked (pago)'}, empieza en ` +
+      `${conPago ? EMPIEZA_EN_MIN_PAGO : EMPIEZA_EN_MIN} min`,
+  );
+  if (conPago) {
+    const total = (servicio.precioARS ?? 0) * fraccionAnticipada(servicio.modalidad);
+    console.log(`  • Cobro    : $${total.toLocaleString('es-AR')} — el TOTAL, no la seña (virtual)`);
+  }
   console.log(
     `  • Ventana  : se entra desde ${TELECONSULTA.accesoAntesMin} min antes hasta ` +
       `${TELECONSULTA.accesoDespuesMin} min después del fin`,
   );
 
   if (dryRun) {
-    construirTurno(ahora, 'Patient/(dry-run)', undefined);
+    construirTurno(ahora, 'Patient/(dry-run)', undefined, conPago);
     console.log('\n[dry-run] No se conecta a Medplum. Turno construido OK.');
     return;
   }
@@ -171,7 +221,7 @@ async function main(): Promise<void> {
     console.log(`  ✓ Limpieza     ${viejos.length} turno(s) de corridas anteriores + sus Encounter`);
   }
 
-  const turno = await medplum.createResource(construirTurno(ahora, `Patient/${paciente.id}`, profesional));
+  const turno = await medplum.createResource(construirTurno(ahora, `Patient/${paciente.id}`, profesional, conPago));
   const sala = turno.extension?.find((e) => e.url === EXT.teleconsultaSala)?.valueString;
   console.log(`  ✓ Turno        Appointment/${turno.id}`);
   console.log(`    sala ${sala} · empieza ${turno.start}`);
@@ -183,10 +233,36 @@ async function main(): Promise<void> {
   // que va a hacer el portal. Si algo de la configuración está mal, se entera
   // acá y no la primera paciente.
   // --------------------------------------------------------------------
-  const bot = await medplum.searchOne('Bot', { name: 'bw-teleconsulta-token' });
-  if (!bot?.id) {
+  if (conPago) {
+    // Camino del cobro. El link lo pide el MISMO bot que usa Recepción desde el
+    // mostrador, así que lo que se prueba acá es lo que se usa en producción.
+    const botLink = await medplum.searchOne('Bot', { name: 'bw-link-mercadopago' });
+    if (!botLink?.id) {
+      console.log('\n  ⚠️  No existe el Bot bw-link-mercadopago: correr `npm run deploy:bots`.');
+    } else {
+      const r = (await medplum
+        .executeBot(botLink.id, { appointmentId: turno.id, concepto: 'sena' })
+        .catch((err) => ({ ok: false, mensaje: err instanceof Error ? err.message : String(err) }))) as ResultadoLinkMP;
+      const monto = r?.montoARS ?? r?.senaARS;
+      if (r?.ok && r.url) {
+        console.log(`\n  ✓ Link de pago por $${(monto ?? 0).toLocaleString('es-AR')}:`);
+        console.log(`    ${r.url}`);
+        console.log(`    vence: ${turno.extension?.find((e) => e.url === EXT.venceSena)?.valueDateTime}`);
+      } else {
+        console.log(`\n  ✗ No se pudo generar el link: ${r?.mensaje ?? 'sin mensaje'}`);
+        console.log('    Falta MERCADOPAGO_ACCESS_TOKEN o MP_WEBHOOK_URL en los Project Secrets.');
+      }
+    }
+    console.log('\n  El turno está IMPAGO y el bot del token NO deja entrar a la sala hasta que');
+    console.log('  se pague: ese rechazo es parte de lo que esta prueba verifica.');
+    console.log('  Al pagar, MercadoPago llama al webhook → el turno pasa a `booked`, sale el');
+    console.log('  Invoice (sin saldo pendiente) y el WhatsApp de confirmación.');
+  }
+
+  const bot = conPago ? undefined : await medplum.searchOne('Bot', { name: 'bw-teleconsulta-token' });
+  if (!conPago && !bot?.id) {
     console.log('\n  ⚠️  No existe el Bot bw-teleconsulta-token: correr `npm run deploy:bots`.');
-  } else {
+  } else if (bot?.id) {
     const r = (await medplum
       .executeBot(bot.id, { appointmentId: turno.id, rol: 'paciente', pacienteRef: `Patient/${paciente.id}` })
       .catch((err) => ({ ok: false, mensaje: err instanceof Error ? err.message : String(err) }))) as ResultadoToken;
