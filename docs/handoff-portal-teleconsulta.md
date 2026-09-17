@@ -429,7 +429,7 @@ esperan deploy. Lo que queda:
 
 | # | Qué | Quién destraba |
 | --- | --- | --- |
-| 1 | `npm run deploy:bots` + Project Secrets `JITSI_BASE_URL` / `JITSI_APP_ID` / `JITSI_JWT_SECRET` en staging | Nosotros |
+| 1 | `npm run deploy:bots` + Project Secrets `JITSI_BASE_URL` (el **host pelado**: `meet.biowellness.ar`), `JITSI_APP_ID` y `JITSI_JWT_SECRET` | Nosotros |
 | 2 | `frame-ancestors 'self' https://app.biowellness.ar https://dashboard.biowellness.ar` en el nginx de `meet.biowellness.ar` | Nosotros |
 | 3 | `Questionnaire` previo por especialidad · código `teleconsulta` en `COD_CONSENTIMIENTO` | Esperan textos del Director Médico y de cada especialista |
 | 4 | Emisor de `documento-nuevo` (bot por `Subscription` sobre lo que escribe el Dashboard) | Nosotros, después del primer cierre real |

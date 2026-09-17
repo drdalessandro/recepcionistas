@@ -1,10 +1,12 @@
 # Teleconsulta · Fase 0 — Jitsi Meet en una EC2 propia (runbook)
 
-> **Estado: INSTALADO Y VERIFICADO EN PARTE (2026-09-16).** `meet.biowellness.ar`
-> está en pie con certificado válido, **acceso solo por token** y el
-> **profesional como único moderador**. Faltan cinco pruebas de aceptación (§7)
-> y el dominio del Dashboard para cerrar §5. Visión y modelo:
-> [`teleconsulta.md`](teleconsulta.md).
+> **Estado: INSTALADO Y VERIFICADO EN PARTE (2026-09-17).** `meet.biowellness.ar`
+> está en pie con certificado válido, **acceso solo por token**, el
+> **profesional como único moderador** y el **embebido acotado a los dos
+> dominios propios** (§5, aplicado y verificado el 2026-09-17). **La
+> configuración del servidor queda cerrada**: lo único pendiente de esta fase
+> son cinco pruebas de aceptación (§7), que necesitan gente y dispositivos.
+> Visión y modelo: [`teleconsulta.md`](teleconsulta.md).
 >
 > Este documento se corrigió **después** de la instalación real, con lo que
 > falló de verdad. Las trampas están en §13; valen más que el resto del texto.
@@ -26,7 +28,7 @@
 | 6 | Tres personas con video fluido (relay por el servidor) | ⏳ pendiente |
 | 7 | Funciona en iPhone dentro de una página embebida | ⏳ pendiente |
 | 8 | Sin grabación, sin terceros, sin bienvenida, barra recortada | ✅ aplicado (§5) |
-| 9 | `frame-ancestors` con los dominios del portal y del Dashboard | ⚠️ línea lista (§5) — **falta aplicarla en el servidor** |
+| 9 | `frame-ancestors` con los dominios del portal y del Dashboard | ✅ aplicado y verificado con `curl` (§5, 2026-09-17) |
 | 10 | Operable por alguien que no lo instaló | ✅ §8 |
 
 ## 1. Cómo instalar Jitsi: tres caminos
@@ -62,6 +64,7 @@ El equivalente en Docker queda en §9.
 | Disco | 20 GB gp3. No se graba nada |
 | IP | **Elastic IP** — está en el DNS y en la config del JVB |
 | DNS | `A` `meet.biowellness.ar` → la Elastic IP, **antes** de instalar |
+| Convive con | El **front estático** de `recepcion.biowellness.ar`, en la misma instancia. La **API de Medplum está aparte** (`api.medplum.com.ar`, su propia EC2). Ver §2.1 |
 
 **Security group** (entrada). La fila del 80 es la que se olvida y la que
 rompe el certificado:
@@ -80,6 +83,76 @@ rompe el certificado:
 > `Timeout during connect (likely firewall problem)` — pasó en la instalación
 > real. `ufw` viene inactivo en la AMI de Ubuntu, así que el único filtro es el
 > security group.
+
+### 2.1 · Jitsi comparte la instancia con la app de Recepción
+
+**Es así hoy y es una decisión tomada** (Andrés, 2026-09-17): en la misma EC2
+conviven el vhost de `meet.biowellness.ar` y el de `recepcion.biowellness.ar`.
+El plan acordado es **separarlos cuando la CPU lo pida**, creando una imagen y
+levantando `meet` aparte.
+
+**Lo que comparte instancia es solo el front estático.** La **API de Medplum
+está en su propia EC2** (`api.medplum.com.ar`), y ahí es donde vive el trabajo
+de verdad: los bots, las búsquedas FHIR, los cobros. Eso acota mucho el riesgo,
+y conviene tenerlo claro para no sobreestimarlo: lo que comparte máquina con el
+video es **nginx sirviendo archivos**, sin proceso de aplicación detrás. Una vez
+que el navegador de la recepcionista cargó el bundle, **habla directo con la API
+en la otra instancia**: aunque el videobridge saturara esta, la app seguiría
+funcionando. Lo único que se degradaría es la **carga inicial** —abrir la app o
+recargar la página— y el bundle se cachea.
+
+Dicho eso, el principio de `teleconsulta.md` §2 se cumple donde importa: una
+llamada no puede tirar la agenda, porque la agenda no está acá.
+
+Dos consecuencias prácticas de la convivencia, mientras dure:
+
+- **El nginx es uno solo.** Un `systemctl reload nginx` por un cambio de Jitsi
+  recarga también Recepción. `reload` es seguro —con la configuración rota
+  nginx no aplica nada y sigue sirviendo la vieja—, pero **`restart` sí deja a
+  las dos afuera**: usar siempre `reload`, y `nginx -t` antes.
+- **Los `[warn]` cruzados son normales**: el `protocol options redefined for
+  0.0.0.0:443` que devuelve `nginx -t` viene justamente de que hay dos
+  `server` en 443 (§5).
+
+**Cuándo va a hacer falta separar, de verdad.** No es "cuando haya muchas
+teleconsultas": **una llamada de dos personas va punto a punto** y el
+videobridge casi no interviene, y una teleconsulta es de dos —paciente y
+profesional—. El servidor entra a trabajar en dos casos:
+
+1. **Tres o más en la sala** (una interconsulta, un familiar).
+2. **Cuando el punto a punto no se puede armar** y todo el audio y video pasan
+   por el JVB o por coturn: redes móviles con NAT simétrico, redes corporativas.
+   Este es el caso frecuente y el que no se ve venir.
+
+O sea que **la señal a vigilar no es la agenda de teleconsultas sino cuánto
+relay está haciendo el JVB** — y lo que se resiente primero no es la app, sino
+servir el bundle a quien la abre en ese momento. El videobridge publica sus estadísticas
+(conferencias y participantes activos, bitrate) en un endpoint local; conviene
+confirmar el puerto en la instancia antes de apoyarse en él:
+
+```bash
+curl -s http://localhost:8080/colibri/stats | head -40   # confirmar puerto/ruta
+```
+
+> ⚠️ **Lo que hay que tocar el día de la mudanza, y no es el DNS.** Jitsi
+> guarda **la IP escrita a mano** en dos lugares, porque el JVB no puede
+> descubrirla solo detrás del NAT de EC2 (§3.2):
+>
+> - `/etc/jitsi/videobridge/sip-communicator.properties` →
+>   `NAT_HARVESTER_LOCAL_ADDRESS` (privada, **cambia con la instancia nueva**) y
+>   `NAT_HARVESTER_PUBLIC_ADDRESS` (la elástica).
+> - `/etc/turnserver.conf` → la IP externa de coturn.
+>
+> Una imagen de esta instancia los copia **con las IPs viejas**. Si no se
+> actualizan, el síntoma es el peor posible: **una llamada de dos personas anda
+> igual** (va punto a punto y no toca el JVB) y solo falla la de tres, o la del
+> paciente en 4G. O sea que la mudanza parece exitosa y el problema aparece
+> semanas después, en la consulta de alguien.
+>
+> Y al revés: la instancia que se queda con Recepción hereda todo Jitsi
+> corriendo. Conviene apagar y deshabilitar ahí `prosody`, `jicofo`,
+> `jitsi-videobridge2` y `coturn`, y sacar el vhost de `meet` de
+> `sites-enabled`, en vez de dejarlos escuchando puertos por las dudas.
 
 ## 3. Instalación
 
@@ -186,6 +259,30 @@ apt install -y jitsi-meet-tokens
 |---|---|
 | Application ID | `biowellness-teleconsulta` — es el `iss` del token, fijo |
 | Application secret | El hexadecimal generado. Vive en **dos** lugares: este servidor y, en la Fase 1, el Project Secret `JITSI_JWT_SECRET` de Medplum |
+
+**Los tres Project Secrets de Medplum** (Fase 1), con el nombre exacto que lee
+`bw-teleconsulta-token`. `JITSI_*` es una abreviatura para nombrarlos juntos, no
+un nombre:
+
+| Secret | Valor | Tiene que coincidir con |
+|---|---|---|
+| `JITSI_BASE_URL` | `meet.biowellness.ar` | el `VirtualHost` de Prosody |
+| `JITSI_APP_ID` | `biowellness-teleconsulta` | `app_id` |
+| `JITSI_JWT_SECRET` | el hexadecimal de `openssl rand -hex 32` | `app_secret` |
+
+> ⚠️ **`JITSI_BASE_URL` tiene nombre de URL y es el HOST pelado.** Va al claim
+> `sub`, que Prosody compara contra el nombre del `VirtualHost`: con `https://`
+> adelante el token se rechaza del lado del servidor y desde el portal se ve
+> como "no se pudo entrar", lejos de la causa. El bot **normaliza** el valor
+> (`dominioJitsi` en `src/lib/teleconsulta.ts`), así que las dos formas
+> funcionan; el nombre igual engaña y por eso está anotado acá.
+
+**Cómo verificar que quedaron bien.** Los Project Secrets no se pueden leer por
+API —a propósito—, así que la única prueba real es **ejecutar el bot**. Eso lo
+hace solo `npm run seed:prueba-teleconsulta`: crea el turno de prueba, pide el
+token y muestra los claims `iss`, `sub` y `room` que salieron, más un link
+directo a la sala. Si contesta *"La videollamada no está configurada"*, falta
+alguno de los tres.
 
 Si el diálogo no aparece: `dpkg-reconfigure jitsi-meet-tokens`, o editar a mano
 `/etc/prosody/conf.avail/meet.biowellness.ar.cfg.lua`. Falta **una línea que el
@@ -379,11 +476,25 @@ castellano** es la señal de que el bloque quedó activo.
 > de grabar se pregunta si lo están grabando**. En una consulta médica eso no
 > es un detalle de interfaz.
 
-**Desde dónde se puede embeber.** En el `server` de nginx de Jitsi:
+**Desde dónde se puede embeber.** En `/etc/nginx/sites-available/meet.biowellness.ar.conf`,
+dentro del `server` de **443**, pegada al `Strict-Transport-Security` que el
+paquete ya deja ahí:
 
 ```nginx
-add_header Content-Security-Policy "frame-ancestors 'self' https://app.biowellness.ar https://dashboard.biowellness.ar;" always;
+    add_header Strict-Transport-Security "max-age=63072000" always;
+    add_header Content-Security-Policy "frame-ancestors 'self' https://app.biowellness.ar https://dashboard.biowellness.ar;" always;
 ```
+
+```bash
+cp /etc/nginx/sites-available/meet.biowellness.ar.conf{,.bak}
+sed -i "/add_header Strict-Transport-Security \"max-age=63072000\" always;/a\\    add_header Content-Security-Policy \"frame-ancestors 'self' https://app.biowellness.ar https://dashboard.biowellness.ar;\" always;" \
+  /etc/nginx/sites-available/meet.biowellness.ar.conf
+nginx -t && systemctl reload nginx
+```
+
+El patrón del `sed` lleva las comillas **dobles** a propósito: hay un segundo
+`Strict-Transport-Security` en `location = /_unlock`, escrito con comillas
+simples y con `includeSubDomains`, que así no se toca.
 
 Los dos dominios son el portal del paciente y el Dashboard clínico
 (`dashboard.biowellness.ar`, confirmado el 2026-09-16). **Sin esta línea
@@ -391,8 +502,46 @@ cualquier sitio de internet puede embeber el servidor de videollamadas en una
 página propia**, que es exactamente lo que se usa para engañar a alguien sobre
 con quién está hablando.
 
-⚠️ **Falta aplicarla en el servidor** (editar el `server` de nginx de Jitsi,
-`nginx -t` y recargar). Es el último pendiente de configuración de la fase.
+> **Por qué alcanza con ponerla en el `server` y no en cada `location`.**
+> En nginx `add_header` **no se hereda** en un `location` que declare sus
+> propios `add_header`: se pisan todos, no se suman. Este archivo tiene tres
+> `location` que los declaran (los assets estáticos, `/_unlock` y
+> `/conference-request/v1`), así que esos tres van a responder **sin** la CSP.
+> No importa: `frame-ancestors` gobierna el documento que se embebe, y la
+> página de la sala la sirve `location ~ ^/([^/?&:'"]+)$` → `@root_path`, que
+> **no** declara `add_header` y por lo tanto sí hereda. Un CSS o un `.js` no se
+> embeben en un iframe. Si algún día se le agrega un `add_header` a
+> `@root_path`, hay que repetir la CSP ahí.
+
+**Verificar que quedó** — contra una sala, no contra un asset:
+
+```bash
+curl -sI https://meet.biowellness.ar/tc-prueba | grep -i content-security-policy
+content-security-policy: frame-ancestors 'self' https://app.biowellness.ar https://dashboard.biowellness.ar;
+```
+
+> **`nginx -t` devuelve dos `[warn]` que no son de esto y no rompen nada.**
+> Aparecieron en la corrida real del 2026-09-17 y conviene reconocerlos para no
+> perder tiempo, que es la misma trampa que §13 #4:
+>
+> - `duplicate extension "wasm"` — el bloque `types { application/wasm wasm; }`
+>   que trae el config de Jitsi repite un mapeo que el `mime.types` de nginx ya
+>   tiene. Cosmético.
+> - `protocol options redefined for 0.0.0.0:443` — hay más de un `server` que
+>   escucha en 443 declarando opciones de protocolo; nginx aplica las del
+>   primero que abre el socket y avisa por los demás. Cosmético.
+>
+> Lo que decide es la última línea: `test is successful`. Si eso aparece,
+> `systemctl reload nginx` y listo.
+
+Del lado del portal y del Dashboard hace falta además que **su** CSP permita el
+iframe (`frame-src` y `script-src` con `meet.biowellness.ar`): son dos permisos
+distintos, en dos servidores distintos, y hacen falta los dos.
+
+⚠️ Si alguna vez aparece un `add_header X-Frame-Options` (hoy no está, ni en el
+archivo ni en lo que trae `include /etc/jitsi/meet/jaas/*.conf`), hay que
+**sacarlo**: no admite más de un origen y el navegador que lo entiende le da
+prioridad, así que rompería el embebido en uno de los dos dominios.
 
 **Logs sin PHI.** Las salas son UUIDs. El nombre visible aparece en Prosody en
 nivel `debug`/`info`: dejar Prosody en `warn`.
@@ -513,7 +662,7 @@ contestadas.
 - [x] NAT del JVB configurado
 - [x] Moderador por token: las tres piezas de §4.2, verificadas con la prueba 4
 - [x] `config.js` endurecido y barra recortada
-- [ ] `frame-ancestors` con los dos dominios — la línea está en §5; **falta aplicarla**
+- [x] `frame-ancestors` con los dos dominios — aplicado y verificado (§5, 2026-09-17)
 - [ ] Pruebas 5 a 9 de §7
 - [ ] Decidir el multiplexado de 443 según el resultado de la prueba 5
 - [ ] `unattended-upgrades` y SSH solo con clave

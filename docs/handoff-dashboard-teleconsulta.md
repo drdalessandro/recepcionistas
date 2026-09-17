@@ -87,6 +87,52 @@ const canonico = await medplum.searchOne('Practitioner',
 console.assert(yo?.id === canonico?.id);        // si falla, se arregla en el admin, no en código
 ```
 
+### 1.1 · Cuando ya hay dos fichas (el caso del Dr. D'Alessandro)
+
+Pasó exactamente lo que este documento anticipaba: hay **dos** `Practitioner`
+para el mismo médico. La del Dashboard (`b5fd368b-…`) tiene la **matrícula**,
+sin la cual no se firman recetas; la que creó nuestro seed
+(`56a9c556-…`) tiene el código de negocio con el que se arman turnos y agendas.
+El pedido del Dashboard —que gane la suya y que nuestro seed la resuelva— es el
+correcto: **la matrícula no se puede regenerar, el código sí**.
+
+> ⚠️ **Antes de tocar nada había que arreglar algo nuestro.** El upsert del seed
+> era un PUT con la ficha del catálogo, y `buildPractitioner` devuelve
+> `identifier` con un solo elemento: el nuestro. O sea que la primera corrida de
+> `npm run seed` **le habría borrado la matrícula**, sin ruido, y el problema
+> aparecería el día que alguien no pudiera recetar. Desde
+> `src/fhir/practitioner.ts` el `Practitioner` **se fusiona** en vez de
+> reemplazarse: se preserva todo lo ajeno (matrícula, `qualification`,
+> `telecom`, identifier de otros sistemas) y solo se asegura lo nuestro. Hay
+> tests que fijan que la matrícula sobrevive.
+
+El procedimiento, en orden (los dos primeros pasos son nuestros):
+
+```bash
+# 1. Ver el plan, sin tocar nada. Lista las fichas de cada médico.
+npm run medicos:consolidar
+
+# 2. Aplicar, forzando que gane la del Dashboard.
+npm run medicos:consolidar -- --canonico MED_DALESSANDRO=b5fd368b-5209-4084-ab77-4e2c6e53c02e --aplicar
+
+# 3. El turno de prueba, ahora con el Practitioner correcto como participante.
+npm run seed:prueba-teleconsulta
+```
+
+El paso 2 le agrega **nuestro identifier a la ficha del Dashboard** (conservando
+la matrícula y todo lo demás) y a la nuestra le saca el identifier y la deja
+`active: false`. Queda **una sola ficha activa con el código**, que es lo que
+hace que la búsqueda condicional del seed y de los bots no sea ambigua.
+
+`--canonico` existe para esto: la regla por defecto deduce el canónico por
+antigüedad, y eso no sirve cuando la ficha que tiene que ganar es la que lleva
+un dato que este repo no ve. Si el id que se le pasa no está entre las fichas
+del médico, **no toca nada y sale con error** — desactivar la ficha equivocada
+de un profesional es caro de revertir.
+
+Vale para cualquier profesional en la misma situación, incluidos Albarellos y
+Carrieri cuando tengan usuario en el Dashboard.
+
 **Policies.** Cada profesional entra con la de su especialidad (nombres
 exactos: `Cardiología — Clínico limitado`, `Endocrinología — Clínico limitado`,
 `Nutrición — Clínico limitado`). El Director Médico entra con la suya, que es
@@ -411,7 +457,8 @@ Lo que queda:
 | 3 | `Subscription` en las policies de especialidad | Solo si quieren "paciente en línea" por websocket (§2) |
 | 4 | `Questionnaire` previo por especialidad; código `teleconsulta` en `COD_CONSENTIMIENTO` | Esperan las preguntas de cada especialista y el texto del Director Médico |
 | 5 | Emisor de `documento-nuevo` al paciente | Nosotros, después del primer cierre real |
-| 6 | `PractitionerRole` con `specialty` para Albarellos y Carrieri; usuarios del Dashboard con el perfil correcto (§1) | Manual, desde el admin: lo hacemos juntos en la primera prueba |
+| 6 | `PractitionerRole` con `specialty` para Albarellos y Carrieri | Manual, desde el admin: lo hacemos juntos en la primera prueba |
+| 7 | Consolidar las fichas duplicadas de cada profesional (§1.1) | Nosotros, con el id de la ficha del Dashboard que nos pasen |
 
 **El turno de prueba ya está**, y lo crea un seed:
 

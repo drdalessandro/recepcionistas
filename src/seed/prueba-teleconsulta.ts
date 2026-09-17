@@ -33,6 +33,7 @@ import 'dotenv/config';
 import { MedplumClient } from '@medplum/core';
 import { randomUUID } from 'node:crypto';
 import type { Appointment, Patient, Practitioner } from '@medplum/fhirtypes';
+import type { ResultadoToken } from '../bots/teleconsulta-token.js';
 import { clasificacionDeServicio, modalidadAppointmentType } from '../fhir/appointment.js';
 import { EXT, SYSTEM } from '../fhir/identifiers.js';
 import { RECURSO_TELECONSULTA } from '../config/recursos.js';
@@ -175,14 +176,53 @@ async function main(): Promise<void> {
   console.log(`  ✓ Turno        Appointment/${turno.id}`);
   console.log(`    sala ${sala} · empieza ${turno.start}`);
 
+  // --------------------------------------------------------------------
+  // La ÚNICA forma de verificar los Project Secrets es ejecutar el bot:
+  // Medplum no los expone por API (a propósito). Así que el seed cierra el
+  // lazo — crea el turno y acto seguido pide el token, que es exactamente lo
+  // que va a hacer el portal. Si algo de la configuración está mal, se entera
+  // acá y no la primera paciente.
+  // --------------------------------------------------------------------
+  const bot = await medplum.searchOne('Bot', { name: 'bw-teleconsulta-token' });
+  if (!bot?.id) {
+    console.log('\n  ⚠️  No existe el Bot bw-teleconsulta-token: correr `npm run deploy:bots`.');
+  } else {
+    const r = (await medplum
+      .executeBot(bot.id, { appointmentId: turno.id, rol: 'paciente', pacienteRef: `Patient/${paciente.id}` })
+      .catch((err) => ({ ok: false, mensaje: err instanceof Error ? err.message : String(err) }))) as ResultadoToken;
+
+    if (r?.ok && r.jwt) {
+      const claims = JSON.parse(Buffer.from(r.jwt.split('.')[1] as string, 'base64url').toString()) as {
+        iss: string;
+        sub: string;
+        room: string;
+      };
+      console.log('\n  ✓ Los secrets JITSI_* están bien: el bot emitió un token.');
+      console.log(`    dominio (claim sub) : ${claims.sub}`);
+      console.log(`    app id  (claim iss) : ${claims.iss}`);
+      console.log(`    sala    (claim room): ${claims.room}`);
+      // El `sub` tiene que ser el HOST pelado o Prosody rechaza el token: es el
+      // error más caro de diagnosticar porque aparece del lado del servidor.
+      if (claims.sub.includes('/')) {
+        console.log(`\n  ⚠️  El claim \`sub\` trae una URL y Prosody espera el host pelado.`);
+        console.log('     Corregir el Project Secret JITSI_BASE_URL a `meet.biowellness.ar`.');
+      }
+      console.log(`\n    Link directo para probar la sala a mano (vence con el turno):`);
+      console.log(`    https://${r.dominio}/${r.sala}?jwt=${r.jwt}`);
+    } else {
+      console.log(`\n  ✗ El bot NO emitió token: ${r?.mensaje ?? 'sin mensaje'}`);
+      console.log('    "La videollamada no está configurada" = falta alguno de los tres Project Secrets:');
+      console.log('    JITSI_BASE_URL (el host pelado, `meet.biowellness.ar`) · JITSI_APP_ID · JITSI_JWT_SECRET.');
+    }
+  }
+
   console.log('\nPasale esto a los dos equipos:');
   console.log(`  • Portal    → ${PORTAL_URL}${rutaTeleconsulta(turno.id as string)}`);
   console.log(`                appointmentId: ${turno.id} · pacienteRef: Patient/${paciente.id}`);
   console.log(`  • Dashboard → appointmentId: ${turno.id} · practitionerRef: Practitioner/${profesional.id}`);
-  console.log('\nHace falta además, del lado del servidor:');
-  console.log('  1. `npm run deploy:bots` y los Project Secrets JITSI_BASE_URL / JITSI_APP_ID / JITSI_JWT_SECRET.');
-  console.log('  2. `frame-ancestors` con los dos dominios en el nginx de meet.biowellness.ar.');
-  console.log('  Sin (1) el token no sale; sin (2) el navegador no muestra el iframe.');
+  console.log('\nY del lado del servidor: `frame-ancestors` con los dos dominios en el');
+  console.log('nginx de meet.biowellness.ar (runbook §5). Sin eso el token sale igual,');
+  console.log('pero el navegador se niega a mostrar el iframe dentro del portal.');
 }
 
 main().catch((err) => {

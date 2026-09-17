@@ -13,7 +13,7 @@
  */
 import 'dotenv/config';
 import { MedplumClient } from '@medplum/core';
-import type { Resource, Slot } from '@medplum/fhirtypes';
+import type { Practitioner, Resource, Slot } from '@medplum/fhirtypes';
 import { buildSeed, buildSlot, buildSlotMedico, horarioDeAgendaMedico } from './builders.js';
 import { HORARIO_ES_PLACEHOLDER, HORARIO_SEMANAL } from '../config/horario.js';
 import { RECURSOS } from '../config/recursos.js';
@@ -23,6 +23,7 @@ import { getServicio } from '../config/catalogo.js';
 import { CONTRAINDICACIONES } from '../config/contraindicaciones.js';
 import { generarSlots } from '../lib/slots.js';
 import { SYSTEM } from '../fhir/identifiers.js';
+import { fusionarPractitioner } from '../fhir/practitioner.js';
 
 async function main(): Promise<void> {
   const dryRun = process.argv.includes('--dry-run');
@@ -272,7 +273,15 @@ async function upsert(medplum: MedplumClient, recurso: Resource): Promise<string
   }
   const existente = await withRetry(() => medplum.searchOne(recurso.resourceType, query));
   if (existente?.id) {
-    const actualizado = await withRetry(() => medplum.updateResource({ ...recurso, id: existente.id }));
+    // Reemplazo entero: es lo correcto para todo lo que el seed publica, que es
+    // nuestro de punta a punta (servicios, combos, policies). El `Practitioner`
+    // es la excepción y por eso se fusiona: esa ficha la comparte el Dashboard,
+    // que le carga la matrícula. Ver src/fhir/practitioner.ts.
+    const aEscribir =
+      recurso.resourceType === 'Practitioner'
+        ? fusionarPractitioner(existente as Practitioner, recurso as Practitioner)
+        : recurso;
+    const actualizado = await withRetry(() => medplum.updateResource({ ...aEscribir, id: existente.id }));
     return actualizado.id;
   }
   const creado = await withRetry(() => medplum.createResource(recurso));
