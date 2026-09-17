@@ -6,7 +6,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import type { Practitioner } from '@medplum/fhirtypes';
-import { fusionarPractitioner } from '../src/fhir/practitioner.js';
+import { claveNombre, fusionarPractitioner, nombreDePractitioner } from '../src/fhir/practitioner.js';
 import { buildPractitioner } from '../src/seed/builders.js';
 import { EXT, SYSTEM } from '../src/fhir/identifiers.js';
 
@@ -69,5 +69,37 @@ describe('fusionarPractitioner — el seed no pisa la ficha clínica', () => {
     expect(r.extension).toContainEqual(ajena);
     expect((r.extension ?? []).filter((e) => e.url === EXT.tipoContrato)).toHaveLength(1);
     expect((r.extension ?? []).find((e) => e.url === EXT.tipoContrato)?.valueCode).not.toBe('viejo');
+  });
+});
+
+describe('claveNombre — dos fichas de la misma persona tienen que matchear', () => {
+  it('EL TÍTULO NO PUEDE SEPARAR A UNA PERSONA DE SÍ MISMA', () => {
+    // El caso real (2026-09-17): nuestro catálogo lo publica con "Dr." en el
+    // `text`; el Dashboard lo tiene estructurado y sin título. Con el título
+    // adentro de la clave, el script daba "una sola ficha" y no veía el
+    // duplicado que estaba buscando.
+    expect(claveNombre("Dr. Alejandro D'Alessandro")).toBe(claveNombre("Alejandro D'Alessandro"));
+    expect(claveNombre('Dra. Malena Albarellos')).toBe(claveNombre('Malena Albarellos'));
+  });
+
+  it('Tildes y puntuación no separan', () => {
+    expect(claveNombre("D'Alessandro")).toBe(claveNombre('Dalessandro'));
+    expect(claveNombre('Nicolás Carrieri')).toBe(claveNombre('Nicolas Carrieri'));
+    expect(claveNombre('Dr. Conrado López Alonso')).toBe(claveNombre('conrado lopez alonso'));
+  });
+
+  it('Personas distintas siguen siendo distintas', () => {
+    expect(claveNombre("Alejandro D'Alessandro")).not.toBe(claveNombre('Malena Albarellos'));
+    // Y un apellido que EMPIEZA con un título no se mutila: la regex va por
+    // palabra completa, así que "Drago" conserva su "Dr".
+    expect(claveNombre('Ana Drago')).toBe('anadrago');
+  });
+
+  it('nombreDePractitioner lee las dos formas de nombre', () => {
+    expect(nombreDePractitioner({ resourceType: 'Practitioner', name: [{ text: 'Dr. X' }] })).toBe('Dr. X');
+    expect(
+      nombreDePractitioner({ resourceType: 'Practitioner', name: [{ given: ['Ana'], family: 'Pérez' }] }),
+    ).toBe('Ana Pérez');
+    expect(nombreDePractitioner({ resourceType: 'Practitioner' })).toBe('');
   });
 });
