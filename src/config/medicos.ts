@@ -63,11 +63,17 @@ export interface Medico {
 export const MEDICOS: Medico[] = [
   {
     codigo: 'MED_DALESSANDRO',
-    // Nota: el nombre completo es "Dr. Alejandro Sergio D'Alessandro" (MN 92179,
-    // ver decisiones-pendientes.md). Acá queda el corto porque es el que ya está
-    // publicado en la góndola y en los turnos existentes; unificarlo es un
-    // cambio aparte, no de la teleconsulta.
-    nombre: "Dr. Alejandro D'Alessandro",
+    // Nombre COMPLETO (MN 92179), unificado con el Dashboard clínico por
+    // decisión de Andrés (2026-09-17). Antes acá estaba el corto —"Dr. Alejandro
+    // D'Alessandro"— y el Dashboard tenía el completo: dos formas del mismo
+    // nombre que no se rompían pero se leían raro al mirar los dos lados, y que
+    // además hacían que `claveNombre` diera las dos fichas por personas
+    // distintas (ver src/fhir/practitioner.ts y `medicos:consolidar`).
+    //
+    // El cambio NO reescribe el pasado: los turnos ya creados guardan el nombre
+    // del servicio en su `description`, y ahí sigue el corto. Es correcto —un
+    // turno dice lo que decía el día que se reservó— y por eso no hay migración.
+    nombre: "Dr. Alejandro Sergio D'Alessandro",
     esDirector: false,
     especialidad: 'cardiologia',
     precioConsultaARS: 120_000,

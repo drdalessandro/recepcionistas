@@ -13,6 +13,7 @@ import {
   nombreDePractitioner,
 } from '../src/fhir/practitioner.js';
 import { buildPractitioner } from '../src/seed/builders.js';
+import { MEDICOS } from '../src/config/medicos.js';
 import { EXT, SYSTEM } from '../src/fhir/identifiers.js';
 
 const MATRICULA = 'https://biowellness.ar/fhir/CodeSystem/matricula';
@@ -132,5 +133,29 @@ describe('datosNoRegenerables — qué ficha no se puede desactivar a ciegas', (
         telecom: [{ system: 'phone', value: '+5491100000000' }],
       }),
     ).toEqual([]);
+  });
+});
+
+describe('El nombre del catálogo y el del Dashboard son el mismo (Andrés, 2026-09-17)', () => {
+  it('claveNombre los da por la misma persona, sin --canonico', () => {
+    // Antes NO matcheaban —el catálogo tenía el nombre corto y el Dashboard el
+    // completo— y `medicos:consolidar` daba las dos fichas del Dr. D'Alessandro
+    // por dos personas distintas. Se unificó el catálogo. Si alguien vuelve a
+    // acortarlo, el matcheo se rompe y el script vuelve a no ver el duplicado:
+    // por eso la decisión queda fijada acá y no solo en un comentario.
+    const delCatalogo = MEDICOS.find((m) => m.codigo === 'MED_DALESSANDRO')?.nombre ?? '';
+    expect(claveNombre(delCatalogo)).toBe(claveNombre("Alejandro Sergio D'Alessandro"));
+  });
+
+  it('El seed NO le pisa el nombre estructurado al Dashboard', () => {
+    // Coincidir el texto no significa sobrescribir: la ficha del Dashboard lo
+    // tiene en `given`/`family` y eso es mejor dato que nuestro `text`.
+    const delDashboard = {
+      resourceType: 'Practitioner' as const,
+      name: [{ given: ['Alejandro', 'Sergio'], family: "D'Alessandro" }],
+    };
+    const r = fusionarPractitioner(delDashboard, buildPractitioner('MED_DALESSANDRO'));
+    expect(r.name?.[0]?.given).toEqual(['Alejandro', 'Sergio']);
+    expect(r.name?.[0]?.text).toBeUndefined();
   });
 });

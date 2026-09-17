@@ -361,7 +361,7 @@ describe('nombreServicioRecepcion — el mostrador siempre sabe con quién', () 
       'Evaluación Biowellness — Dra. Stephanie Dos Santos',
     );
     expect(nombreServicioRecepcion(getServicio('CONSULTA_MED_DALESSANDRO'))).toBe(
-      "Evaluación Biowellness — Dr. Alejandro D'Alessandro",
+      "Evaluación Biowellness — Dr. Alejandro Sergio D'Alessandro",
     );
   });
   it('No duplica si el título ya lo trae, ni toca servicios sin médico', () => {
