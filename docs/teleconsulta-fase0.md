@@ -1,10 +1,12 @@
 # Teleconsulta · Fase 0 — Jitsi Meet en una EC2 propia (runbook)
 
-> **Estado: INSTALADO Y VERIFICADO EN PARTE (2026-09-16).** `meet.biowellness.ar`
-> está en pie con certificado válido, **acceso solo por token** y el
-> **profesional como único moderador**. Faltan cinco pruebas de aceptación (§7)
-> y el dominio del Dashboard para cerrar §5. Visión y modelo:
-> [`teleconsulta.md`](teleconsulta.md).
+> **Estado: INSTALADO Y VERIFICADO EN PARTE (2026-09-17).** `meet.biowellness.ar`
+> está en pie con certificado válido, **acceso solo por token**, el
+> **profesional como único moderador** y el **embebido acotado a los dos
+> dominios propios** (§5, aplicado y verificado el 2026-09-17). **La
+> configuración del servidor queda cerrada**: lo único pendiente de esta fase
+> son cinco pruebas de aceptación (§7), que necesitan gente y dispositivos.
+> Visión y modelo: [`teleconsulta.md`](teleconsulta.md).
 >
 > Este documento se corrigió **después** de la instalación real, con lo que
 > falló de verdad. Las trampas están en §13; valen más que el resto del texto.
@@ -26,7 +28,7 @@
 | 6 | Tres personas con video fluido (relay por el servidor) | ⏳ pendiente |
 | 7 | Funciona en iPhone dentro de una página embebida | ⏳ pendiente |
 | 8 | Sin grabación, sin terceros, sin bienvenida, barra recortada | ✅ aplicado (§5) |
-| 9 | `frame-ancestors` con los dominios del portal y del Dashboard | ⚠️ línea lista (§5) — **falta aplicarla en el servidor** |
+| 9 | `frame-ancestors` con los dominios del portal y del Dashboard | ✅ aplicado y verificado con `curl` (§5, 2026-09-17) |
 | 10 | Operable por alguien que no lo instaló | ✅ §8 |
 
 ## 1. Cómo instalar Jitsi: tres caminos
@@ -420,7 +422,22 @@ con quién está hablando.
 
 ```bash
 curl -sI https://meet.biowellness.ar/tc-prueba | grep -i content-security-policy
+content-security-policy: frame-ancestors 'self' https://app.biowellness.ar https://dashboard.biowellness.ar;
 ```
+
+> **`nginx -t` devuelve dos `[warn]` que no son de esto y no rompen nada.**
+> Aparecieron en la corrida real del 2026-09-17 y conviene reconocerlos para no
+> perder tiempo, que es la misma trampa que §13 #4:
+>
+> - `duplicate extension "wasm"` — el bloque `types { application/wasm wasm; }`
+>   que trae el config de Jitsi repite un mapeo que el `mime.types` de nginx ya
+>   tiene. Cosmético.
+> - `protocol options redefined for 0.0.0.0:443` — hay más de un `server` que
+>   escucha en 443 declarando opciones de protocolo; nginx aplica las del
+>   primero que abre el socket y avisa por los demás. Cosmético.
+>
+> Lo que decide es la última línea: `test is successful`. Si eso aparece,
+> `systemctl reload nginx` y listo.
 
 Del lado del portal y del Dashboard hace falta además que **su** CSP permita el
 iframe (`frame-src` y `script-src` con `meet.biowellness.ar`): son dos permisos
@@ -550,7 +567,7 @@ contestadas.
 - [x] NAT del JVB configurado
 - [x] Moderador por token: las tres piezas de §4.2, verificadas con la prueba 4
 - [x] `config.js` endurecido y barra recortada
-- [ ] `frame-ancestors` con los dos dominios — la línea está en §5; **falta aplicarla**
+- [x] `frame-ancestors` con los dos dominios — aplicado y verificado (§5, 2026-09-17)
 - [ ] Pruebas 5 a 9 de §7
 - [ ] Decidir el multiplexado de 443 según el resultado de la prueba 5
 - [ ] `unattended-upgrades` y SSH solo con clave
