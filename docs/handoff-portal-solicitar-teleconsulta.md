@@ -97,6 +97,78 @@ Por eso no es un simple toggle sobre la misma tarjeta; ver §3.2.
 Hoy publicados: `TELECONSULTA_MED_DALESSANDRO` (cardiología) y
 `TELECONSULTA_MED_ALBARELLOS` (endocrinología y diabetes).
 
+## 2.1 · Distinguir virtual de presencial en la UI
+
+Reportado desde el portal (Andrés, 2026-09-17) con una captura de
+`/consulta-medica`: el selector **"Médico"** muestra al Dr. D'Alessandro **dos
+veces, con el texto exactamente igual**, y los horarios de abajo son los de
+video (lunes y viernes 18-20) sin que nada lo diga.
+
+**No es un problema de decoración.** El selector dice "Médico" pero lo que se
+está eligiendo es *médico + modalidad*: D'Alessandro tiene dos agendas y dos
+servicios, y las dos entradas toman su etiqueta del **profesional**, que es el
+mismo. Dos opciones con el mismo texto son ambiguas con emoji y sin emoji, y el
+riesgo concreto es que alguien reserve una videollamada creyendo que va al
+consultorio.
+
+### De dónde sacar la señal (no del nombre)
+
+La modalidad viaja en un campo, con lista cerrada, en los **dos** recursos que
+ustedes podrían estar enumerando:
+
+```ts
+const MODALIDAD_EXT = 'https://biowellness.ar/fhir/StructureDefinition/modalidad-atencion';
+const esVirtual = (r.extension ?? []).find((e) => e.url === MODALIDAD_EXT)?.valueCode === 'virtual';
+```
+
+- en la **`ActivityDefinition`** del servicio (desde el 16-sep);
+- en el **`Schedule`** de la agenda (agregado hoy, 2026-09-17, justamente por
+  esto).
+
+**Ausencia = presencial**, igual que siempre. No hace falta parsear nombres ni
+mirar el identifier `SCH_TELE_*`, que es convención interna nuestra y puede
+cambiar.
+
+### Qué nos parece mejor
+
+**Opción A (la que recomendamos): sacar la modalidad del selector de médicos.**
+
+```
+Modalidad:  [ Presencial ] [ Por videollamada ]     ← segmentado
+Médico:     [ Dr. Alejandro Sergio D'Alessandro ▾ ] ← un renglón por médico
+```
+
+Cada médico aparece **una sola vez**, la lista se filtra por la modalidad
+elegida, y el paciente no puede equivocarse porque la decisión es explícita y
+está arriba. Al cambiar de modalidad **hay que volver a pedir los horarios**
+(§3.2: son agendas distintas).
+
+**Opción B (mínimo viable): la modalidad en el TEXTO de cada opción.**
+
+```
+🏥  Dr. Alejandro Sergio D'Alessandro · Presencial
+🎥  Dr. Alejandro Sergio D'Alessandro · Videollamada
+```
+
+El emoji **como refuerzo, nunca solo**: un ícono de cámara sin texto se lee
+igual de bien como "sacar una foto", no lo pronuncia un lector de pantalla, y
+se pierde cuando ese texto viaja a un mail de confirmación o a un recordatorio.
+La palabra es la que hace el trabajo; el ícono ayuda a barrer la lista con la
+vista.
+
+Si van por B, usen el mismo par de palabras en **todo** el circuito —tarjeta,
+confirmación, recordatorio, "Mis turnos"— para que el paciente no tenga que
+aprender dos vocabularios.
+
+### De paso: el nombre sin punto
+
+En la captura, las dos entradas del Dr. D'Alessandro dicen *"Dr Alejandro"*
+—sin punto— y las otras dos *"Dr. Conrado"* y *"Dra. Stephanie"*. Si están
+etiquetando con `Practitioner.name`, es esperable: su ficha es la **compartida
+con el Dashboard** y nuestro seed **no le pisa el nombre** a propósito, así que
+ahí manda la grafía que cargó el Dashboard. No es un bug nuestro; lo decimos
+para que no lo persigan.
+
 ## 3. Los horarios: `bw-disponibilidad` cambió (léanlo)
 
 Hasta hoy este bot calculaba **siempre** la grilla de salas: horario del centro,
@@ -289,6 +361,8 @@ Nada de esto los bloquea para arrancar con cardiología.
 - [ ] El pedido crea el `Task` y el portal muestra "esperando confirmación".
 - [ ] Ningún texto del flujo virtual dice "seña" ni promete un saldo a pagar en
       el centro.
+- [ ] En el selector, **ninguna opción tiene el mismo texto que otra**: se ve a
+      simple vista cuál es presencial y cuál por videollamada (§2.1).
 - [ ] Sin consentimiento general o sin cuestionario, el portal no deja llegar al
       pedido.
 

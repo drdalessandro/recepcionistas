@@ -9,6 +9,7 @@ import { MEDICOS, MEDICOS_POR_CODIGO, codigoAgenda, codigoConsulta } from '../sr
 import { getServicio } from '../src/config/catalogo.js';
 import { buildScheduleMedico, buildSlotMedico, esScheduleDeMedico, horarioDeAgendaMedico } from '../src/seed/builders.js';
 import { generarSlots } from '../src/lib/slots.js';
+import { EXT } from '../src/fhir/identifiers.js';
 import { HORARIO_SEMANAL } from '../src/config/horario.js';
 
 /** Slots de una semana completa para un médico, como los genera el seed. */
@@ -246,6 +247,18 @@ describe('Agenda de teleconsulta: dos agendas por profesional', () => {
     expect(MEDICOS_POR_CODIGO.get('MED_CONRADO')?.agenda).toEqual([{ dia: 5, desde: '17:00', hasta: '20:00' }]);
     const viernes = solapamientosDeAgendas(MEDICOS).filter((c) => c.dia === 5);
     expect(viernes).toEqual([]);
+  });
+
+  it('LA AGENDA DE VIDEO DECLARA SU MODALIDAD (el portal no puede deducirla del nombre)', () => {
+    // Los dos Schedule del mismo profesional tienen el mismo `actor.display`
+    // —es la misma persona— así que un selector de médicos lo muestra DOS
+    // VECES con el mismo texto. La modalidad va en un campo, con el mismo
+    // contrato que la del servicio: `valueCode`, lista cerrada, y solo en la
+    // virtual (la ausencia es presencial).
+    const video = buildScheduleMedico(dalessandro, 'virtual');
+    const ext = video.extension?.find((e) => e.url === EXT.modalidadAtencion);
+    expect(ext?.valueCode).toBe('virtual');
+    expect(buildScheduleMedico(dalessandro).extension).toBeUndefined();
   });
 
   it('El seed publica un Schedule por agenda, y se distinguen en el admin', () => {
