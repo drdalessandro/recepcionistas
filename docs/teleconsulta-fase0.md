@@ -64,6 +64,7 @@ El equivalente en Docker queda en §9.
 | Disco | 20 GB gp3. No se graba nada |
 | IP | **Elastic IP** — está en el DNS y en la config del JVB |
 | DNS | `A` `meet.biowellness.ar` → la Elastic IP, **antes** de instalar |
+| Convive con | **`recepcion.biowellness.ar`, en la MISMA instancia** (confirmado por Andrés, 2026-09-17). Ver abajo |
 
 **Security group** (entrada). La fila del 80 es la que se olvida y la que
 rompe el certificado:
@@ -82,6 +83,62 @@ rompe el certificado:
 > `Timeout during connect (likely firewall problem)` — pasó en la instalación
 > real. `ufw` viene inactivo en la AMI de Ubuntu, así que el único filtro es el
 > security group.
+
+### 2.1 · Jitsi comparte la instancia con la app de Recepción
+
+**Es así hoy y es una decisión tomada** (Andrés, 2026-09-17): en la misma EC2
+conviven el vhost de `meet.biowellness.ar` y el de `recepcion.biowellness.ar`,
+que está en producción. El plan acordado es **separarlos cuando la CPU lo pida**,
+creando una imagen y levantando `meet` aparte.
+
+Dos consecuencias prácticas de la convivencia, mientras dure:
+
+- **El nginx es uno solo.** Un `systemctl reload nginx` por un cambio de Jitsi
+  recarga también Recepción. `reload` es seguro —con la configuración rota
+  nginx no aplica nada y sigue sirviendo la vieja—, pero **`restart` sí deja a
+  las dos afuera**: usar siempre `reload`, y `nginx -t` antes.
+- **Los `[warn]` cruzados son normales**: el `protocol options redefined for
+  0.0.0.0:443` que devuelve `nginx -t` viene justamente de que hay dos
+  `server` en 443 (§5).
+
+**Cuándo va a hacer falta separar, de verdad.** No es "cuando haya muchas
+teleconsultas": **una llamada de dos personas va punto a punto** y el
+videobridge casi no interviene, y una teleconsulta es de dos —paciente y
+profesional—. El servidor entra a trabajar en dos casos:
+
+1. **Tres o más en la sala** (una interconsulta, un familiar).
+2. **Cuando el punto a punto no se puede armar** y todo el audio y video pasan
+   por el JVB o por coturn: redes móviles con NAT simétrico, redes corporativas.
+   Este es el caso frecuente y el que no se ve venir.
+
+O sea que **la señal a vigilar no es la agenda de teleconsultas sino cuánto
+relay está haciendo el JVB**. El videobridge publica sus estadísticas
+(conferencias y participantes activos, bitrate) en un endpoint local; conviene
+confirmar el puerto en la instancia antes de apoyarse en él:
+
+```bash
+curl -s http://localhost:8080/colibri/stats | head -40   # confirmar puerto/ruta
+```
+
+> ⚠️ **Lo que hay que tocar el día de la mudanza, y no es el DNS.** Jitsi
+> guarda **la IP escrita a mano** en dos lugares, porque el JVB no puede
+> descubrirla solo detrás del NAT de EC2 (§3.2):
+>
+> - `/etc/jitsi/videobridge/sip-communicator.properties` →
+>   `NAT_HARVESTER_LOCAL_ADDRESS` (privada, **cambia con la instancia nueva**) y
+>   `NAT_HARVESTER_PUBLIC_ADDRESS` (la elástica).
+> - `/etc/turnserver.conf` → la IP externa de coturn.
+>
+> Una imagen de esta instancia los copia **con las IPs viejas**. Si no se
+> actualizan, el síntoma es el peor posible: **una llamada de dos personas anda
+> igual** (va punto a punto y no toca el JVB) y solo falla la de tres, o la del
+> paciente en 4G. O sea que la mudanza parece exitosa y el problema aparece
+> semanas después, en la consulta de alguien.
+>
+> Y al revés: la instancia que se queda con Recepción hereda todo Jitsi
+> corriendo. Conviene apagar y deshabilitar ahí `prosody`, `jicofo`,
+> `jitsi-videobridge2` y `coturn`, y sacar el vhost de `meet` de
+> `sites-enabled`, en vez de dejarlos escuchando puertos por las dudas.
 
 ## 3. Instalación
 
