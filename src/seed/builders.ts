@@ -410,6 +410,17 @@ export function buildScheduleMedico(m: Medico, modalidad: ModalidadAtencion = 'p
       { system: SYSTEM.sidRecurso, value: `bw-sched-${esTele ? 'tele-' : ''}${slugMedico(m.codigo)}` },
     ],
     active: true,
+    // LA MODALIDAD, EN UN CAMPO QUE SE PUEDE LEER. Mismo contrato que el de la
+    // `ActivityDefinition` del servicio (`valueCode`, lista cerrada), y por la
+    // misma razón: el portal no puede deducirla del nombre.
+    //
+    // Sin esto, un profesional que atiende de las dos formas aparece DOS VECES
+    // en el selector de médicos con el MISMO texto —los dos Schedule tienen el
+    // mismo `actor.display`, que es correcto: es la misma persona— y el
+    // paciente elige a ciegas cuál de las dos agendas está mirando (reportado
+    // por Andrés desde el portal, 2026-09-17). El identifier `SCH_TELE_*` y el
+    // `comment` alcanzan para un humano en el admin, no para pintar una UI.
+    ...(esTele ? { extension: [{ url: EXT.modalidadAtencion, valueCode: 'virtual' as const }] } : {}),
     // Que se lea en el admin cuál es cuál: dos Schedule del mismo profesional
     // sin nada que los distinga es una trampa para el próximo que los mire.
     comment: esTele ? `Teleconsulta — ${m.nombre}` : undefined,
