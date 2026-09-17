@@ -18,9 +18,17 @@ import { handler as disponibilidad } from '../src/bots/disponibilidad.js';
 const CONSULTA = getServicio('CONSULTA_MED_DALESSANDRO');
 
 /** MedplumClient falso con la agenda publicada de un médico. */
-function fakeMedplum(slotsLibres: string[]) {
+function fakeMedplum(slotsLibres: string[], pedidos?: string[]) {
   return {
-    searchOne: async (tipo: string) => (tipo === 'Schedule' ? { resourceType: 'Schedule', id: 'sch-med' } : undefined),
+    searchOne: async (tipo: string, query?: string) => {
+      if (tipo !== 'Schedule') {
+        return undefined;
+      }
+      // `pedidos` deja ver CONTRA QUÉ agenda preguntó: con dos Schedules por
+      // médico, mirar la equivocada devuelve horarios plausibles y equivocados.
+      pedidos?.push(String(query));
+      return { resourceType: 'Schedule', id: 'sch-med' };
+    },
     searchResources: async (tipo: string) =>
       tipo === 'Slot'
         ? slotsLibres.map((start, i) => ({
@@ -157,16 +165,28 @@ describe('bw-disponibilidad · consultas y teleconsultas → la agenda del médi
     expect(r.dias?.[0]?.horarios[0]?.inicio).toBe(isoHorarioPortal(libre));
   });
 
-  it('las dos modalidades del mismo médico comparten la agenda publicada', async () => {
-    // Hoy hay UN Schedule por médico (SCH_<codigo>). Reservar a las 16 en
-    // persona deja sin las 16 a la teleconsulta, y está bien: el cuello de
-    // botella es el profesional.
+  it('CADA MODALIDAD MIRA SU AGENDA cuando el médico publica franjas de video', async () => {
+    // El Dr. D'Alessandro atiende presencial martes/miércoles/jueves y por
+    // video lunes y viernes (Andrés, 2026-09-17): son dos `Schedule` distintos
+    // y preguntarle al equivocado devolvería horarios plausibles y falsos.
     expect(TELECONSULTA.practitionerCodigo).toBe(CONSULTA.practitionerCodigo);
-    const libre = enDias(3, 16);
-    const medplum = fakeMedplum([isoHorarioPortal(libre)]);
-    const presencial = await disponibilidad(medplum, evento(CONSULTA.codigo));
-    const virtual = await disponibilidad(medplum, evento(TELECONSULTA.codigo));
-    expect(virtual.dias).toEqual(presencial.dias);
+    const pedidos: string[] = [];
+    const medplum = fakeMedplum([isoHorarioPortal(enDias(3, 16))], pedidos);
+    await disponibilidad(medplum, evento(CONSULTA.codigo));
+    await disponibilidad(medplum, evento(TELECONSULTA.codigo));
+    expect(pedidos[0]).toContain('SCH_MED_DALESSANDRO');
+    expect(pedidos[1]).toContain('SCH_TELE_MED_DALESSANDRO');
+  });
+
+  it('sin franjas de video, las dos modalidades siguen compartiendo la agenda', async () => {
+    // El caso de todos los demás profesionales, y el que hace que activar esto
+    // no haya movido nada: un solo Schedule, y un presencial a las 16:00 deja
+    // sin 16:00 también a la teleconsulta. El cuello de botella es el médico.
+    const pedidos: string[] = [];
+    const medplum = fakeMedplum([isoHorarioPortal(enDias(3, 17))], pedidos);
+    await disponibilidad(medplum, evento('CONSULTA_MED_CONRADO'));
+    expect(pedidos[0]).toContain('SCH_MED_CONRADO');
+    expect(pedidos[0]).not.toContain('SCH_TELE');
   });
 
   it('SIN AGENDA PUBLICADA NO INVENTA HORARIOS (y lo dice)', async () => {

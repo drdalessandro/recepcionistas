@@ -15,7 +15,7 @@ Pedir una teleconsulta **usa el mismo camino que ya tienen** para una consulta
 presencial: `bw-disponibilidad` para los horarios, `bw-solicitar-turno` para el
 pedido. Lo único que cambia es el `servicioCodigo`.
 
-Tres cosas nuevas que sí les tocan:
+Cuatro cosas nuevas que sí les tocan:
 
 1. El catálogo ahora trae servicios **virtuales**, que se reconocen por la
    extensión `modalidad-atencion` (§2).
@@ -24,6 +24,9 @@ Tres cosas nuevas que sí les tocan:
    publicada del profesional y dice de dónde salió (§3).
 3. El cobro es del **100 % por adelantado**, no la seña del 50 %: en ningún
    texto de un turno virtual puede decir "seña" (§5).
+4. Un profesional puede publicar **horarios de video distintos de los
+   presenciales** — el Dr. D'Alessandro ya lo hace: lunes y viernes de 18 a 20.
+   Cambiar de modalidad **vuelve a pedir la grilla** (§3.2).
 
 Y un límite que no es técnico: **hoy solo el Dr. D'Alessandro se puede ofrecer**.
 La Dra. Albarellos ya está en el catálogo pero todavía no tiene franjas
@@ -151,22 +154,37 @@ merece saber cuál de las dos le tocó:
 En los dos casos `ok: true` y `dias: []`. Muestren `r.mensaje` tal cual: ya viene
 redactado según la causa.
 
-### 3.2 · Presencial y virtual comparten la agenda
+### 3.2 · Cada modalidad puede tener SU agenda
 
-Hoy hay **un solo `Schedule` por médico** (`SCH_<codigo>`). Consecuencia directa:
+Un profesional puede publicar **horarios de video distintos de los
+presenciales**, y el Dr. D'Alessandro es el primero que lo hace
+(Andrés, 2026-09-17):
 
-> Si el Dr. D'Alessandro tiene una presencial a las 16:00, las 16:00 **tampoco
-> están** para una teleconsulta.
+| | Días |
+|---|---|
+| Presencial | martes 16-20 · miércoles 8-12 · jueves 16-20 |
+| **Teleconsulta** | **lunes 18-20 · viernes 18-20** |
 
-Es a propósito: el cuello de botella es el profesional, no la sala. Y tiene un
-lado cómodo para ustedes: **para un mismo médico la grilla es idéntica en las dos
-modalidades**, así que alternar entre ellas puede cambiar solo el `servicioCodigo`
-**sin volver a pedir los horarios**. Lo que sí cambia es el precio y la duración,
-que vienen en la `ActivityDefinition` de cada uno.
+Son agendas **independientes**: no se pisan entre sí y cada modalidad ve la
+suya. Por eso **hay que volver a pedir los horarios al cambiar de modalidad**:
+no es el mismo listado con otro precio.
+
+> El viernes de video se superpone con el consultorio del Dr. Conrado (17-20) y
+> está bien: una videollamada no ocupa el consultorio. Es justamente para lo que
+> existe la agenda de video aparte.
+
+**Para los demás profesionales no cambió nada**: quien no tiene franjas de video
+propias sigue con **una sola agenda** compartida por las dos modalidades, y ahí
+sí una presencial a las 16:00 deja sin 16:00 a la teleconsulta (el cuello de
+botella es el profesional, no la sala).
+
+Ustedes no tienen que saber cuál es cuál: le piden los horarios a
+`bw-disponibilidad` con el `servicioCodigo` y el bot resuelve a qué agenda
+mirar. Lo único que les toca es **no cachear la grilla entre modalidades**.
 
 Con el matiz del §2: como la presencial no elige médico en la góndola y la
-virtual sí, el toggle recién es equivalente **una vez que el paciente ya eligió
-profesional**. Antes de eso son dos recorridos distintos.
+virtual sí, son dos recorridos distintos hasta que el paciente eligió
+profesional.
 
 (Si en algún momento se decide que un profesional publique horarios de video
 distintos de los presenciales, es un cambio nuestro y se los avisamos. Ver §7.)
@@ -242,7 +260,7 @@ por el previo de la especialidad (`teleconsulta.md` §10, decide Andrés).
 | **Franjas de la Dra. Albarellos** | sin agenda publicada → el portal no la puede ofrecer | **Andrés**. Es un renglón en `src/config/medicos.ts` + `npm run seed` |
 | **Dr. Carrieri (hiperbárica)** | `Practitioner` creado, **sin servicio publicado** | **Andrés**: falta el precio de la consulta |
 | **Nutrición** | tres servicios sin publicar | **Andrés**: falta el nombre de la nutricionista |
-| **Agenda de video separada de la presencial** | el campo `agendaTeleconsulta` existe en la config pero **no lo usa nadie**: hoy hay una sola agenda por médico (§3.2) | decisión de Andrés; si se activa, es cambio nuestro y se los avisamos |
+| ~~Agenda de video separada de la presencial~~ | **resuelto 2026-09-17**: implementado y en uso para el Dr. D'Alessandro (§3.2) | — |
 
 Nada de esto los bloquea para arrancar con cardiología.
 
@@ -263,8 +281,9 @@ Nada de esto los bloquea para arrancar con cardiología.
       `fuente === 'agenda-medico'` y coinciden con los horarios publicados del
       médico (martes 16-20, miércoles 8-12, jueves 16-20).
 - [ ] Un horario a más de 48 h **se ofrece** (antes lo comía R-13).
-- [ ] Reservar la presencial de las 16:00 hace desaparecer las 16:00 también de
-      la lista virtual.
+- [ ] La lista virtual del Dr. D'Alessandro trae **lunes y viernes**, no sus días
+      presenciales: son dos agendas y cambiar de modalidad vuelve a pedir los
+      horarios.
 - [ ] Elegir la endocrinóloga muestra el mensaje de "todavía no tiene horarios
       publicados" y **no** una grilla inventada.
 - [ ] El pedido crea el `Task` y el portal muestra "esperando confirmación".

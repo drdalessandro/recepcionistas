@@ -6,6 +6,7 @@
  * garantiza). El precio de la consulta es por médico y está en ARS (pesos),
  * no en USD.
  */
+import type { ModalidadAtencion } from '../domain/types.js';
 import type { EspecialidadCodigo } from '../fhir/identifiers.js';
 
 /** Franja de atención semanal de un médico (día 0=domingo … 6=sábado). */
@@ -87,6 +88,15 @@ export const MEDICOS: Medico[] = [
       { dia: 3, desde: '08:00', hasta: '12:00' }, // Miércoles
       { dia: 4, desde: '16:00', hasta: '20:00' }, // Jueves
     ],
+    // Teleconsulta cardiológica: LUNES y VIERNES de 18 a 20 (Andrés,
+    // 2026-09-17). Son días que NO toca su agenda presencial, y el viernes el
+    // consultorio lo tiene el Dr. Conrado (17-20) — que es exactamente para lo
+    // que existe una agenda de video aparte: atender por videollamada en
+    // horarios en los que el consultorio está ocupado por otro profesional.
+    agendaTeleconsulta: [
+      { dia: 1, desde: '18:00', hasta: '20:00' }, // Lunes
+      { dia: 5, desde: '18:00', hasta: '20:00' }, // Viernes
+    ],
   },
   {
     codigo: 'MED_DOS_SANTOS',
@@ -155,4 +165,32 @@ export function codigoConsulta(medicoCodigo: string): string {
  */
 export function codigoTeleconsulta(medicoCodigo: string): string {
   return `TELECONSULTA_${medicoCodigo}`;
+}
+
+/**
+ * Identifier del `Schedule` donde vive la agenda publicada de un profesional
+ * **para esa modalidad**.
+ *
+ * Una sola función, y la usan los tres lados que tienen que coincidir o el
+ * sistema se parte: el seed que publica los Slots, `bw-disponibilidad` que los
+ * lista y `bw-reservar-turno` que los pasa a `busy`. Si divergieran, el portal
+ * ofrecería horarios de una agenda y la reserva marcaría los de la otra.
+ *
+ * La respuesta sale de la CONFIG, no de lo que haya en el servidor: un médico
+ * **sin** `agendaTeleconsulta` sigue teniendo una sola agenda (`SCH_<codigo>`)
+ * y sus dos modalidades comparten los horarios, exactamente como hasta hoy.
+ * Recién cuando alguien le define franjas de video aparece la segunda agenda.
+ * Por eso agregar esta función no movió ni un turno: es un no-op hasta que hay
+ * franjas.
+ */
+export function codigoAgenda(medicoCodigo: string, modalidad: ModalidadAtencion = 'presencial'): string {
+  const m = MEDICOS_POR_CODIGO.get(medicoCodigo);
+  return modalidad === 'virtual' && (m?.agendaTeleconsulta?.length ?? 0) > 0
+    ? `SCH_TELE_${medicoCodigo}`
+    : `SCH_${medicoCodigo}`;
+}
+
+/** ¿Este profesional publica agenda de video separada de la presencial? */
+export function tieneAgendaTeleconsulta(m: Medico): boolean {
+  return (m.agendaTeleconsulta?.length ?? 0) > 0;
 }

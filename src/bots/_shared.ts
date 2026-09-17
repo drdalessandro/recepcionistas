@@ -47,6 +47,7 @@ import { EMAIL_FROM, EMAIL_RESPUESTAS } from '../config/email.js';
 import type { IntensidadMembresia, ModalidadAtencion, Servicio } from '../domain/types.js';
 import { resolverTC } from '../config/tipo-cambio.js';
 import { CATEGORIA_COMERCIAL, getServicio, nombreServicioRecepcion } from '../config/catalogo.js';
+import { codigoAgenda } from '../config/medicos.js';
 import { getMembresia } from '../config/membresias.js';
 import { claveSemana, perteneceASemana } from '../lib/semana-membresia.js';
 import { getPaquete } from '../config/paquetes.js';
@@ -1040,7 +1041,7 @@ export async function chequearHorarioDisponible(
   inicio: Date,
 ): Promise<ChequeoHorario> {
   if (servicio.practitionerCodigo) {
-    return chequearAgendaMedico(medplum, servicio.practitionerCodigo, inicio);
+    return chequearAgendaMedico(medplum, servicio.practitionerCodigo, inicio, servicio.modalidad);
   }
   const { disp } = await disponibilidadDePaciente(medplum, pacienteRef, servicio);
   return horarioOfrecido(disp.dias, inicio) ? { ok: true } : { ok: false, alternativas: disp.dias };
@@ -1058,17 +1059,20 @@ export async function chequearHorarioDisponible(
  *   de `bw-disponibilidad` NO puede inventar horarios: devuelve vacío y lo dice.
  * - `publicada: true` con `dias: []` → publica agenda y está toda tomada.
  *
- * Ojo: devuelve los slots de las DOS modalidades juntas, porque hoy hay **una
- * sola agenda por médico** (`SCH_<codigo>`). Un turno presencial a las 10:00
+ * Qué agenda mira lo decide `codigoAgenda`, la MISMA función que usa el seed
+ * para publicar los Slots. Un profesional sin franjas de video tiene una sola
+ * agenda y sus dos modalidades comparten horarios —un presencial a las 10:00
  * deja sin 10:00 también a la teleconsulta, y está bien: el cuello de botella
- * es el profesional, no la sala.
+ * es el profesional, no la sala—. Con franjas de video propias son dos agendas
+ * independientes y cada modalidad ve la suya.
  */
 export async function agendaPublicadaDeMedico(
   medplum: MedplumClient,
   practitionerCodigo: string,
+  modalidad: ModalidadAtencion = 'presencial',
 ): Promise<{ publicada: boolean; libres: Slot[]; dias: DiaDisponible[] }> {
   const sch = await medplum
-    .searchOne('Schedule', `identifier=${SYSTEM.recursoCodigo}|SCH_${practitionerCodigo}`)
+    .searchOne('Schedule', `identifier=${SYSTEM.recursoCodigo}|${codigoAgenda(practitionerCodigo, modalidad)}`)
     .catch(() => undefined);
   if (!sch?.id) {
     return { publicada: false, libres: [], dias: [] };
@@ -1084,8 +1088,9 @@ async function chequearAgendaMedico(
   medplum: MedplumClient,
   practitionerCodigo: string,
   inicio: Date,
+  modalidad?: ModalidadAtencion,
 ): Promise<ChequeoHorario> {
-  const { publicada, libres, dias } = await agendaPublicadaDeMedico(medplum, practitionerCodigo);
+  const { publicada, libres, dias } = await agendaPublicadaDeMedico(medplum, practitionerCodigo, modalidad);
   if (!publicada) {
     // Sin agenda publicada no hay nada que contradecir: que decida Recepción,
     // como con cualquier código que este chequeo no sabe resolver.

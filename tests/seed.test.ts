@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { buildScheduleMedico, buildSeed, buildSlotMedico, esScheduleDeMedico, horarioDeAgendaMedico } from '../src/seed/builders.js';
 import { generarSlots } from '../src/lib/slots.js';
 import { getServicio } from '../src/config/catalogo.js';
-import { MEDICOS } from '../src/config/medicos.js';
+import { MEDICOS, tieneAgendaTeleconsulta } from '../src/config/medicos.js';
 import { SYSTEM } from '../src/fhir/identifiers.js';
 import { EXT, INTAKE_QUESTIONNAIRE_URL } from '../src/fhir/identifiers.js';
 import { CONSENTIMIENTO_LIBRARY_URL, VERSION_CONSENTIMIENTO, consentSections } from '../src/config/consentimiento-texto.js';
@@ -38,9 +38,11 @@ describe('Seed — composición', () => {
     // dónde pararse en la agenda, con capacidad alta porque lo que limita una
     // teleconsulta es el profesional, no un lugar.
     expect(seed.locations.length).toBe(15);
-    // 15 recursos + las 3 agendas médicas publicadas (Conrado, D'Alessandro,
-    // Dos Santos). Albarellos y Carrieri todavía no tienen franjas definidas.
-    expect(seed.schedules.length).toBe(18);
+    // 15 recursos + las 3 agendas médicas presenciales (Conrado, D'Alessandro,
+    // Dos Santos) + 1 agenda de VIDEO (D'Alessandro, lunes y viernes 18-20:
+    // un profesional puede publicar horarios de teleconsulta distintos de los
+    // presenciales). Albarellos y Carrieri todavía no tienen franjas definidas.
+    expect(seed.schedules.length).toBe(19);
     // 5 profesionales: los 3 médicos + Albarellos (endocrinología, solo virtual)
     // + Carrieri (hiperbárica, sin servicio publicado hasta que haya precio).
     expect(seed.practitioners.length).toBe(5);
@@ -392,7 +394,23 @@ describe('Seed — agendas de médicos (portal → Consulta médica)', () => {
 
   it('El seed solo publica Schedule de los médicos CON agenda declarada', () => {
     const publicados = seed.schedules.filter((s) => esScheduleDeMedico(s));
-    expect(publicados).toHaveLength(MEDICOS.filter((m) => (m.agenda?.length ?? 0) > 0).length);
+    // Una por agenda declarada, no una por médico: quien publica franjas de
+    // video tiene DOS (la presencial y la de teleconsulta).
+    const esperadas =
+      MEDICOS.filter((m) => (m.agenda?.length ?? 0) > 0).length + MEDICOS.filter(tieneAgendaTeleconsulta).length;
+    expect(publicados).toHaveLength(esperadas);
+  });
+
+  it('La agenda de VIDEO se publica aparte y `esScheduleDeMedico` la reconoce', () => {
+    // Lo segundo no es un detalle: sin reconocerla, `npm run limpiar -- --apply`
+    // la daría por ajena y la borraría con todos sus slots.
+    const identifiers = seed.schedules.flatMap((s) => (s.identifier ?? []).map((i) => i.value));
+    expect(identifiers).toContain('SCH_MED_DALESSANDRO');
+    expect(identifiers).toContain('SCH_TELE_MED_DALESSANDRO');
+    const video = seed.schedules.find((s) =>
+      (s.identifier ?? []).some((i) => i.value === 'SCH_TELE_MED_DALESSANDRO'),
+    );
+    expect(video && esScheduleDeMedico(video)).toBe(true);
   });
 
   // El kiosco del mostrador y el portal dependen de que estos DOS recursos

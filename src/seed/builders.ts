@@ -20,8 +20,8 @@ import type {
   Slot,
   StructureDefinition,
 } from '@medplum/fhirtypes';
-import type { Servicio } from '../domain/types.js';
-import { MEDICOS, type Medico } from '../config/medicos.js';
+import type { ModalidadAtencion, Servicio } from '../domain/types.js';
+import { MEDICOS, codigoAgenda, tieneAgendaTeleconsulta, type Medico } from '../config/medicos.js';
 import { CATEGORIA_COMERCIAL, ORDEN_FAMILIA, TODOS_LOS_SERVICIOS } from '../config/catalogo.js';
 import { COMBOS } from '../config/combos.js';
 import { MEMBRESIAS } from '../config/membresias.js';
@@ -401,14 +401,18 @@ function slugMedico(codigo: string): string {
  * contrato del portal (`bw-sched-{medico}` bajo sid/recurso, que el portal
  * busca por valor). El actor es el Practitioner (referencia condicional).
  */
-export function buildScheduleMedico(m: Medico): Schedule {
+export function buildScheduleMedico(m: Medico, modalidad: ModalidadAtencion = 'presencial'): Schedule {
+  const esTele = modalidad === 'virtual';
   return {
     resourceType: 'Schedule',
     identifier: [
-      { system: SYSTEM.recursoCodigo, value: `SCH_${m.codigo}` },
-      { system: SYSTEM.sidRecurso, value: `bw-sched-${slugMedico(m.codigo)}` },
+      { system: SYSTEM.recursoCodigo, value: codigoAgenda(m.codigo, modalidad) },
+      { system: SYSTEM.sidRecurso, value: `bw-sched-${esTele ? 'tele-' : ''}${slugMedico(m.codigo)}` },
     ],
     active: true,
+    // Que se lea en el admin cuál es cuál: dos Schedule del mismo profesional
+    // sin nada que los distinga es una trampa para el próximo que los mire.
+    comment: esTele ? `Teleconsulta — ${m.nombre}` : undefined,
     actor: [{ reference: `Practitioner?identifier=${SYSTEM.medico}|${m.codigo}`, display: m.nombre }],
   };
 }
@@ -418,12 +422,25 @@ export function buildScheduleMedico(m: Medico): Schedule {
  * sin duplicar; el runner NO pisa los existentes (un slot ya reservado quedó
  * `busy` y una regeneración jamás debe volverlo a ofrecer).
  */
-export function buildSlotMedico(m: Medico, descriptor: SlotDescriptor, scheduleRef: string): Slot {
+export function buildSlotMedico(
+  m: Medico,
+  descriptor: SlotDescriptor,
+  scheduleRef: string,
+  modalidad: ModalidadAtencion = 'presencial',
+): Slot {
+  // El identifier sale de la agenda a la que pertenece el slot: `MED_X|…` para
+  // la presencial (EL MISMO DE SIEMPRE — cambiarlo duplicaría cada slot ya
+  // publicado, porque el alta es un create condicional por identifier) y
+  // `TELE_MED_X|…` para la de video. Sin distinguirlos, un médico que atienda
+  // las dos modalidades en el mismo horario tendría dos slots peleando por un
+  // identifier.
+  const clave = codigoAgenda(m.codigo, modalidad).replace(/^SCH_/, '');
+  const esTele = modalidad === 'virtual';
   return {
     resourceType: 'Slot',
     identifier: [
-      { system: SYSTEM.recursoCodigo, value: `${m.codigo}|${descriptor.inicio}` },
-      { system: SYSTEM.sidRecurso, value: `bw-slot-${slugMedico(m.codigo)}-${descriptor.inicio}` },
+      { system: SYSTEM.recursoCodigo, value: `${clave}|${descriptor.inicio}` },
+      { system: SYSTEM.sidRecurso, value: `bw-slot-${esTele ? 'tele-' : ''}${slugMedico(m.codigo)}-${descriptor.inicio}` },
     ],
     schedule: { reference: scheduleRef },
     status: 'free',
@@ -443,14 +460,17 @@ export function buildSlotMedico(m: Medico, descriptor: SlotDescriptor, scheduleR
  */
 export function esScheduleDeMedico(sch: Schedule): boolean {
   return (sch.identifier ?? []).some(
-    (i) => i.system === SYSTEM.recursoCodigo && MEDICOS.some((m) => i.value === `SCH_${m.codigo}`),
+    (i) =>
+      i.system === SYSTEM.recursoCodigo &&
+      MEDICOS.some((m) => i.value === `SCH_${m.codigo}` || i.value === `SCH_TELE_${m.codigo}`),
   );
 }
 
 /** Horario semanal (shape de HORARIO_SEMANAL) armado desde la agenda del médico. */
-export function horarioDeAgendaMedico(m: Medico): HorarioDia[] {
+export function horarioDeAgendaMedico(m: Medico, modalidad: ModalidadAtencion = 'presencial'): HorarioDia[] {
+  const agenda = (modalidad === 'virtual' ? m.agendaTeleconsulta : m.agenda) ?? [];
   return Array.from({ length: 7 }, (_, dia) => {
-    const franjas = (m.agenda ?? []).filter((f) => f.dia === dia).map((f) => ({ desde: f.desde, hasta: f.hasta }));
+    const franjas = agenda.filter((f) => f.dia === dia).map((f) => ({ desde: f.desde, hasta: f.hasta }));
     return { dia, abierto: franjas.length > 0, franjas };
   });
 }
@@ -508,7 +528,8 @@ export function buildSeed(): RecursosSeed {
     schedules: [
       ...RECURSOS.map((r) => buildSchedule(r.codigo)),
       // Agendas publicadas de médicos (portal): solo los que definen `agenda`.
-      ...MEDICOS.filter((m) => (m.agenda?.length ?? 0) > 0).map(buildScheduleMedico),
+      ...MEDICOS.filter((m) => (m.agenda?.length ?? 0) > 0).map((m) => buildScheduleMedico(m)),
+      ...MEDICOS.filter(tieneAgendaTeleconsulta).map((m) => buildScheduleMedico(m, 'virtual')),
     ],
     practitioners: MEDICOS.map((m) => buildPractitioner(m.codigo)),
   };

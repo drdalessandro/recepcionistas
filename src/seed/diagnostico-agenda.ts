@@ -18,7 +18,8 @@ import 'dotenv/config';
 import { MedplumClient } from '@medplum/core';
 import type { Bundle, Schedule, Slot } from '@medplum/fhirtypes';
 import { RECURSOS, RECURSOS_POR_CODIGO } from '../config/recursos.js';
-import { MEDICOS } from '../config/medicos.js';
+import { MEDICOS, codigoAgenda, tieneAgendaTeleconsulta } from '../config/medicos.js';
+import type { ModalidadAtencion } from '../domain/types.js';
 import { solapamientosDeAgendas } from '../lib/agenda-medicos.js';
 import { EXT, SYSTEM } from '../fhir/identifiers.js';
 import { esScheduleDeMedico } from './builders.js';
@@ -68,27 +69,41 @@ async function main(): Promise<void> {
   //    médica"). Sin Schedule canónico o sin slots libres, el portal muestra
   //    "no tiene horarios libres publicados" aunque el médico atienda.
   console.log('\n=== Agendas de médicos (portal → Consulta médica) ===');
+  // Un profesional puede tener DOS: la presencial y la de teleconsulta. Se
+  // listan las dos por separado — una teleconsulta que mira la agenda
+  // equivocada es invisible hasta que un paciente no encuentra horarios.
   for (const m of MEDICOS) {
-    const franjas = m.agenda ?? [];
-    const declarada = franjas.length
-      ? franjas.map((f) => `${DIAS[f.dia] ?? f.dia} ${f.desde}-${f.hasta}`).join(', ')
-      : 'SIN agenda en src/config/medicos.ts';
-    const sch = await medplum.searchOne('Schedule', `identifier=${SYSTEM.recursoCodigo}|SCH_${m.codigo}`);
-    if (!sch?.id) {
-      console.log(`  ${franjas.length ? '✗' : '·'} ${m.nombre.padEnd(28)} ${declarada} · sin Schedule canónico`);
-      continue;
+    const modalidades: ModalidadAtencion[] = tieneAgendaTeleconsulta(m) ? ['presencial', 'virtual'] : ['presencial'];
+    for (const modalidad of modalidades) {
+      const esTele = modalidad === 'virtual';
+      const franjas = (esTele ? m.agendaTeleconsulta : m.agenda) ?? [];
+      const etiqueta = esTele ? `${m.nombre} (video)` : m.nombre;
+      const declarada = franjas.length
+        ? franjas.map((f) => `${DIAS[f.dia] ?? f.dia} ${f.desde}-${f.hasta}`).join(', ')
+        : 'SIN agenda en src/config/medicos.ts';
+      const sch = await medplum.searchOne(
+        'Schedule',
+        `identifier=${SYSTEM.recursoCodigo}|${codigoAgenda(m.codigo, modalidad)}`,
+      );
+      if (!sch?.id) {
+        console.log(`  ${franjas.length ? '✗' : '·'} ${etiqueta.padEnd(28)} ${declarada} · sin Schedule canónico`);
+        continue;
+      }
+      const libres = await contar(medplum, 'Slot', `schedule=Schedule/${sch.id}&status=free&start=ge${ahora}`);
+      const ocupados = await contar(medplum, 'Slot', `schedule=Schedule/${sch.id}&status=busy&start=ge${ahora}`);
+      const marca = libres > 0 ? '✓' : '✗';
+      console.log(
+        `  ${marca} ${etiqueta.padEnd(28)} ${declarada} · Schedule/${sch.id} · ${libres} libres, ${ocupados} ocupados`,
+      );
     }
-    const libres = await contar(medplum, 'Slot', `schedule=Schedule/${sch.id}&status=free&start=ge${ahora}`);
-    const ocupados = await contar(medplum, 'Slot', `schedule=Schedule/${sch.id}&status=busy&start=ge${ahora}`);
-    const marca = libres > 0 ? '✓' : '✗';
-    console.log(
-      `  ${marca} ${m.nombre.padEnd(28)} ${declarada} · Schedule/${sch.id} · ${libres} libres, ${ocupados} ocupados`,
-    );
   }
   console.log('  (0 libres con agenda declarada => falta materializar: npm run seed -- --with-slots --dias=30)');
 
   // Superposiciones: hay UN consultorio, así que dos médicos en la misma
   // franja compiten por él (el portal ofrece las dos, R-07 deja reservar una).
+  // Las agendas de VIDEO quedan afuera a propósito: una videollamada no ocupa
+  // el consultorio, así que dos profesionales pueden atender por video a la
+  // misma hora sin pisarse.
   const cruces = solapamientosDeAgendas(MEDICOS);
   if (cruces.length > 0) {
     console.log(`\n  ⚠️  ${cruces.length} superposición(es) de agenda:`);

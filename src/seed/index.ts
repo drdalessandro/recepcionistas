@@ -17,7 +17,8 @@ import type { Practitioner, Resource, Slot } from '@medplum/fhirtypes';
 import { buildSeed, buildSlot, buildSlotMedico, horarioDeAgendaMedico } from './builders.js';
 import { HORARIO_ES_PLACEHOLDER, HORARIO_SEMANAL } from '../config/horario.js';
 import { RECURSOS } from '../config/recursos.js';
-import { MEDICOS, codigoConsulta } from '../config/medicos.js';
+import { MEDICOS, codigoAgenda, codigoConsulta, codigoTeleconsulta, tieneAgendaTeleconsulta } from '../config/medicos.js';
+import type { ModalidadAtencion } from '../domain/types.js';
 import { reconciliarSlots, solapamientosDeAgendas } from '../lib/agenda-medicos.js';
 import { getServicio } from '../config/catalogo.js';
 import { CONTRAINDICACIONES } from '../config/contraindicaciones.js';
@@ -139,25 +140,37 @@ async function generarYCargarSlots(medplum: MedplumClient, dias: number): Promis
 
   // Agendas publicadas de MÉDICOS (portal → "Consulta con Director Médico"):
   // slots free por franja del médico, con la duración de SU consulta.
-  for (const m of MEDICOS.filter((x) => (x.agenda?.length ?? 0) > 0)) {
+  //
+  // Son DOS agendas por profesional cuando publica horarios de video propios:
+  // la presencial (`SCH_<codigo>`) y la de teleconsulta (`SCH_TELE_<codigo>`).
+  // Se publican y se reconcilian por separado a propósito — mezclarlas haría
+  // que la reconciliación de una borrara los slots libres de la otra, que es
+  // justo el modo de falla que esta función existe para evitar.
+  const agendas: Array<{ m: (typeof MEDICOS)[number]; modalidad: ModalidadAtencion }> = [
+    ...MEDICOS.filter((x) => (x.agenda?.length ?? 0) > 0).map((m) => ({ m, modalidad: 'presencial' as const })),
+    ...MEDICOS.filter(tieneAgendaTeleconsulta).map((m) => ({ m, modalidad: 'virtual' as const })),
+  ];
+  for (const { m, modalidad } of agendas) {
+    const esTele = modalidad === 'virtual';
+    const etiqueta = esTele ? `${m.nombre} (teleconsulta)` : m.nombre;
     const sch = await withRetry(() =>
-      medplum.searchOne('Schedule', `identifier=${SYSTEM.recursoCodigo}|SCH_${m.codigo}`),
+      medplum.searchOne('Schedule', `identifier=${SYSTEM.recursoCodigo}|${codigoAgenda(m.codigo, modalidad)}`),
     );
     if (!sch?.id) {
-      console.log(`  ⚠️  Sin Schedule para ${m.nombre}: se omite su agenda.`);
+      console.log(`  ⚠️  Sin Schedule para ${etiqueta}: se omite su agenda.`);
       continue;
     }
-    const dur = getServicio(codigoConsulta(m.codigo)).duracionMin;
+    const dur = getServicio(esTele ? codigoTeleconsulta(m.codigo) : codigoConsulta(m.codigo)).duracionMin;
     const deMedico = generarSlots(
-      [{ codigo: m.codigo, nombre: m.nombre, tipo: 'CONSULTORIO', capacidad: 1 }],
-      horarioDeAgendaMedico(m),
+      [{ codigo: m.codigo, nombre: m.nombre, tipo: esTele ? 'VIRTUAL' : 'CONSULTORIO', capacidad: 1 }],
+      horarioDeAgendaMedico(m, modalidad),
       { desde, dias, granularidadMin: dur },
     );
     const rm = await crearSlotsEnLotes(
       medplum,
-      deMedico.map((desc) => buildSlotMedico(m, desc, `Schedule/${sch.id}`)),
+      deMedico.map((desc) => buildSlotMedico(m, desc, `Schedule/${sch.id}`, modalidad)),
     );
-    console.log(`  ✓ Agenda ${m.nombre}: ${rm.creados} slots nuevos (${rm.existentes} ya existían)`);
+    console.log(`  ✓ Agenda ${etiqueta}: ${rm.creados} slots nuevos (${rm.existentes} ya existían)`);
 
     // Reconciliación: si la agenda CAMBIÓ (una franja se movió de día u hora),
     // los slots libres viejos seguirían publicados y el portal ofrecería un
@@ -184,7 +197,7 @@ async function generarYCargarSlots(medplum: MedplumClient, dias: number): Promis
     }
     for (const s of ocupadosFuera) {
       console.log(
-        `     ⚠️  Turno RESERVADO fuera de la agenda nueva: ${s.start} (Slot/${s.id}). No se tocó: reubicalo con el paciente.`,
+        `     ⚠️  Turno RESERVADO fuera de la agenda nueva de ${etiqueta}: ${s.start} (Slot/${s.id}). No se tocó: reubicalo con el paciente.`,
       );
     }
   }

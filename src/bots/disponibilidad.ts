@@ -87,7 +87,11 @@ export async function handler(
   // `bw-solicitar-turno` miran lo mismo "si divergieran, el portal ofrecería
   // horarios que después se rechazan". Para las consultas divergían.
   if (servicio.practitionerCodigo) {
-    const { publicada, dias } = await agendaPublicadaDeMedico(medplum, servicio.practitionerCodigo);
+    const { publicada, dias } = await agendaPublicadaDeMedico(
+      medplum,
+      servicio.practitionerCodigo,
+      servicio.modalidad,
+    );
     const vacia = dias.every((d) => d.horarios.length === 0);
     return {
       ok: true,
