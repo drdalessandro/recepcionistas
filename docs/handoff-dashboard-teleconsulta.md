@@ -130,6 +130,18 @@ un dato que este repo no ve. Si el id que se le pasa no está entre las fichas
 del médico, **no toca nada y sale con error** — desactivar la ficha equivocada
 de un profesional es caro de revertir.
 
+> **Por qué no matcheaban solas, y qué se hizo.** El catálogo tenía el nombre
+> corto ("Dr. Alejandro D'Alessandro") y ustedes el completo ("Alejandro
+> **Sergio** D'Alessandro"), así que el matcheo por nombre las daba por dos
+> personas distintas. **El catálogo pasó al nombre completo** (Andrés,
+> 2026-09-17), con lo que ahora coinciden y el próximo duplicado de este médico
+> se detecta solo. Un test lo fija.
+>
+> Coincidir el texto **no** significa que les pisemos el nombre: la fusión
+> preserva el de ustedes, que está estructurado en `given`/`family` y es mejor
+> dato que nuestro `text`. Y no reescribe el pasado: los turnos ya creados
+> guardan el nombre que tenía el servicio el día que se reservaron.
+
 Vale para cualquier profesional en la misma situación, incluidos Albarellos y
 Carrieri cuando tengan usuario en el Dashboard.
 
