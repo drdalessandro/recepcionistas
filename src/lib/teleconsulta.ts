@@ -46,6 +46,18 @@ export const TELECONSULTA = {
 /** Prefijo del nombre de sala. Ver `nombreSala`. */
 export const PREFIJO_SALA = 'tc-';
 
+/**
+ * Página de la videollamada en el portal del paciente.
+ *
+ * **Es contrato con el portal** (confirmado por ellos el 2026-09-17), no una
+ * preferencia nuestra: esta ruta viaja escrita en el WhatsApp de 2 h y en el
+ * web push, que se mandan a teléfonos y no se pueden corregir después. Si el
+ * portal la cambia, se cambia acá en el mismo deploy.
+ */
+export function rutaTeleconsulta(appointmentId: string): string {
+  return `/teleconsulta/${appointmentId}`;
+}
+
 /** Rol con el que alguien entra a la sala. */
 export type RolSala = 'profesional' | 'paciente';
 
