@@ -25,6 +25,7 @@
     "migrar:medios": "tsx src/seed/migrar-medio-pago.ts",
     "migrar:dni-renaper": "tsx src/seed/migrar-dni-renaper.ts",
     "limpiar": "tsx src/seed/limpiar.ts",
+    "limpiar:solicitudes": "tsx src/seed/limpiar-solicitudes.ts",
     "bots:bundle": "tsx src/seed/deploy-bots.ts --dry-run",
     "bots:check": "tsx src/seed/diagnostico-bots.ts",
     "bots:cron": "tsx src/seed/cron-bots.ts",

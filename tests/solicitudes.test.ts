@@ -5,6 +5,7 @@ import {
   preferenciaLegible,
   mensajeWhatsAppRecepcion,
   indiceSolicitudAResolver,
+  solicitudBorrable,
   type SolicitudTurno,
 } from '../src/lib/solicitudes.js';
 
@@ -71,5 +72,55 @@ describe('indiceSolicitudAResolver (auto-resolver al reservar)', () => {
     const pendientes = [{ terapiaCodigo: 'IHHT' }, { terapiaCodigo: 'CRIO' }];
     expect(indiceSolicitudAResolver(pendientes, ['HBOT_MONO', 'HBOT'])).toBe(-1);
     expect(indiceSolicitudAResolver([], ['HBOT'])).toBe(-1);
+  });
+});
+
+/**
+ * `limpiar:solicitudes` borra de verdad, así que el criterio de QUÉ se puede
+ * borrar es lo único que separa una limpieza de un accidente.
+ */
+describe('solicitudBorrable — qué se puede borrar y qué no', () => {
+  const ahora = new Date('2026-09-18T12:00:00-03:00');
+  const haceDias = (d: number): string => new Date(ahora.getTime() - d * 24 * 3600_000).toISOString();
+
+  it('Una resuelta hace 60 días, con el umbral en 30: se borra', () => {
+    expect(solicitudBorrable({ status: 'completed', ultimaActividad: haceDias(60) }, { ahora, dias: 30 })).toBe(true);
+  });
+
+  it('Una resuelta ayer, con el umbral en 30: NO se borra', () => {
+    expect(solicitudBorrable({ status: 'completed', ultimaActividad: haceDias(1) }, { ahora, dias: 30 })).toBe(false);
+  });
+
+  it('UNA SOLICITUD EN CURSO NO SE BORRA, por vieja que sea', () => {
+    // Es el accidente que hay que evitar: está en la bandeja de Recepción y
+    // `disponibilidadDePaciente` le está reservando el horario al paciente.
+    // Borrarla es hacerle desaparecer el pedido de abajo de las manos.
+    for (const status of ['requested', 'received', 'accepted', 'in-progress']) {
+      expect(
+        solicitudBorrable({ status, ultimaActividad: haceDias(400) }, { ahora, dias: 30 }),
+        `${status} no se puede borrar`,
+      ).toBe(false);
+    }
+  });
+
+  it('Las canceladas sí (las deja bw-fusionar-paciente al absorber una ficha)', () => {
+    expect(solicitudBorrable({ status: 'cancelled', ultimaActividad: haceDias(60) }, { ahora, dias: 30 })).toBe(true);
+  });
+
+  it('SIN FECHA NO SE BORRA: ante la duda, un script destructivo se abstiene', () => {
+    expect(solicitudBorrable({ status: 'completed' }, { ahora, dias: 30 })).toBe(false);
+    expect(solicitudBorrable({ status: 'completed', ultimaActividad: 'cualquier cosa' }, { ahora, dias: 30 })).toBe(
+      false,
+    );
+  });
+
+  it('Sin estado tampoco', () => {
+    expect(solicitudBorrable({ ultimaActividad: haceDias(400) }, { ahora, dias: 30 })).toBe(false);
+  });
+
+  it('Con --dias=0 se borra todo lo cerrado, incluso lo de hoy', () => {
+    // Sirve para limpiar datos de prueba. El script avisa fuerte cuando el
+    // umbral es corto, pero no lo prohíbe: es una decisión del operador.
+    expect(solicitudBorrable({ status: 'completed', ultimaActividad: haceDias(0) }, { ahora, dias: 0 })).toBe(true);
   });
 });
