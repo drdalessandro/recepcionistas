@@ -345,7 +345,7 @@ export function Avisos({ onAtender }: { onAtender: (pacienteId: string) => void 
       )}
 
       <Alert variant="light" color="gray">
-        Al crear la ficha con el teléfono, los próximos WhatsApp de esa persona entran solos a <b>Mensajes</b>.
+        Al Crear el Cliente con el número de teléfono, los próximos WhatsApp de esa persona entran solos a <b>Mensajes</b>.
       </Alert>
 
       <NuevoPacienteModal
