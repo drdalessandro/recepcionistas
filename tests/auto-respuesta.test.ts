@@ -6,7 +6,9 @@ import {
   CENTRO_DIRECCION,
   CENTRO_MAPA,
   CTA_APP,
+  INAUGURACION,
   PEDIDO_DATOS,
+  SEGUNDOS_ENTRE_MENSAJES,
 } from '../src/config/auto-respuesta.js';
 import {
   armarAutoRespuesta,
@@ -136,16 +138,16 @@ describe('armado de la respuesta', () => {
     expect(r?.texto).toContain('abrimos mañana a las 08:00');
   });
 
-  it('a un número desconocido le pide nombre, email y DNI opcional, en el ÚLTIMO globo', () => {
+  it('a un número desconocido le pide nombre, email y DNI opcional, en un globo propio', () => {
     const r = armarAutoRespuesta({ ...base, esConocido: false, nombre: undefined, texto: 'hola' });
-    const ultimo = r?.mensajesSiguientes?.at(-1) ?? '';
-    expect(ultimo).toContain('Nombre y Apellido:');
-    expect(ultimo).toContain('Email:');
-    expect(ultimo).toContain('DNI (opcional):');
+    const datos = r?.mensajesSiguientes?.find((m) => m.startsWith('Para poder asesorarte')) ?? '';
+    expect(datos).toContain('Nombre y Apellido:');
+    expect(datos).toContain('Email:');
+    expect(datos).toContain('DNI (opcional):');
     // El bloque va con los renglones en blanco tal cual lo definió Andrés.
-    expect(ultimo).toContain(`compartinos por favor:\n\n${PEDIDO_DATOS}`);
-    // Y la pregunta va SOLO ahí: si estuviera antes, lo que conteste la
-    // persona podría llegar entre nuestros globos (2026-09-14).
+    expect(datos).toContain(`compartinos por favor:\n\n${PEDIDO_DATOS}`);
+    // Y la pregunta va SOLO ahí: si estuviera en el saludo, lo que conteste la
+    // persona llegaría entre nuestros globos (2026-09-14).
     expect(r?.texto).not.toContain('Nombre y Apellido');
     expect(r?.mensajesSiguientes?.[0]).not.toContain('Nombre y Apellido');
   });
@@ -159,23 +161,24 @@ describe('armado de la respuesta', () => {
     const [h, m] = hhmmArg.split(':').map(Number);
     return new Date(Date.UTC(2026, 7, 23, (h as number) + 3, m as number));
   };
-  /** Los tres globos de la bienvenida, en el orden en que salen. */
+  /** Los globos de la bienvenida, en el orden en que salen. */
   const secuencia = (ahora: Date): string[] => {
     const r = armarAutoRespuesta({ ...base, ahora, esConocido: false, nombre: undefined, texto: 'hola' });
     return [r?.texto ?? '', ...(r?.mensajesSiguientes ?? [])];
   };
   const todo = (ahora: Date): string => secuencia(ahora).join('\n');
-  const ultimo = (ahora: Date): string => secuencia(ahora).at(-1) ?? '';
+  /** El globo del pedido de datos, que es donde vive lo que depende del horario. */
+  const globoDatos = (ahora: Date): string => secuencia(ahora).find((m) => m.startsWith('Para poder asesorarte')) ?? '';
 
   it('con el centro abierto, al desconocido no se le habla de horarios', () => {
-    expect(ultimo(viernes('15:00'))).toContain('Para poder asesorarte');
-    expect(ultimo(viernes('15:00'))).toContain('Enseguida te contacta alguien del equipo.');
+    expect(globoDatos(viernes('15:00'))).toContain('Para poder asesorarte');
+    expect(globoDatos(viernes('15:00'))).toContain('Enseguida te contacta alguien del equipo.');
     expect(todo(viernes('15:00'))).not.toContain('estamos cerrados');
     expect(todo(viernes('15:00'))).not.toContain('Horario:');
   });
 
   it('el domingo avisa que está cerrado, cuándo se responde y el horario — en el globo de la pregunta', () => {
-    const r = ultimo(domingo('11:00'));
+    const r = globoDatos(domingo('11:00'));
     expect(r).toContain('Ahora estamos cerrados');
     expect(r).toContain('te respondemos mañana a las 08:00');
     expect(r).toContain('Horario: lunes a viernes de 08:00 a 22:00');
@@ -185,7 +188,7 @@ describe('armado de la respuesta', () => {
   });
 
   it('el sábado a la noche NO promete "mañana": el domingo no abre', () => {
-    expect(ultimo(sabado('21:00'))).toContain('te respondemos el lunes a las 08:00');
+    expect(globoDatos(sabado('21:00'))).toContain('te respondemos el lunes a las 08:00');
     expect(todo(sabado('21:00'))).not.toContain('mañana');
   });
 
@@ -195,15 +198,23 @@ describe('armado de la respuesta', () => {
     }
   });
 
-  it('al desconocido le siguen dos mensajes de presentación, al conocido ninguno', () => {
+  it('al desconocido le siguen tres mensajes, al conocido ninguno', () => {
     const desconocido = armarAutoRespuesta({ ...base, esConocido: false, nombre: undefined, texto: 'hola' });
-    expect(desconocido?.mensajesSiguientes).toHaveLength(2);
+    expect(desconocido?.mensajesSiguientes).toHaveLength(3);
     // El que ya está en la base no necesita que le presenten el centro.
     const conocido = armarAutoRespuesta({ ...base, texto: 'hola' });
     expect(conocido?.mensajesSiguientes).toBeUndefined();
   });
 
-  it('la bajada de marca va SOLO en el saludo, no repetida tres segundos después', () => {
+  it('el presupuesto de pausas no crece al sumar globos: sigue en 6 s dentro del webhook', () => {
+    // Las pausas son una menos que los globos, y corren DENTRO del webhook de
+    // Twilio: después del último globo todavía falta el aviso a Recepción.
+    const globos = 1 + (armarAutoRespuesta({ ...base, esConocido: false, nombre: undefined, texto: 'hola' })
+      ?.mensajesSiguientes?.length ?? 0);
+    expect((globos - 1) * SEGUNDOS_ENTRE_MENSAJES).toBeLessThanOrEqual(6);
+  });
+
+  it('la bajada de marca va SOLO en el saludo, no repetida dos segundos después', () => {
     const r = armarAutoRespuesta({ ...base, esConocido: false, nombre: undefined, texto: 'hola' });
     expect(r?.texto).toContain('Longevidad Saludable');
     for (const m of r?.mensajesSiguientes ?? []) {
@@ -211,28 +222,36 @@ describe('armado de la respuesta', () => {
     }
   });
 
-  it('los tres globos, en orden: saludo con Web e Info → la App → la pregunta', () => {
+  it('los cuatro globos, en orden: saludo → la App → la pregunta → la inauguración', () => {
     const r = armarAutoRespuesta({ ...base, esConocido: false, nombre: undefined, texto: 'hola' });
-    const [segundo, tercero] = r?.mensajesSiguientes as [string, string];
+    const [segundo, tercero, cuarto] = r?.mensajesSiguientes as [string, string, string];
 
     expect(r?.texto).toBe(BIENVENIDA_SALUDO);
     expect(segundo).toBe(CTA_APP);
     expect(tercero.startsWith('Para poder asesorarte')).toBe(true);
+    expect(cuarto).toBe(INAUGURACION);
   });
 
-  it('jerarquía: Web, Info y App con título en negrita y link en su renglón; mapa e Instagram planos', () => {
+  it('el día que el centro abra, vaciar INAUGURACION saca el globo sin tocar lógica', () => {
+    // El `.filter` de `armarAutoRespuesta` es lo que lo sostiene: acá se fija
+    // que la constante sea lo ÚNICO que hay que cambiar (Andrés, 2026-09-18).
+    const globos = armarAutoRespuesta({ ...base, esConocido: false, nombre: undefined, texto: 'hola' })
+      ?.mensajesSiguientes;
+    expect(globos?.every((m) => m.trim().length > 0)).toBe(true);
+    expect(globos?.filter((m) => m === INAUGURACION)).toHaveLength(INAUGURACION.trim() ? 1 : 0);
+  });
+
+  it('jerarquía: Web, Info y App con título en negrita y link en su renglón', () => {
     const saludo = BIENVENIDA_SALUDO;
     // Destacados: emoji + *título* en un renglón, link SOLO en el siguiente.
     expect(saludo).toContain('🌐 *Conocé Biowellness*\nhttps://www.biowellness.ar');
     expect(saludo).toContain('ℹ️ *Servicios e información*\nhttps://info.biowellness.ar');
     expect(CTA_APP).toMatch(/^📱 \*[^*\n]+\*\n/);
-    // Segundo plano: una línea plana cada uno, sin negrita.
-    expect(saludo).toContain('\n📍 Mapa: https://maps.app.goo.gl/');
-    expect(saludo).not.toMatch(/\*[^*\n]*Mapa/);
-    // Instagram con la palabra, no un emoji solo: con "📷 biowellness.ar" no se
-    // entendía que era la cuenta de IG (Andrés, 2026-08-23).
-    expect(saludo).toContain('Instagram: @biowellness.ar');
-    // El email salió a propósito (menos texto; quien escribe por WhatsApp ya nos tiene).
+    // Mapa, Instagram y email salieron del saludo (Andrés, 2026-09-18 y 09-14):
+    // el saludo queda con las dos puertas que importan. El mapa sigue vivo en
+    // la respuesta de "¿dónde están?".
+    expect(saludo).not.toContain('maps.app.goo.gl');
+    expect(saludo).not.toContain('Instagram');
     expect(saludo).not.toContain('info@biowellness.ar');
     // La App NO va en el saludo: tiene su propio globo (y su propia tarjeta).
     expect(saludo).not.toContain('app.biowellness.ar');
@@ -611,9 +630,11 @@ describe('auto-respuesta · dónde están (horario-ubicacion)', () => {
     expect(t).not.toContain('%20');
   });
 
-  it('el link del mapa es el corto de Google Maps y es el MISMO que el de la bienvenida', () => {
+  it('el link del mapa es el corto de Google Maps, y vive SOLO acá', () => {
     expect(CENTRO_MAPA).toMatch(/^https:\/\/maps\.app\.goo\.gl\/[A-Za-z0-9]+$/);
-    expect(BIENVENIDA_SALUDO).toContain(`📍 Mapa: ${CENTRO_MAPA}`);
+    // Salió de la bienvenida el 2026-09-18: quien pregunta dónde estamos
+    // recibe esta respuesta, y el saludo queda más corto.
+    expect(BIENVENIDA_SALUDO).not.toContain(CENTRO_MAPA);
   });
 
   it('la tarjeta de vista previa es el mapa (primer link); la App cierra', () => {
@@ -760,12 +781,13 @@ describe('auto-respuesta · el cierre con la App (autogestión)', () => {
     expect(llevaCtaApp('turno-pedido', false)).toBe(true);
   });
 
-  it('el cierre nombra la autogestión: título en negrita, imperativos, link solo abajo (misma URL que el portal)', () => {
+  it('el cierre nombra la autogestión: título en negrita y link solo abajo (misma URL que el portal)', () => {
+    // Dos renglones, no tres: la línea de imperativos salió el 2026-09-18
+    // (menos texto en TODAS las respuestas, no solo en la bienvenida).
     const renglones = CTA_APP.split('\n');
-    expect(renglones).toHaveLength(3);
+    expect(renglones).toHaveLength(2);
     expect(renglones[0]).toMatch(/^📱 \*Autogestión[^*]*\*$/);
-    expect(renglones[1]).toMatch(/^Pedí .*escribinos/);
-    expect(renglones[2]).toBe(APP_URL);
+    expect(renglones[1]).toBe(APP_URL);
     expect(APP_URL).toBe(PORTAL_URL);
   });
 
