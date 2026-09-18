@@ -70,6 +70,7 @@ npm run bots:check         # ¿están todos creados y con código deployado?
 npm run policy:check       # ¿las AccessPolicies del servidor coinciden con el código?
 npm run bots:cron          # horario de los bots de cron (--apply para escribirlo)
 npm run migrar:dni-renaper # suma el DNI con el system canónico (RENAPER) a fichas viejas
+npm run limpiar:solicitudes # borra solicitudes de turno ya cerradas (dry-run; --apply borra)
 npm run federador:check    # ¿anda el Federador del Ministerio? (QA por defecto; --prod es explícito)
 ```
 

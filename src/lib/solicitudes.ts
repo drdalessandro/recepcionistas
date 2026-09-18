@@ -116,3 +116,55 @@ export function mensajeWhatsAppRecepcion(s: SolicitudTurno, nombrePaciente?: str
     `.\nConfirmala desde la app de Recepción (Solicitudes).`
   );
 }
+
+// ============================================================================
+// Limpieza de solicitudes ya cerradas (`npm run limpiar:solicitudes`).
+// ============================================================================
+
+/**
+ * Estados en los que una solicitud está CERRADA: nadie la está trabajando.
+ *
+ * La lista es corta a propósito. `requested`, `received`, `accepted` e
+ * `in-progress` son trabajo vivo —están en la bandeja de Recepción y
+ * `disponibilidadDePaciente` les reserva el horario— y borrar una sería
+ * hacerle desaparecer a alguien el pedido de abajo de las manos.
+ *
+ * `cancelled` entra porque existe de verdad: `bw-fusionar-paciente` cancela las
+ * solicitudes de la ficha que absorbe.
+ */
+const ESTADOS_CERRADOS = new Set(['completed', 'cancelled']);
+
+export interface SolicitudCerrable {
+  status?: string;
+  /** `meta.lastUpdated`: la última vez que alguien la tocó. */
+  ultimaActividad?: string;
+}
+
+/**
+ * ¿Esta solicitud se puede borrar?
+ *
+ * Dos condiciones, las dos necesarias: que esté cerrada y que haga `dias` que
+ * nadie la toca.
+ *
+ * Se mide por **última actividad** y no por `authoredOn` (cuándo pidió el
+ * turno) porque lo que importa es hace cuánto se cerró, no hace cuánto se
+ * pidió: una solicitud de hace dos meses resuelta ayer todavía es reciente para
+ * quien la resolvió.
+ *
+ * **Sin fecha no se borra.** Un recurso sin `meta.lastUpdated` no se puede
+ * juzgar, y ante la duda un script destructivo se abstiene.
+ */
+export function solicitudBorrable(t: SolicitudCerrable, opts: { ahora: Date; dias: number }): boolean {
+  if (!t.status || !ESTADOS_CERRADOS.has(t.status)) {
+    return false;
+  }
+  if (!t.ultimaActividad) {
+    return false;
+  }
+  const cerradaEn = new Date(t.ultimaActividad).getTime();
+  if (Number.isNaN(cerradaEn)) {
+    return false;
+  }
+  const corte = opts.ahora.getTime() - Math.max(0, opts.dias) * 24 * 60 * 60 * 1000;
+  return cerradaEn <= corte;
+}
