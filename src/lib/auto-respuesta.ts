@@ -334,7 +334,17 @@ export interface ContextoAutoRespuesta {
  * cambia el mensaje (Andrés, 2026-08-24).
  */
 function pedidoDeDatos(abierto: boolean, apertura: string | undefined): string {
-  const pedido = `Para poder asesorarte, compartinos por favor:\n\n${PEDIDO_DATOS}`;
+  const pedido = `Compartinos por favor:\n\n${PEDIDO_DATOS}`;
+
+  // MIENTRAS EL CENTRO NO HAYA INAUGURADO, el pedido va solo. El horario
+  // semanal y el "te respondemos mañana a las 08:00" contradicen al globo que
+  // acaba de avisar que todavía no abrimos (Andrés, 2026-09-18). No es una
+  // condición suelta: es la misma constante que enciende ese globo, así que el
+  // día que se vacíe `INAUGURACION` las dos líneas vuelven solas y sin que
+  // nadie tenga que acordarse de esto.
+  if (INAUGURACION.trim()) {
+    return pedido;
+  }
 
   if (abierto) {
     return `${pedido}\n\nEnseguida te contacta alguien del equipo.`;
@@ -377,9 +387,11 @@ function minutosDesde(iso: string, ahora: Date): number {
  *
  * - `humano`: la persona pidió que la dejemos de contestar. Cerrar ese mensaje
  *   vendiéndole la App es exactamente lo contrario de lo que pidió.
- * - `generico` a un número **desconocido**: `CTA_APP` ya es el segundo globo
- *   de la bienvenida (ver `BIENVENIDA_SALUDO`). Dos veces el mismo bloque en
- *   diez segundos se lee como un error, no como insistencia.
+ * - `generico` a un número **desconocido**: la bienvenida NO ofrece la App
+ *   (Andrés, 2026-09-18). Mientras el centro no haya inaugurado, a alguien que
+ *   todavía no es paciente la App no le resuelve nada: lo que necesita es
+ *   dejar sus datos. Ojo con el alcance: un *pedido de turno* de un número
+ *   desconocido sí la lleva, porque ahí no hay bienvenida.
  */
 export function llevaCtaApp(intencion: Intencion, esConocido: boolean): boolean {
   if (intencion === 'humano') return false;
@@ -584,12 +596,14 @@ function decidirRespuesta(ctx: ContextoAutoRespuesta): DecisionAutoRespuesta | u
         // Al desconocido le siguen la App y, ÚLTIMO, el pedido de datos: así
         // lo que conteste no puede llegar antes que la pregunta. Al que ya
         // está en la base no, que no necesita que le presenten el centro.
-        // `.filter` no es defensivo: cuando el centro abra se vacía
-        // `INAUGURACION` y su globo desaparece solo, sin tocar esta línea.
+        // Orden: saludo → inauguración → pedido de datos. La pregunta va
+        // ÚLTIMA (2026-09-14) para que lo que conteste la persona no caiga
+        // entre nuestros globos. El `.filter` no es defensivo: cuando el
+        // centro abra se vacía `INAUGURACION` y su globo desaparece solo.
         ...(ctx.esConocido
           ? {}
           : {
-              mensajesSiguientes: [CTA_APP, pedidoDeDatos(abierto, apertura), INAUGURACION].filter(
+              mensajesSiguientes: [INAUGURACION, pedidoDeDatos(abierto, apertura)].filter(
                 (m) => m.trim().length > 0,
               ),
             }),

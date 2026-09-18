@@ -155,10 +155,11 @@ Y **dos excepciones**, en `llevaCtaApp()`, que no son gusto:
 
 - **`HUMANO`**: la persona pidió que la dejemos de contestar. Cerrar ese
   mensaje vendiéndole la App es lo contrario de lo que pidió.
-- **`generico` a un número desconocido**: `CTA_APP` ya es el **segundo globo**
-  de la bienvenida (ver "Números desconocidos"). El mismo bloque dos veces en
-  diez segundos se lee como un error. Ojo: un *pedido de turno* de un número
-  desconocido **sí** lleva el cierre, porque ahí no hay bienvenida.
+- **`generico` a un número desconocido**: la bienvenida **no ofrece la App**
+  (Andrés, 2026-09-18). A alguien que todavía no es paciente, y con el centro
+  sin inaugurar, la App no le resuelve nada: lo que necesita es dejar sus
+  datos. Ojo: un *pedido de turno* de un número desconocido **sí** lleva el
+  cierre, porque ahí no hay bienvenida.
 
 Todo esto tiene test: presente y último en las demás intenciones, ausente en
 las dos excepciones, y la URL es la misma `PORTAL_URL` del onboarding.
@@ -233,7 +234,7 @@ peor que no contestar.
 
 ## Números desconocidos
 
-También reciben respuesta —**cuatro globos**, con `SEGUNDOS_ENTRE_MENSAJES` (2 s)
+También reciben respuesta —**tres globos**, con `SEGUNDOS_ENTRE_MENSAJES` (3 s)
 entre medio— y el aviso en **Avisos** sigue funcionando igual. Como no tienen
 hilo donde dejar la marca, la anti-repetición mira los avisos previos del mismo
 teléfono.
@@ -242,23 +243,31 @@ teléfono.
    (emoji + título en negrita + link solo en su renglón). Mapa, Instagram y
    email salieron (2026-09-18 y 09-14): el saludo queda con las dos puertas que
    importan, y el mapa sigue vivo en la respuesta de "¿dónde están?".
-2. **La App** (`CTA_APP`): el mismo bloque que cierra el resto de las
-   respuestas, a la par de Web e Info. Por eso `llevaCtaApp()` **no** lo vuelve
-   a pegar en este caso.
+2. **La inauguración** (`INAUGURACION`): que todavía no abrimos y que lo
+   avisamos. Es lo que explica por qué no se ofrece un turno.
 3. **El pedido de datos** (`pedidoDeDatos()`): Nombre y Apellido, Email y DNI
-   (opcional). Fuera de horario suma cuándo se responde y el horario real.
-4. **La inauguración** (`INAUGURACION`): que todavía no abrimos y que lo
-   avisamos. Es lo que explica por qué no se ofrece un turno. **Temporal por
-   diseño**: el día que el centro abra se vacía la constante y el globo
-   desaparece solo, sin tocar lógica (lo sostiene un `.filter`, y hay test).
+   (opcional), **y nada más**.
 
-Cada globo arma su propia tarjeta de vista previa con su primer link: la Web en
-el 1, la App en el 2.
+La App **no** está en la bienvenida (Andrés, 2026-09-18): a alguien que todavía
+no es paciente, y con el centro sin inaugurar, no le resuelve nada. El saludo
+arma su tarjeta de vista previa con la Web, que es su primer link.
 
-> **Al sumar un globo, mirar la pausa.** Las pausas son una menos que los
-> globos y corren dentro del webhook de Twilio. Por eso el cuarto globo vino
-> con `SEGUNDOS_ENTRE_MENSAJES` de 3 s a 2 s: 3 × 2 s = 6 s, el mismo
-> presupuesto que tenían los tres globos con 2 × 3 s. Hay test.
+### `INAUGURACION` enciende y apaga dos cosas a la vez
+
+Mientras esa constante tenga texto, el pedido de datos va **pelado**: sin el
+horario semanal y sin el "te respondemos mañana a las 08:00". Prometer una hora
+de apertura tres segundos después de avisar que todavía no inauguramos es
+contradecirse (Andrés, 2026-09-18).
+
+No son dos perillas: es la misma. El día que el centro abra se vacía
+`INAUGURACION` y, sin tocar lógica, **su globo desaparece y las líneas de
+horario vuelven solas**. Hay test de las dos mitades.
+
+> **Al sumar o sacar un globo, mirar la pausa.** Las pausas son una menos que
+> los globos y corren dentro del webhook de Twilio, del que después todavía
+> sale el aviso a Recepción. El presupuesto que sostenemos es de **6 s**: con
+> tres globos entran 3 s; si algún día vuelven a ser cuatro hay que bajar a
+> 2 s en vez de dejar que el total salte a 9 s. Hay test.
 
 ### Por qué la pregunta va última (y por qué la pausa NO se sube)
 
@@ -296,7 +305,7 @@ Todo en `src/config/auto-respuesta.ts`, sin tocar lógica:
 | `MINUTOS_SILENCIO_HUMANO` | Cuánto dura el silencio que pide `HUMANO`. |
 | `CENTRO_DIRECCION` · `CENTRO_MAPA` | La dirección y el link **corto** del mapa (`maps.app.goo.gl`), el mismo de la bienvenida. Hasta 2026-09-15 el mapa se armaba con la dirección codificada y ocupaba tres renglones de `%20` en el teléfono. |
 | `CENTRO_COMO_LLEGAR` | Renglones de cómo llegar (tren, colectivo, estacionamiento). **Vacío = el bloque no sale**; hoy está vacío porque el texto lo da Andrés. |
-| `INAUGURACION` | El cuarto globo de la bienvenida. **Vaciarla el día que el centro abra**: el globo desaparece solo. |
+| `INAUGURACION` | El segundo globo de la bienvenida. **Vaciarla el día que el centro abra**: el globo desaparece y el horario vuelve al pedido de datos, solos. |
 
 Los **textos** están en `armarAutoRespuesta()`. El **horario** NO se toca acá:
 sale de `src/config/horario.ts`, que es la única fuente de verdad.
