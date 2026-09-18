@@ -270,7 +270,7 @@ export const BIENVENIDA_SALUDO =
  * contradirían a este mismo texto—. El día que el centro abra se vacía esta
  * constante y las dos vuelven a su lugar solas, sin tocar lógica. Hay test.
  */
-export const INAUGURACION = 'Próximamente inauguración:\n\nNos contactaremos para hacerte saber la fecha!';
+export const INAUGURACION = 'Próximamente estaremos inaugurando💪🏼\n\nNos contactaremos para hacerte saber la fecha!';
 
 /**
  * Los campos que se le piden al desconocido para darlo de alta. Un campo por
