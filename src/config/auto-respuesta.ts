@@ -158,8 +158,10 @@ export const APP_URL = 'https://app.biowellness.ar';
  *
  * NO va en dos casos, decididos en `llevaCtaApp()` (`lib/auto-respuesta.ts`):
  * cuando la persona pidió `HUMANO` (pidió que la dejemos de contestar, no que
- * le vendamos la App) y en la bienvenida al número desconocido, donde ESTE
- * MISMO bloque es el segundo globo (ver `BIENVENIDA_SALUDO`).
+ * le vendamos la App) y en la bienvenida al número desconocido, que desde el
+ * 2026-09-18 **no ofrece la App**: a alguien que todavía no es paciente, y con
+ * el centro sin inaugurar, no le resuelve nada. Sí la lleva un pedido de turno
+ * de un número desconocido, porque ahí no hay bienvenida.
  */
 export const CTA_APP =
   '📱 *Autogestión en la App*\n' + APP_URL;
@@ -204,11 +206,10 @@ export const VENTANA_AVISO_MINUTOS = 60;
  * que corre DESPUÉS del último globo —el aviso a Recepción del número
  * desconocido— se descuenta del mismo.
  *
- * **Dos segundos, no tres, desde que la bienvenida tiene cuatro globos**
- * (2026-09-18): las pausas son una menos que los globos, así que con tres
- * seguía el mismo presupuesto de siempre (3 × 2 s = 6 s, igual que los 2 × 3 s
- * de cuando eran tres globos) en vez de saltar a 9 s. El ritmo de "alguien
- * escribiendo" se mantiene; lo que no se mantenía era el margen.
+ * **Regla al sumar o sacar globos**: las pausas son una menos que los globos,
+ * y el presupuesto que venimos sosteniendo es de 6 s (hay test). Con tres
+ * globos entran 3 s; si algún día vuelven a ser cuatro, hay que bajar la pausa
+ * a 2 s en vez de dejar que el total salte a 9 s.
  *
  * NO subirla para "darle tiempo a contestar" (se evaluó, 2026-09-14): Twilio
  * corta a los 15 s y el bot corre en Lambda con el timeout por defecto de
@@ -218,7 +219,7 @@ export const VENTANA_AVISO_MINUTOS = 60;
  * lleva 20-40 s. Lo que evita el cruce es el ORDEN de la bienvenida (la
  * pregunta va en el ÚLTIMO globo), no la pausa.
  */
-export const SEGUNDOS_ENTRE_MENSAJES = 2;
+export const SEGUNDOS_ENTRE_MENSAJES = 3;
 
 /**
  * La bienvenida al número que NO está en la base son TRES globos, en este
@@ -257,12 +258,17 @@ export const BIENVENIDA_SALUDO =
   'https://info.biowellness.ar';
 
 /**
- * El aviso de que el centro todavía no abrió. **Último globo de la bienvenida.**
+ * El aviso de que el centro todavía no abrió. **Segundo globo de la
+ * bienvenida**, entre el saludo y el pedido de datos.
  *
- * Mientras exista, es lo que explica por qué no se ofrece un turno: la persona
- * deja sus datos y lo que recibe a cambio es el aviso de la fecha. Cuando el
- * centro abra, se borra esta constante y su globo desaparece solo — por eso el
- * texto no se mezcla con el pedido de datos (Andrés, 2026-09-18).
+ * Es lo que explica por qué no se ofrece un turno: la persona deja sus datos y
+ * lo que recibe a cambio es el aviso de la fecha. Va ANTES del pedido para que
+ * la pregunta siga siendo el último globo (ver `BIENVENIDA_SALUDO`).
+ *
+ * **Enciende y apaga dos cosas a la vez** (Andrés, 2026-09-18): su propio globo
+ * y, en `pedidoDeDatos()`, las líneas de horario —que mientras no inauguremos
+ * contradirían a este mismo texto—. El día que el centro abra se vacía esta
+ * constante y las dos vuelven a su lugar solas, sin tocar lógica. Hay test.
  */
 export const INAUGURACION = 'Próximamente inauguración:\n\nNos contactaremos para hacerte saber la fecha!';
 

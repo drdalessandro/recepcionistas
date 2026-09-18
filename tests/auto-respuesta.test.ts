@@ -140,12 +140,13 @@ describe('armado de la respuesta', () => {
 
   it('a un número desconocido le pide nombre, email y DNI opcional, en un globo propio', () => {
     const r = armarAutoRespuesta({ ...base, esConocido: false, nombre: undefined, texto: 'hola' });
-    const datos = r?.mensajesSiguientes?.find((m) => m.startsWith('Para poder asesorarte')) ?? '';
+    const datos = r?.mensajesSiguientes?.find((m) => m.startsWith('Compartinos por favor')) ?? '';
     expect(datos).toContain('Nombre y Apellido:');
     expect(datos).toContain('Email:');
     expect(datos).toContain('DNI (opcional):');
-    // El bloque va con los renglones en blanco tal cual lo definió Andrés.
-    expect(datos).toContain(`compartinos por favor:\n\n${PEDIDO_DATOS}`);
+    // El bloque va con los renglones en blanco tal cual lo definió Andrés, y
+    // arranca en "Compartinos" (el "Para poder asesorarte," salió 2026-09-18).
+    expect(datos).toBe(`Compartinos por favor:\n\n${PEDIDO_DATOS}`);
     // Y la pregunta va SOLO ahí: si estuviera en el saludo, lo que conteste la
     // persona llegaría entre nuestros globos (2026-09-14).
     expect(r?.texto).not.toContain('Nombre y Apellido');
@@ -168,28 +169,26 @@ describe('armado de la respuesta', () => {
   };
   const todo = (ahora: Date): string => secuencia(ahora).join('\n');
   /** El globo del pedido de datos, que es donde vive lo que depende del horario. */
-  const globoDatos = (ahora: Date): string => secuencia(ahora).find((m) => m.startsWith('Para poder asesorarte')) ?? '';
+  const globoDatos = (ahora: Date): string => secuencia(ahora).find((m) => m.startsWith('Compartinos por favor')) ?? '';
 
-  it('con el centro abierto, al desconocido no se le habla de horarios', () => {
-    expect(globoDatos(viernes('15:00'))).toContain('Para poder asesorarte');
-    expect(globoDatos(viernes('15:00'))).toContain('Enseguida te contacta alguien del equipo.');
-    expect(todo(viernes('15:00'))).not.toContain('estamos cerrados');
-    expect(todo(viernes('15:00'))).not.toContain('Horario:');
+  it('mientras no inauguremos, la bienvenida NO habla de horarios a ninguna hora', () => {
+    // Prometer "abrimos mañana a las 08:00" tres segundos después de avisar
+    // que todavía no inauguramos era contradecirnos (Andrés, 2026-09-18).
+    for (const ahora of [viernes('15:00'), domingo('11:00'), sabado('21:00')]) {
+      expect(todo(ahora), ahora.toISOString()).not.toContain('estamos cerrados');
+      expect(todo(ahora), ahora.toISOString()).not.toContain('Horario:');
+      expect(todo(ahora), ahora.toISOString()).not.toContain('te respondemos');
+      expect(todo(ahora), ahora.toISOString()).not.toContain('Enseguida te contacta');
+    }
   });
 
-  it('el domingo avisa que está cerrado, cuándo se responde y el horario — en el globo de la pregunta', () => {
-    const r = globoDatos(domingo('11:00'));
-    expect(r).toContain('Ahora estamos cerrados');
-    expect(r).toContain('te respondemos mañana a las 08:00');
-    expect(r).toContain('Horario: lunes a viernes de 08:00 a 22:00');
-    expect(r).toContain('domingo cerrado');
-    // Cerrado o abierto, el saludo es el mismo: lo que cambia es el cierre.
-    expect(secuencia(domingo('11:00'))[0]).toBe(secuencia(viernes('15:00'))[0]);
-  });
-
-  it('el sábado a la noche NO promete "mañana": el domingo no abre', () => {
-    expect(globoDatos(sabado('21:00'))).toContain('te respondemos el lunes a las 08:00');
-    expect(todo(sabado('21:00'))).not.toContain('mañana');
+  it('el pedido de datos es el MISMO a cualquier hora: sólo los campos', () => {
+    const esperado = `Compartinos por favor:\n\n${PEDIDO_DATOS}`;
+    for (const ahora of [viernes('15:00'), domingo('11:00'), sabado('21:00')]) {
+      expect(globoDatos(ahora), ahora.toISOString()).toBe(esperado);
+    }
+    // Y toda la bienvenida es igual abierto o cerrado, globo por globo.
+    expect(secuencia(domingo('11:00'))).toEqual(secuencia(viernes('15:00')));
   });
 
   it('la bajada de marca va en el saludo, con el 🧬', () => {
@@ -198,9 +197,9 @@ describe('armado de la respuesta', () => {
     }
   });
 
-  it('al desconocido le siguen tres mensajes, al conocido ninguno', () => {
+  it('al desconocido le siguen dos mensajes, al conocido ninguno', () => {
     const desconocido = armarAutoRespuesta({ ...base, esConocido: false, nombre: undefined, texto: 'hola' });
-    expect(desconocido?.mensajesSiguientes).toHaveLength(3);
+    expect(desconocido?.mensajesSiguientes).toHaveLength(2);
     // El que ya está en la base no necesita que le presenten el centro.
     const conocido = armarAutoRespuesta({ ...base, texto: 'hola' });
     expect(conocido?.mensajesSiguientes).toBeUndefined();
@@ -222,14 +221,23 @@ describe('armado de la respuesta', () => {
     }
   });
 
-  it('los cuatro globos, en orden: saludo → la App → la pregunta → la inauguración', () => {
+  it('los tres globos, en orden: saludo → la inauguración → la pregunta', () => {
     const r = armarAutoRespuesta({ ...base, esConocido: false, nombre: undefined, texto: 'hola' });
-    const [segundo, tercero, cuarto] = r?.mensajesSiguientes as [string, string, string];
+    const [segundo, tercero] = r?.mensajesSiguientes as [string, string];
 
     expect(r?.texto).toBe(BIENVENIDA_SALUDO);
-    expect(segundo).toBe(CTA_APP);
-    expect(tercero.startsWith('Para poder asesorarte')).toBe(true);
-    expect(cuarto).toBe(INAUGURACION);
+    expect(segundo).toBe(INAUGURACION);
+    // La pregunta, ÚLTIMA: lo que conteste la persona no puede caer entre
+    // nuestros globos (2026-09-14).
+    expect(tercero.startsWith('Compartinos por favor')).toBe(true);
+  });
+
+  it('la bienvenida NO ofrece la App: por ahora no va (Andrés, 2026-09-18)', () => {
+    const r = armarAutoRespuesta({ ...base, esConocido: false, nombre: undefined, texto: 'hola' });
+    for (const m of [r?.texto ?? '', ...(r?.mensajesSiguientes ?? [])]) {
+      expect(m).not.toContain(APP_URL);
+      expect(m).not.toContain(CTA_APP);
+    }
   });
 
   it('el día que el centro abra, vaciar INAUGURACION saca el globo sin tocar lógica', () => {
@@ -757,12 +765,13 @@ describe('auto-respuesta · el cierre con la App (autogestión)', () => {
     expect(r?.texto).not.toContain(APP_URL);
   });
 
-  it('al número desconocido la App le llega UNA vez: en la bienvenida, no en el saludo', () => {
+  it('al número desconocido que saluda, la App NO le llega: ni en el saludo ni después', () => {
+    // 2026-09-18: a alguien que todavía no es paciente, y con el centro sin
+    // inaugurar, la App no le resuelve nada. Lo que necesita es dejar datos.
     const r = armarAutoRespuesta({ ...base, esConocido: false, nombre: undefined, texto: 'hola' });
     expect(r?.intencion).toBe('generico');
-    expect(r?.texto).not.toContain(CTA_APP);
     const todo = [r?.texto ?? '', ...(r?.mensajesSiguientes ?? [])].join('\n');
-    expect(todo.split(APP_URL).length - 1).toBe(1);
+    expect(todo).not.toContain(APP_URL);
   });
 
   it('un pedido de turno de un número desconocido SÍ lleva la App: ahí no hay bienvenida', () => {
