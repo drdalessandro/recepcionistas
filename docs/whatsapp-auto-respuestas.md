@@ -124,13 +124,17 @@ y el link solo en el siguiente:
 
 ```
 📱 *Autogestión en la App*
-Pedí turnos, seguí tu plan y tus pagos, y escribinos. Todo en un solo lugar:
 https://app.biowellness.ar
 ```
 
 El título va en **negrita de WhatsApp** (`*…*`): se renderiza en texto libre,
 que es lo único que manda el bot. Es lo que lo pone a la par de Web e Info en
 la bienvenida (Andrés, 2026-09-14).
+
+**Dos renglones, no tres** (Andrés, 2026-09-18): la línea de imperativos
+("Pedí turnos, seguí tu plan y tus pagos…") salió. Ojo con el alcance: `CTA_APP`
+cierra **todas** las respuestas, así que recortarlo acorta precios, HBOT, IHHT,
+Red Light, Recovery, información y el acuse, no solo la bienvenida.
 
 Tres decisiones detrás de ese bloque:
 
@@ -229,23 +233,32 @@ peor que no contestar.
 
 ## Números desconocidos
 
-También reciben respuesta —**tres globos**, con `SEGUNDOS_ENTRE_MENSAJES` (3 s)
+También reciben respuesta —**cuatro globos**, con `SEGUNDOS_ENTRE_MENSAJES` (2 s)
 entre medio— y el aviso en **Avisos** sigue funcionando igual. Como no tienen
 hilo donde dejar la marca, la anti-repetición mira los avisos previos del mismo
 teléfono.
 
-1. **Saludo** (`BIENVENIDA_SALUDO`): bajada de marca; **Web e Info destacadas**
-   (emoji + título en negrita + link solo en su renglón); mapa e Instagram en
-   una línea plana cada uno. El email salió: quien escribe por WhatsApp ya nos
-   tiene, y era el texto que sobraba.
+1. **Saludo** (`BIENVENIDA_SALUDO`): bajada de marca y **Web e Info destacadas**
+   (emoji + título en negrita + link solo en su renglón). Mapa, Instagram y
+   email salieron (2026-09-18 y 09-14): el saludo queda con las dos puertas que
+   importan, y el mapa sigue vivo en la respuesta de "¿dónde están?".
 2. **La App** (`CTA_APP`): el mismo bloque que cierra el resto de las
    respuestas, a la par de Web e Info. Por eso `llevaCtaApp()` **no** lo vuelve
    a pegar en este caso.
 3. **El pedido de datos** (`pedidoDeDatos()`): Nombre y Apellido, Email y DNI
    (opcional). Fuera de horario suma cuándo se responde y el horario real.
+4. **La inauguración** (`INAUGURACION`): que todavía no abrimos y que lo
+   avisamos. Es lo que explica por qué no se ofrece un turno. **Temporal por
+   diseño**: el día que el centro abra se vacía la constante y el globo
+   desaparece solo, sin tocar lógica (lo sostiene un `.filter`, y hay test).
 
 Cada globo arma su propia tarjeta de vista previa con su primer link: la Web en
 el 1, la App en el 2.
+
+> **Al sumar un globo, mirar la pausa.** Las pausas son una menos que los
+> globos y corren dentro del webhook de Twilio. Por eso el cuarto globo vino
+> con `SEGUNDOS_ENTRE_MENSAJES` de 3 s a 2 s: 3 × 2 s = 6 s, el mismo
+> presupuesto que tenían los tres globos con 2 × 3 s. Hay test.
 
 ### Por qué la pregunta va última (y por qué la pausa NO se sube)
 
@@ -283,6 +296,7 @@ Todo en `src/config/auto-respuesta.ts`, sin tocar lógica:
 | `MINUTOS_SILENCIO_HUMANO` | Cuánto dura el silencio que pide `HUMANO`. |
 | `CENTRO_DIRECCION` · `CENTRO_MAPA` | La dirección y el link **corto** del mapa (`maps.app.goo.gl`), el mismo de la bienvenida. Hasta 2026-09-15 el mapa se armaba con la dirección codificada y ocupaba tres renglones de `%20` en el teléfono. |
 | `CENTRO_COMO_LLEGAR` | Renglones de cómo llegar (tren, colectivo, estacionamiento). **Vacío = el bloque no sale**; hoy está vacío porque el texto lo da Andrés. |
+| `INAUGURACION` | El cuarto globo de la bienvenida. **Vaciarla el día que el centro abra**: el globo desaparece solo. |
 
 Los **textos** están en `armarAutoRespuesta()`. El **horario** NO se toca acá:
 sale de `src/config/horario.ts`, que es la única fuente de verdad.

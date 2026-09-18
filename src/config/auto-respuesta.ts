@@ -162,9 +162,7 @@ export const APP_URL = 'https://app.biowellness.ar';
  * MISMO bloque es el segundo globo (ver `BIENVENIDA_SALUDO`).
  */
 export const CTA_APP =
-  '📱 *Autogestión en la App*\n' +
-  'Pedí turnos, seguí tu plan y tus pagos, y escribinos. Todo en un solo lugar:\n' +
-  APP_URL;
+  '📱 *Autogestión en la App*\n' + APP_URL;
 
 /**
  * Cuánto espera el sistema antes de repetir la MISMA auto-respuesta en un hilo.
@@ -202,9 +200,15 @@ export const VENTANA_AVISO_MINUTOS = 60;
  * Pausa entre los mensajes de una misma respuesta automática.
  *
  * El bot contesta dentro del webhook de Twilio, que espera la respuesta en una
- * ventana acotada: cada segundo de pausa se descuenta de ese presupuesto. Tres
- * segundos dan el ritmo de alguien escribiendo sin arriesgar un timeout (y con
- * dos pausas encadenadas seguimos MUY por debajo del límite).
+ * ventana acotada: cada segundo de pausa se descuenta de ese presupuesto, y lo
+ * que corre DESPUÉS del último globo —el aviso a Recepción del número
+ * desconocido— se descuenta del mismo.
+ *
+ * **Dos segundos, no tres, desde que la bienvenida tiene cuatro globos**
+ * (2026-09-18): las pausas son una menos que los globos, así que con tres
+ * seguía el mismo presupuesto de siempre (3 × 2 s = 6 s, igual que los 2 × 3 s
+ * de cuando eran tres globos) en vez de saltar a 9 s. El ritmo de "alguien
+ * escribiendo" se mantiene; lo que no se mantenía era el margen.
  *
  * NO subirla para "darle tiempo a contestar" (se evaluó, 2026-09-14): Twilio
  * corta a los 15 s y el bot corre en Lambda con el timeout por defecto de
@@ -214,7 +218,7 @@ export const VENTANA_AVISO_MINUTOS = 60;
  * lleva 20-40 s. Lo que evita el cruce es el ORDEN de la bienvenida (la
  * pregunta va en el ÚLTIMO globo), no la pausa.
  */
-export const SEGUNDOS_ENTRE_MENSAJES = 3;
+export const SEGUNDOS_ENTRE_MENSAJES = 2;
 
 /**
  * La bienvenida al número que NO está en la base son TRES globos, en este
@@ -250,10 +254,17 @@ export const BIENVENIDA_SALUDO =
   'https://www.biowellness.ar\n' +
   '\n' +
   'ℹ️ *Servicios e información*\n' +
-  'https://info.biowellness.ar\n' +
-  '\n' +
-  `📍 Mapa: ${CENTRO_MAPA}\n` +
-  '📸 Instagram: @biowellness.ar';
+  'https://info.biowellness.ar';
+
+/**
+ * El aviso de que el centro todavía no abrió. **Último globo de la bienvenida.**
+ *
+ * Mientras exista, es lo que explica por qué no se ofrece un turno: la persona
+ * deja sus datos y lo que recibe a cambio es el aviso de la fecha. Cuando el
+ * centro abra, se borra esta constante y su globo desaparece solo — por eso el
+ * texto no se mezcla con el pedido de datos (Andrés, 2026-09-18).
+ */
+export const INAUGURACION = 'Próximamente inauguración:\n\nNos contactaremos para hacerte saber la fecha!';
 
 /**
  * Los campos que se le piden al desconocido para darlo de alta. Un campo por

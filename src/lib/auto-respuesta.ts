@@ -22,6 +22,7 @@ import {
   CENTRO_DIRECCION,
   CENTRO_MAPA,
   CTA_APP,
+  INAUGURACION,
   LINKS_HBOT,
   LINKS_IHHT,
   LINKS_INFO,
@@ -583,7 +584,15 @@ function decidirRespuesta(ctx: ContextoAutoRespuesta): DecisionAutoRespuesta | u
         // Al desconocido le siguen la App y, ÚLTIMO, el pedido de datos: así
         // lo que conteste no puede llegar antes que la pregunta. Al que ya
         // está en la base no, que no necesita que le presenten el centro.
-        ...(ctx.esConocido ? {} : { mensajesSiguientes: [CTA_APP, pedidoDeDatos(abierto, apertura)] }),
+        // `.filter` no es defensivo: cuando el centro abra se vacía
+        // `INAUGURACION` y su globo desaparece solo, sin tocar esta línea.
+        ...(ctx.esConocido
+          ? {}
+          : {
+              mensajesSiguientes: [CTA_APP, pedidoDeDatos(abierto, apertura), INAUGURACION].filter(
+                (m) => m.trim().length > 0,
+              ),
+            }),
       };
   }
 }
