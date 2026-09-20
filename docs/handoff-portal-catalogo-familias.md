@@ -60,6 +60,24 @@ servicio en "Mis turnos" o en el historial buscando por código, esa consulta
 descontracturante se queda sin nombre. El filtro va en la vidriera, no en el
 lookup.
 
+### Agregado 2026-09-20 — también hay `draft`, y significa "oculto por ahora"
+
+Con el mismo filtro `status=active` alcanza: no hay nada nuevo que hacer. Pero
+para que no sorprenda al leer el servidor: desde hoy algunos servicios se
+publican con **`status: 'draft'`**. No están retirados; están **fuera de la
+vidriera de forma temporal y reversible**, y del lado de Recepción se siguen
+reservando y cobrando igual.
+
+El primer caso son las teleconsultas de lista durante la preapertura
+(`TELECONSULTA_MED_DALESSANDRO`, `TELECONSULTA_MED_ALBARELLOS`): Andrés pidió
+que en la góndola quede sólo `TELECONSULTA_PREAPERTURA_MED_DALESSANDRO`, para
+que la de $150.000 no compita al lado de la de $3.000. El día de la apertura
+vuelven a `active` sin cambiar de código.
+
+Vale lo mismo de arriba: el lookup por código de "Mis turnos" **tiene que
+seguir trayendo los `draft`** — un paciente que reservó la teleconsulta de
+lista antes de hoy tiene un turno que la referencia.
+
 ---
 
 ## 2. Terapias Biológicas — de 18 tarjetas a 6 viñetas

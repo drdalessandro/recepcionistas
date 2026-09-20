@@ -118,6 +118,18 @@ export interface Servicio {
    * Borrarlo rompería el histórico.
    */
   retirado?: boolean;
+  /**
+   * Fuera de la vidriera del portal, pero NO del catálogo: Recepción lo ve, lo
+   * reserva y lo cobra igual. Se publica como `status: 'draft'`, que el filtro
+   * `status=active` de la góndola deja afuera (el mismo filtro que esconde los
+   * retirados). Es la diferencia con `retirado`: esto es temporal y reversible
+   * —sacar la marca lo vuelve a publicar `active`—, y no dice "no se ofrece
+   * más" sino "todavía no, por acá".
+   *
+   * Nació con la preapertura (2026-09-20): las teleconsultas de lista se
+   * esconden para que no compitan en la góndola con la de preapertura.
+   */
+  ocultoEnPortal?: boolean;
 }
 
 export type VarianteCombo = 'INDIVIDUAL' | 'PAREJA';

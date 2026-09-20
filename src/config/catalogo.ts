@@ -48,6 +48,31 @@ const IV_TB: Split = { tipo: 'IV_TB_85_15', bw: 85, prescriptores: 15 };
 const MASAJE: Split = { tipo: 'MASAJE_50_50', bw: 50, terapeuta: 50 };
 
 /**
+ * ¿Estamos en la etapa previa a la apertura del centro?
+ *
+ * Es UNA llave, a propósito: el día que se abra hay que tocar un solo lugar.
+ * Mientras esté en `true`:
+ *
+ *  - Las teleconsultas de lista (las que genera `teleconsulta()` por cada
+ *    médico con precio) se publican **ocultas en el portal**. Andrés,
+ *    2026-09-20: "que sólo quede Teleconsulta Preapertura, las otras
+ *    quitarlas, para no confundir" — la de cardiología a $150.000 aparecía
+ *    pegada a la de preapertura a $3.000 y el paciente podía pedir la que no
+ *    era. Recepción las sigue viendo y pudiendo reservar; lo que se esconde es
+ *    la vidriera.
+ *  - Los dos productos de PREAPERTURA (sección 11) se ofrecen.
+ *
+ * Va acá arriba y no en la sección 11 porque `teleconsulta()` corre al armar
+ * `SERVICIOS`, y una `const` declarada más abajo todavía no existe en ese
+ * momento (TDZ).
+ *
+ * ⚠️ AL ABRIR EL CENTRO: `PREAPERTURA = false`, y además retirar los dos
+ * productos de la sección 11 (`retirado: true` → `SERVICIOS_RETIRADOS`). Lo
+ * segundo todavía es a mano: ver el comentario de esa sección.
+ */
+export const PREAPERTURA = true;
+
+/**
  * Etiqueta COMERCIAL de cada categoría (→ `ActivityDefinition.topic`, lo que
  * muestra el portal como sección). El código interno de categoría no cambia:
  * lo usan R-07, el mapeo a recursos y el pricing.
@@ -359,6 +384,8 @@ export const SERVICIOS: Servicio[] = [
   // ⚠️ AL ABRIR EL CENTRO: marcarlos `retirado: true` y moverlos a
   // `SERVICIOS_RETIRADOS`. NO borrar la entrada — los turnos y cobros que los
   // referencien tienen que seguir resolviendo (ver el comentario de esa lista).
+  // Y poner `PREAPERTURA = false` (arriba de todo): eso devuelve a la vidriera
+  // las teleconsultas de lista, que mientras tanto están ocultas.
   //
   // `fmAplica: false` en los dos: un 20 % de Founding Member encima de un 98 %
   // ya aplicado no es una promoción, es un error de cálculo.
@@ -520,6 +547,8 @@ function teleconsulta(m: Medico, precioARS: number): Servicio {
     descripcion:
       `Consulta de ${seccion.toLowerCase()} por videollamada, desde donde estés. ` +
       'Antes del turno podés subir tus estudios para que el profesional los revise.',
+    // Preapertura: fuera de la vidriera, no del catálogo. Ver `PREAPERTURA`.
+    ...(PREAPERTURA ? { ocultoEnPortal: true } : {}),
   } as Servicio;
 }
 

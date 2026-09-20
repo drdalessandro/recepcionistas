@@ -92,3 +92,40 @@ export function repartirEnPartes(totalARS: number, partes: number): number[] {
   resultado[partes - 1] = totalARS - base * (partes - 1);
   return resultado;
 }
+
+// ============================================================================
+// Pendientes cobrables en el mostrador ("Pagos pendientes" de Atender).
+// ============================================================================
+
+/**
+ * ¿Este Invoice es algo que Recepción tiene que cobrar?
+ *
+ * Dos claves entran al panel: `plan-…` (cuota de plan) y `saldo-…` (el 50 %
+ * restante de un turno). Y dos estados: `issued` (pendiente) y `cancelled`.
+ * Pero `cancelled` no significa lo mismo en las dos claves:
+ *
+ *  - En una cuota de plan, `cancelled` es un **rechazo de MercadoPago** (R-11):
+ *    el socio debe la cuota, quedó bloqueado, y el mostrador la cobra para
+ *    regularizar. Sí es cobrable.
+ *  - En un saldo de turno, `cancelled` es un **turno cancelado**: el único
+ *    camino que deja un saldo en ese estado es `cancelarTurno`, porque el
+ *    webhook de MP no cancela un saldo rechazado (sigue `issued` y se cobra en
+ *    el mostrador). No se debe nada.
+ *
+ * Hasta el 2026-09-20 el panel mostraba los dos como "Rechazado (R-11)" con
+ * botón de Cobrar. Sobre un saldo de turno cancelado eso cobraba $60.000 por
+ * una sesión que no existe: `resolverInvoicePlan` recupera un Invoice
+ * `cancelled` a propósito (es el camino del socio que regulariza), así que el
+ * cobro salía andando y con ChargeItem para Administración.
+ */
+export function esPendienteCobrable(inv: { status?: string; claves: string[] }): boolean {
+  const esPlan = inv.claves.some((c) => c.startsWith('plan-'));
+  const esSaldo = inv.claves.some((c) => c.startsWith('saldo-'));
+  if (inv.status === 'issued') {
+    return esPlan || esSaldo;
+  }
+  if (inv.status === 'cancelled') {
+    return esPlan; // un saldo cancelado es un turno cancelado: no se debe
+  }
+  return false;
+}

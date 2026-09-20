@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { SERVICIOS_POR_CODIGO } from '../src/config/catalogo.js';
+import { PREAPERTURA, SERVICIOS, SERVICIOS_POR_CODIGO, SERVICIOS_RETIRADOS } from '../src/config/catalogo.js';
 import { calcularCobro, calcularSenaARS, fraccionAnticipada } from '../src/lib/pricing.js';
+import { buildActivityDefinition, buildSeed } from '../src/seed/builders.js';
 
 /**
  * Los dos productos de PREAPERTURA (Andrés, 2026-09-20): Multiplaza y
@@ -127,6 +128,55 @@ describe('preapertura · teleconsulta: el 100 % por adelantado, sin saldo', () =
     // que un turno de 20 toma un bloque entero igual. Ver la nota del servicio.
     expect(SERVICIOS_POR_CODIGO.get(TELECONSULTA)?.duracionMin).toBe(20);
     expect(SERVICIOS_POR_CODIGO.get('TELECONSULTA_MED_DALESSANDRO')?.duracionMin).toBe(60);
+  });
+
+  it('en la góndola queda SOLA: las teleconsultas de lista se publican ocultas', () => {
+    // Andrés, 2026-09-20: "que sólo quede Teleconsulta Preapertura, las otras
+    // quitarlas, para no confundir". La de cardiología a $150.000 aparecía
+    // pegada a la de preapertura a $3.000.
+    //
+    // Este test es de la ETAPA: cuando se abra el centro y `PREAPERTURA` pase
+    // a false, la primera aserción es la que tiene que cambiar (y la de abajo
+    // sobre `active` se invierte). No es un bug que falle ese día: es el
+    // recordatorio.
+    expect(PREAPERTURA).toBe(true);
+
+    const deLista = ['TELECONSULTA_MED_DALESSANDRO', 'TELECONSULTA_MED_ALBARELLOS'];
+    for (const codigo of deLista) {
+      const s = SERVICIOS_POR_CODIGO.get(codigo);
+      expect(s?.ocultoEnPortal, codigo).toBe(true);
+      // `draft`, no `retired`: es temporal, y el portal ya filtra por
+      // `status=active` (handoff-portal-catalogo-familias.md §1).
+      expect(buildActivityDefinition(s!).status, codigo).toBe('draft');
+      // Fuera de la VIDRIERA, no del catálogo: Recepción la sigue reservando.
+      expect(SERVICIOS.some((x) => x.codigo === codigo), codigo).toBe(true);
+      expect(SERVICIOS_RETIRADOS.some((x) => x.codigo === codigo), codigo).toBe(false);
+    }
+    // La de preapertura sí se ofrece.
+    expect(buildActivityDefinition(SERVICIOS_POR_CODIGO.get(TELECONSULTA)!).status).toBe('active');
+  });
+
+  it('la marca esconde SOLO teleconsultas: las consultas presenciales no se tocan', () => {
+    // Nadie pidió esconder las presenciales, y con el centro cerrado no hay
+    // con qué confundirlas. Si esto falla, `ocultoEnPortal` se coló donde no
+    // iba.
+    const ocultos = SERVICIOS.filter((s) => s.ocultoEnPortal).map((s) => s.codigo);
+    expect(ocultos.sort()).toEqual(['TELECONSULTA_MED_ALBARELLOS', 'TELECONSULTA_MED_DALESSANDRO']);
+    for (const s of SERVICIOS.filter((x) => x.categoria === 'CONSULTA' && x.modalidad !== 'virtual')) {
+      expect(s.ocultoEnPortal, s.codigo).toBeUndefined();
+    }
+  });
+
+  it('el seed publica los ocultos en `draft`, aparte de los `retired`', () => {
+    // Que un oculto no se cuente como retirado: son dos cosas distintas y el
+    // número de retirados lo fija `seed.test.ts`.
+    const ads = buildSeed().activityDefinitions;
+    expect(ads.filter((a) => a.status === 'draft').map((a) => a.name).sort()).toEqual([
+      'TELECONSULTA_MED_ALBARELLOS',
+      'TELECONSULTA_MED_DALESSANDRO',
+    ]);
+    expect(ads.filter((a) => a.status === 'retired')).toHaveLength(6);
+    expect(ads.filter((a) => a.status === 'active')).toHaveLength(42 - 6 - 2);
   });
 
   it("la atiende el Dr. D'Alessandro y se busca por su apellido", () => {
