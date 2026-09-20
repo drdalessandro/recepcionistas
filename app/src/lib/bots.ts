@@ -214,12 +214,23 @@ export interface ResultadoLinkMP {
   montoARS?: number;
   senaARS?: number;
   url?: string;
+  /** Solo con `enviar`: si el WhatsApp con el link salió de verdad. */
+  enviado?: boolean;
 }
 
-/** Genera un link de MercadoPago para pagar la seña. */
-export async function linkMercadoPago(appointmentId: string, concepto: 'sena' | 'saldo' = 'sena'): Promise<ResultadoLinkMP> {
+/**
+ * Genera un link de MercadoPago para pagar la seña o el saldo.
+ *
+ * Con `enviar` (solo tiene efecto en 'saldo') además se lo manda al paciente
+ * por WhatsApp. El de la seña ya sale solo al reservar y antes de vencer.
+ */
+export async function linkMercadoPago(
+  appointmentId: string,
+  concepto: 'sena' | 'saldo' = 'sena',
+  enviar = false,
+): Promise<ResultadoLinkMP> {
   const id = await botIdPorNombre('bw-link-mercadopago');
-  return (await medplum.executeBot(id, { appointmentId, concepto })) as ResultadoLinkMP;
+  return (await medplum.executeBot(id, { appointmentId, concepto, enviar })) as ResultadoLinkMP;
 }
 
 export interface AsignarPlanInput {

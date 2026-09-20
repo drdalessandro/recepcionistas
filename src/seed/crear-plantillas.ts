@@ -89,6 +89,22 @@ const PLANTILLAS: DefPlantilla[] = [
       '3': 'https://www.mercadopago.com.ar/checkout/v1/redirect?pref_id=202607-2ab3cd4',
     },
   },
+  // Saldo restante. Modelada sobre `plan_link_pago`, que Meta SÍ aprobó con
+  // link adentro: es un aviso transaccional sobre algo que la paciente ya
+  // compró (UTILITY), no una oferta. Mientras no esté aprobada, el mensaje
+  // sale por la genérica — el código manda cuerpo Y variables, así que el día
+  // que se cargue el secret pasa a esta plantilla sin tocar nada.
+  {
+    nombre: 'biowellness_saldo_link_v1',
+    secret: 'TWILIO_CONTENT_SID_SALDO_LINK',
+    body: 'Te quedó pendiente el saldo de tu turno de {{1}} del {{2}}: {{3}}. Podés abonarlo acá: {{4}} o en recepción el día de la sesión.',
+    ejemplos: {
+      '1': 'Cámara Hiperbárica (HBOT) — Monoplaza',
+      '2': 'jueves 31/07 16:00',
+      '3': '$119.708',
+      '4': 'https://www.mercadopago.com.ar/checkout/v1/redirect?pref_id=202607-2ab3cd4',
+    },
+  },
   {
     nombre: 'biowellness_tentativa_vencida_v3',
     secret: 'TWILIO_CONTENT_SID_TENTATIVA_VENCIDA',

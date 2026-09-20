@@ -172,15 +172,15 @@ export function TurnoModal({
     }
   }
 
-  async function generarLinkMP(concepto: 'sena' | 'saldo' = 'sena'): Promise<void> {
+  async function generarLinkMP(concepto: 'sena' | 'saldo' = 'sena', enviar = false): Promise<void> {
     if (!turno) {
       return;
     }
-    setCargando('mp');
+    setCargando(enviar ? 'mp-enviar' : 'mp');
     setError(null);
     setMp(null);
     try {
-      setMp(await linkMercadoPago(turno.appointmentId, concepto));
+      setMp(await linkMercadoPago(turno.appointmentId, concepto, enviar));
     } catch (e) {
       setError(mensajeError(e));
     } finally {
@@ -274,6 +274,16 @@ export function TurnoModal({
                 <Button variant="light" loading={cargando === 'mp'} onClick={() => void generarLinkMP('saldo')}>
                   Link MercadoPago
                 </Button>
+                {/* El link del saldo no se lo manda nadie solo: sin este botón
+                    hay que copiar la URL a mano y pegarla en Mensajes. */}
+                <Button
+                  variant="light"
+                  color="teal"
+                  loading={cargando === 'mp-enviar'}
+                  onClick={() => void generarLinkMP('saldo', true)}
+                >
+                  Enviar por WhatsApp
+                </Button>
               </Group>
             </>
           )}
@@ -293,6 +303,17 @@ export function TurnoModal({
 
           {mp?.ok && mp.url && (
             <Alert color="bio" variant="light">
+              {mp.enviado === true && (
+                <Text size="sm" fw={600} c="teal">
+                  ✓ Se lo mandamos por WhatsApp
+                </Text>
+              )}
+              {/* Link generado pero sin enviar: hay que compartirlo a mano. */}
+              {mp.enviado === false && mp.mensaje && (
+                <Text size="sm" fw={600} c="orange">
+                  No se pudo enviar: {mp.mensaje}
+                </Text>
+              )}
               Link de pago:{' '}
               <Anchor href={mp.url} target="_blank" rel="noreferrer">
                 abrir checkout
