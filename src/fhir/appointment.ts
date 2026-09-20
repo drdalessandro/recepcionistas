@@ -18,9 +18,22 @@
  * equivalencias ni se rompe cuando el catálogo suma un servicio nuevo.
  */
 import type { Appointment, CodeableConcept } from '@medplum/fhirtypes';
-import { CATEGORIA_COMERCIAL, getServicio } from '../config/catalogo.js';
+import { CATEGORIA_COMERCIAL, SERVICIOS_POR_CODIGO, getServicio } from '../config/catalogo.js';
 import type { ModalidadAtencion } from '../domain/types.js';
-import { SYSTEM } from './identifiers.js';
+import { EXT, SYSTEM } from './identifiers.js';
+
+/**
+ * Código del profesional que atiende el turno (`MED_DALESSANDRO`), si es una
+ * consulta. Sale del ítem COBRADO (`item-codigo` → catálogo → `practitionerCodigo`)
+ * y no del `participant Practitioner/…`: el participant trae el id del
+ * recurso, y lo que se necesita para avisarle es su código, que es como se
+ * nombran sus Project Secrets (`PROFESIONAL_WHATSAPP_<código>`). Un combo o
+ * una terapia no tienen profesional: `undefined`.
+ */
+export function practitionerCodigoDeTurno(appt: Appointment): string | undefined {
+  const codigo = appt.extension?.find((e) => e.url === EXT.itemCodigo)?.valueString;
+  return codigo ? SERVICIOS_POR_CODIGO.get(codigo)?.practitionerCodigo : undefined;
+}
 
 export interface ClasificacionServicio {
   serviceType: CodeableConcept[];

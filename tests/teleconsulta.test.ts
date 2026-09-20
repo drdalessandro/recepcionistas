@@ -12,13 +12,18 @@ import { FRACCION_SENA, avisoTurnoReservado, calcularSenaARS, fraccionAnticipada
 import { SERVICIOS } from '../src/config/catalogo.js';
 import { RECURSOS } from '../src/config/recursos.js';
 import {
+  DASHBOARD_URL,
   TELECONSULTA,
   accesoPermitido,
   avisoDue,
+  avisoProfesionalPacienteEnLinea,
+  avisoProfesionalRecordatorio,
+  avisoProfesionalReserva,
   claimsToken,
   dominioJitsi,
   emailRecordatorioTeleconsulta,
   esNombreSala,
+  secretsContactoProfesional,
   habilitaNoShow,
   minutosDeEspera,
   motivoSinAcceso,
@@ -353,5 +358,77 @@ describe('El servicio virtual se tiene que poder ENCONTRAR en el mostrador', () 
     const sala = RECURSOS.find((r) => r.codigo === 'R_TELECONSULTA');
     expect(sala?.tipo).toBe('VIRTUAL');
     expect(sala?.capacidad).toBeGreaterThan(1);
+  });
+});
+
+describe('avisos al PROFESIONAL — los textos (Andrés, 2026-09-20)', () => {
+  const link = DASHBOARD_URL;
+  const reservaVirtual = avisoProfesionalReserva({
+    paciente: 'Ana Pérez',
+    cuando: 'lunes 16/10 19:00',
+    servicio: "Teleconsulta PREAPERTURA — Dr. D'Alessandro",
+    modalidad: 'virtual',
+    link,
+  });
+  const reservaPresencial = avisoProfesionalReserva({
+    paciente: 'Ana Pérez',
+    cuando: 'lunes 16/10 19:00',
+    servicio: 'Consulta médica',
+    modalidad: 'presencial',
+    link,
+  });
+
+  it('los secrets se nombran por el código del profesional', () => {
+    expect(secretsContactoProfesional('MED_DALESSANDRO')).toEqual({
+      whatsapp: 'PROFESIONAL_WHATSAPP_MED_DALESSANDRO',
+      email: 'PROFESIONAL_EMAIL_MED_DALESSANDRO',
+    });
+  });
+
+  it('el Dashboard es el de producción', () => {
+    expect(DASHBOARD_URL).toBe('https://dashboard.biowellness.ar');
+  });
+
+  it('la reserva lleva paciente, fecha, servicio y el link, y dice qué tipo de consulta es', () => {
+    for (const texto of [reservaVirtual.whatsapp, reservaVirtual.email.cuerpo]) {
+      expect(texto).toContain('Ana Pérez');
+      expect(texto).toContain('lunes 16/10 19:00');
+      expect(texto).toContain("D'Alessandro");
+      expect(texto).toContain(link);
+      expect(texto).toContain('teleconsulta');
+    }
+    expect(reservaPresencial.whatsapp).toContain('consulta presencial');
+    expect(reservaPresencial.whatsapp).not.toContain('teleconsulta');
+  });
+
+  it('el asunto del email no nombra al paciente; el cuerpo sí', () => {
+    // Se lee en la pantalla bloqueada de un teléfono apoyado en un escritorio.
+    for (const a of [reservaVirtual, avisoProfesionalRecordatorio({ paciente: 'Ana Pérez', hora: '19:00', servicio: 'Teleconsulta', modalidad: 'virtual', link }), avisoProfesionalPacienteEnLinea({ paciente: 'Ana Pérez', link })]) {
+      expect(a.email.asunto).not.toContain('Pérez');
+      expect(a.email.cuerpo).toContain('Ana Pérez');
+    }
+  });
+
+  it('nada de plata ni de "seña": es un aviso al médico, no un cobro', () => {
+    for (const a of [reservaVirtual, reservaPresencial]) {
+      for (const texto of [a.whatsapp, a.email.asunto, a.email.cuerpo]) {
+        expect(texto).not.toMatch(/seña|\$|saldo/i);
+      }
+    }
+  });
+
+  it('el recordatorio virtual manda a entrar por el Dashboard; el presencial, a la agenda', () => {
+    const virtual = avisoProfesionalRecordatorio({ paciente: 'Ana Pérez', hora: '19:00', servicio: 'Teleconsulta', modalidad: 'virtual', link });
+    const presencial = avisoProfesionalRecordatorio({ paciente: 'Ana Pérez', hora: '19:00', servicio: 'Consulta', modalidad: 'presencial', link });
+    expect(virtual.whatsapp).toContain('Entrá desde tu Dashboard');
+    expect(virtual.email.cuerpo).toContain(`${TELECONSULTA.accesoAntesMin} minutos antes`);
+    expect(presencial.whatsapp).toContain('Tu agenda');
+    expect(presencial.whatsapp).not.toContain('Entrá desde');
+  });
+
+  it('"paciente en la sala" es una línea con el nombre y el link, nada más', () => {
+    const a = avisoProfesionalPacienteEnLinea({ paciente: 'Ana Pérez', link });
+    expect(a.whatsapp).toContain('Ana Pérez entró a la videollamada');
+    expect(a.whatsapp).toContain(link);
   });
 });

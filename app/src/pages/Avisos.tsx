@@ -5,6 +5,7 @@ import { IconAlertTriangle, IconBrandWhatsapp, IconCheck, IconHourglass, IconSen
 import { useMedplum, useSubscription } from '@medplum/react';
 import type { Task } from '@medplum/fhirtypes';
 import { COD, TIPO_AVISO } from '@bw/fhir/identifiers';
+import { esMetaDemo } from '@bw/lib/demo';
 import { enviarWhatsApp, mensajeError } from '../lib/bots';
 import { NuevoPacienteModal } from '../components/NuevoPacienteModal';
 
@@ -183,6 +184,12 @@ export function Avisos({ onAtender }: { onAtender: (pacienteId: string) => void 
         tasks.map((t) => {
           const esWhatsApp = dato(t, 'tipo') === TIPO_AVISO.whatsappDesconocido;
           const esHueco = dato(t, 'tipo') === TIPO_AVISO.huecoLiberado;
+          // `npm run demo:ocupacion` crea avisos con el shape real ("Pago sin
+          // registro interno", un WhatsApp desconocido…) y hasta el 2026-09-20
+          // se veían idénticos a los de verdad: Andrés pasó una tarde buscando
+          // en MercadoPago un pago que no existía. El tag `demo` es la única
+          // diferencia, y tiene que verse.
+          const esDemo = esMetaDemo(t.meta);
           const telefono = dato(t, 'telefono');
           const perfil = dato(t, 'perfil');
           const id = t.id ?? '';
@@ -203,6 +210,11 @@ export function Avisos({ onAtender }: { onAtender: (pacienteId: string) => void 
                 <div style={{ minWidth: 0 }}>
                   <Group gap="xs">
                     <Text fw={600}>{t.code?.text ?? 'Aviso'}</Text>
+                    {esDemo && (
+                      <Badge size="sm" variant="filled" color="gray" title="Dato de demostración: no es real. Se borra solo a las 48 h (o con npm run demo:ocupacion -- --limpiar).">
+                        DEMO
+                      </Badge>
+                    )}
                     {esWhatsApp && (
                       <Badge size="sm" variant="light" color="green" leftSection={<IconBrandWhatsapp size={12} />}>
                         WhatsApp

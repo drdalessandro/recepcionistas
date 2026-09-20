@@ -327,6 +327,51 @@ Portal                          Medplum (bots)                       Recepción 
 | Se cayó la llamada | Los dos vuelven a entrar con el mismo botón: el token se emite de nuevo mientras dure la ventana. El `Encounter` no se cierra hasta que el profesional cierra |
 | Fallo técnico irrecuperable | Recepción llama por teléfono y reprograma. Queda registrado en `cancelationReason` |
 
+### 6.10 Avisos al profesional
+
+Hasta el 2026-09-20 el sistema le confirmaba todo al paciente y el profesional
+se enteraba de sus consultas mirando el Dashboard. Andrés pidió que le llegue
+por WhatsApp o mail. Son tres avisos, y los tres salen de **este repo** —el
+Dashboard es lo que el profesional *ve*; lo que le *llega* lo mandan nuestros
+bots—:
+
+| Aviso | Cuándo | Bot | Clave (idempotencia) |
+|---|---|---|---|
+| **Te reservaron una consulta** (paciente, fecha, servicio, link al Dashboard) | Al confirmarse el pago, después del WhatsApp al paciente | `confirmarReserva` (webhook de MP / seña en mostrador) | `prof-reserva-<turno>` |
+| **Recordatorio de 2 h** con el acceso al Dashboard | Junto con el de 2 h del paciente. El de 48 h no va: es para que el paciente se organice | `bw-recordatorios` | `recordatorio-2h-prof-<turno>` |
+| **Tu paciente está en la sala** | Cuando el paciente entra y el profesional todavía no. Hasta hoy iba solo a `RECEPCION_WHATSAPP_TO`; sigue yendo, y ahora también al profesional | `bw-teleconsulta-presencia` | `tc-en-linea-prof-<turno>` |
+
+Los textos son funciones puras en `src/lib/teleconsulta.ts`
+(`avisoProfesional*`, con tests) y el envío es `avisarProfesional` en
+`src/bots/_shared.ts`. Aplica a **toda consulta con profesional**, presencial o
+virtual: es el mismo médico, y el texto dice "teleconsulta" o "consulta
+presencial" según el turno.
+
+**Dónde vive el contacto.** En Project Secrets, uno por profesional:
+`PROFESIONAL_WHATSAPP_<código>` y `PROFESIONAL_EMAIL_<código>` (el código es el
+de `src/config/medicos.ts`). No en `Practitioner.telecom`: la policy del portal
+deja leer `Practitioner` a los pacientes, y el celular personal del médico
+quedaría a un pedido de API. Sin secret, ese profesional no recibe avisos y no
+es error. `DASHBOARD_BASE_URL` (default `https://dashboard.biowellness.ar`) es
+el link; va a la raíz porque el Dashboard no tiene una ruta confirmada para
+"este turno".
+
+**Canales.** El email sale por SES como siempre. El WhatsApp a un profesional
+está siempre fuera de la ventana de 24 h de Meta (él no nos escribió), así que
+va por la plantilla genérica aprobada con el cuerpo entero en `{{1}}` —el mismo
+camino de `RECEPCION_WHATSAPP_TO`—. Ninguno de los tres avisos tiene secret de
+plantilla propio y no hace falta (`docs/whatsapp-plantillas.md`).
+
+**Lo que lleva y lo que no.** El nombre del paciente sí: el profesional lo va a
+atender. Nada clínico: los estudios, el cuestionario previo y las notas se ven
+en el Dashboard con login. El asunto del email no nombra al paciente —se lee en
+la pantalla bloqueada de un teléfono apoyado en un escritorio—; el cuerpo sí.
+
+**Best-effort, siempre.** Los tres van después de lo que importa (el cobro
+registrado, la presencia anotada) y nada de esto lanza: un aviso que no sale
+queda como `Communication` en `preparation` / `entered-in-error`, igual que los
+del paciente, y no deshace nada.
+
 ## 7. Qué cambia en cada app
 
 ### App de Recepción (este repo)
