@@ -27,6 +27,17 @@ export function metaDemo(hastaISO?: string): Meta {
   return { tag };
 }
 
+/**
+ * ¿Es un recurso de demostración? Lo dice el tag `demo`, y nada más: el
+ * shape es idéntico al real a propósito (la demo existe para que Recepción
+ * vea lo mismo que va a ver en producción). Por eso las pantallas tienen que
+ * marcarlo: un aviso demo de "Pago sin registro interno" mandó a Andrés a
+ * buscar en MercadoPago un pago que no existía (2026-09-20).
+ */
+export function esMetaDemo(meta: Meta | undefined): boolean {
+  return Boolean(meta?.tag?.some((t) => t.system === SYSTEM.demo && t.code === 'demo'));
+}
+
 /** Fecha civil ("YYYY-MM-DD") hasta la que el recurso demo sigue vigente, si la declara. */
 export function demoHastaDe(meta: Meta | undefined): string | undefined {
   const code = meta?.tag?.find((t) => t.system === SYSTEM.demoHasta)?.code;

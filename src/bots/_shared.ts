@@ -57,7 +57,7 @@ import { lineaComercialDeItem } from '../lib/cobros.js';
 import { cicloMes, motivoNoDisponible, parseClavePlan, saldoPlan } from '../lib/planes.js';
 import { evaluarCancelacion, type ReservaRecurso } from '../lib/reglas-turno.js';
 import { isoArgentina } from '../lib/sena.js';
-import { demoVigente } from '../lib/demo.js';
+import { demoVigente, esMetaDemo } from '../lib/demo.js';
 import { ventana24h } from '../lib/auto-respuesta.js';
 import { SECRET_CONTENT_SID_GENERICO, aE164Argentino, contentVariables, nombreSecretContentSid } from '../lib/whatsapp.js';
 
@@ -68,7 +68,10 @@ export const META_DEMO = { tag: [{ system: SYSTEM.demo, code: 'demo' }] };
 
 /** ¿El recurso está etiquetado `demo`? */
 export function esRecursoDemo(r: { meta?: { tag?: Array<{ system?: string; code?: string }> } } | undefined): boolean {
-  return Boolean(r?.meta?.tag?.some((t) => t.system === SYSTEM.demo && t.code === 'demo'));
+  // Una sola definición de "es demo" (lib/demo.ts): la misma que usa Recepción
+  // para etiquetar los avisos. Si divergieran, un dato que el bot trata como
+  // demo (modo avión) podría verse como real en pantalla, o al revés.
+  return esMetaDemo(r?.meta);
 }
 
 /**
