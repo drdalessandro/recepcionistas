@@ -66,24 +66,33 @@ La lista de espera vive en `src/bots/_shared.ts` (`avisarListaDeEspera`), que se
 bundlea **dentro de cada bot**. Sin redeploy, `bw-estado-turno` y
 `bw-vencer-tentativas` siguen corriendo la versión vieja y el aviso nunca sale.
 
-### El catálogo también va adentro del bundle
+### El catálogo vive en TRES lados
 
-**Un servicio nuevo son dos comandos: `npm run seed` *y* `npm run deploy:bots`.**
+`src/config/catalogo.ts` no se lee del servidor en ningún lado: se compila
+adentro de cada cosa que lo importa. Un servicio nuevo son tres pasos, y si
+falta alguno el síntoma aparece lejos y parece un bug de otro:
 
-`src/config/catalogo.ts` no se lee del servidor: esbuild lo compila adentro de
-cada bot que lo importa (`bw-disponibilidad`, `bw-solicitar-turno`,
-`bw-reservar-turno`, `bw-mover-turno`, `bw-validar-turno`, `bw-proponer-reserva`,
-`bw-reservar-combo`). Con el seed solo, el síntoma engaña: el servicio **aparece
-bien** en la góndola —nombre, precio y descripción salen de la
-`ActivityDefinition` recién publicada— y recién al pedir horarios
-`bw-disponibilidad` contesta `Servicio desconocido: <código>` y el botón de
-reservar queda gris. Da la sensación de un bug del portal y no lo es.
+| Copia | Qué la actualiza | Qué se rompe si falta |
+|---|---|---|
+| `ActivityDefinition` en Medplum | `npm run seed` | el servicio no aparece en la góndola del portal |
+| Bundle de cada bot (esbuild) | `npm run deploy:bots` | `Servicio desconocido: <código>` al pedir horarios |
+| Bundle del app de Recepción (vite) | `git pull && npm run build:app` **en el servidor** | Atender no prellena el servicio de la solicitud |
 
-Pasó con `HBOT_MULTIPLAZA_PREAPERTURA` y
-`TELECONSULTA_PREAPERTURA_MED_DALESSANDRO` el 2026-09-20, el día que se
-crearon. Lo mismo vale para cualquier cambio de precio o de regla en
-`src/config` o `src/lib`: el seed publica lo que se **ve**, el deploy actualiza
-lo que se **decide**.
+Lo bundlean `bw-disponibilidad`, `bw-solicitar-turno`, `bw-reservar-turno`,
+`bw-mover-turno`, `bw-validar-turno`, `bw-proponer-reserva` y
+`bw-reservar-combo`.
+
+Los tres síntomas engañan por el mismo motivo: **lo que se ve sale de la
+`ActivityDefinition` y lo que se decide sale del bundle.** Con el seed solo, la
+tarjeta del portal se ve perfecta —nombre, precio, descripción— y falla al pedir
+horarios. Con los bots al día pero el app viejo, la solicitud llega completa a
+Recepción y Atender deja el select vacío; se reconoce porque **la fecha y la
+hora sí se prellenan** (`Atender.tsx` sólo tiene guarda de catálogo sobre el
+servicio).
+
+Los tres los pisamos en fila el 2026-09-20 con `HBOT_MULTIPLAZA_PREAPERTURA` y
+`TELECONSULTA_PREAPERTURA_MED_DALESSANDRO`, el día que se crearon. Lo mismo vale
+para cualquier cambio de precio o de regla en `src/config` o `src/lib`.
 
 ## 2. Cron de los bots
 

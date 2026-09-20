@@ -8,7 +8,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Appointment } from '@medplum/fhirtypes';
 import { modalidadAppointmentType, modalidadDeTurno } from '../src/fhir/appointment.js';
-import { FRACCION_SENA, calcularSenaARS, fraccionAnticipada } from '../src/lib/pricing.js';
+import { FRACCION_SENA, avisoTurnoReservado, calcularSenaARS, fraccionAnticipada } from '../src/lib/pricing.js';
 import { SERVICIOS } from '../src/config/catalogo.js';
 import { RECURSOS } from '../src/config/recursos.js';
 import {
@@ -220,6 +220,41 @@ describe('El turno virtual: modalidad, cobro y ruta del portal', () => {
     expect(totalARS - senaARS).toBe(0);
     // Y es el precio de lista, no la mitad: 150.000 (Andrés, 2026-09-16).
     expect(totalARS).toBe(150_000);
+  });
+
+  it('El cartel del mostrador NO le dice "seña" a un turno virtual', () => {
+    // Visto en producción el 2026-09-20: la plata salía bien (el 100 %) y el
+    // cartel de "Turno reservado ✓" decía "Tentativo hasta cobrar la seña del
+    // 50 %". La recepcionista le repite al paciente lo que dice la pantalla,
+    // así que prometía un saldo que nadie iba a cobrar.
+    const virtual = avisoTurnoReservado('virtual');
+    expect(virtual).not.toMatch(/seña/i);
+    expect(virtual).toMatch(/100 %/);
+    expect(virtual).toMatch(/no queda saldo/);
+    // Y no le dice "sala" a una videollamada: no hay consultorio que ocupar.
+    expect(virtual).not.toMatch(/sala/i);
+  });
+
+  it('El presencial sigue diciendo lo de siempre: seña del 50 % y sala ocupada', () => {
+    for (const modalidad of ['presencial', undefined] as const) {
+      const texto = avisoTurnoReservado(modalidad);
+      expect(texto).toMatch(/seña del 50 %/);
+      expect(texto).toMatch(/La sala queda ocupada/);
+    }
+  });
+
+  it('Con plan no se cobra nada, y el lugar se nombra según la modalidad', () => {
+    // Confirmado por el plan: la sesión ya está paga, así que no se menciona
+    // ni seña ni pago por adelantado en ninguna de las dos modalidades.
+    const conPlan = avisoTurnoReservado('virtual', 3);
+    expect(conPlan).toContain('Quedan 3 sesiones');
+    expect(conPlan).not.toMatch(/seña|adelantado/i);
+    expect(conPlan).toMatch(/El horario queda tomado/);
+    expect(avisoTurnoReservado('presencial', 3)).toMatch(/La sala queda ocupada/);
+    // 0 sesiones restantes es un número, no "sin plan": si esto se rompe, el
+    // turno que gastó la última sesión vuelve a pedir seña.
+    expect(avisoTurnoReservado('presencial', 0)).toContain('Quedan 0 sesiones');
+    expect(avisoTurnoReservado('presencial', 0)).not.toMatch(/seña/i);
   });
 
   it('rutaTeleconsulta es la ruta que confirmó el portal', () => {

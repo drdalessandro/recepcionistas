@@ -16,6 +16,7 @@ import {
 import { colorEstado, labelEstado } from '../lib/estados';
 import { MEDIOS_SELECT } from '../lib/medios';
 import { EXT, SYSTEM } from '@bw/fhir/identifiers';
+import { modalidadDeTurno } from '@bw/fhir/appointment';
 import type { TurnoTimeline } from '../lib/timeline';
 
 const fmtVence = new Intl.DateTimeFormat('es-AR', {
@@ -69,6 +70,13 @@ export function TurnoModal({
   const perfil = useMedplumProfile();
   const [confirmarCompletar, setConfirmarCompletar] = useState(false);
   const [venceSena, setVenceSena] = useState<Date | null>(null);
+  /**
+   * Modalidad del turno: lo que el paciente paga por adelantado NO es lo mismo
+   * en una videollamada (el 100 %) que en una sesión presencial (la seña del
+   * 50 %), y esta pantalla es la que la recepcionista le lee al paciente. Regla
+   * de Andrés (2026-09-16): en un turno virtual, ningún texto dice "seña".
+   */
+  const [esVirtual, setEsVirtual] = useState(false);
 
   const tentativo = turno?.estado === 'pending' || turno?.estado === 'proposed';
   const saldoPendiente = saldo?.status === 'issued';
@@ -85,6 +93,7 @@ export function TurnoModal({
     setVenceSena(null);
     setFuerzaMayor(false);
     setUsaPlan(false);
+    setEsVirtual(false);
     if (!turno) {
       return;
     }
@@ -96,6 +105,7 @@ export function TurnoModal({
       .then((a) => {
         if (vivo) {
           setUsaPlan(Boolean(a.extension?.some((x) => x.url === EXT.coberturaUsada)));
+          setEsVirtual(modalidadDeTurno(a) === 'virtual');
         }
       })
       .catch(() => undefined);
@@ -163,7 +173,7 @@ export function TurnoModal({
         onCambiado();
         onClose();
       } else {
-        setError(r.mensaje ?? 'No se pudo registrar la seña.');
+        setError(r.mensaje ?? `No se pudo registrar ${esVirtual ? 'el pago' : 'la seña'}.`);
       }
     } catch (e) {
       setError(mensajeError(e));
@@ -239,18 +249,21 @@ export function TurnoModal({
 
           {tentativo && (
             <>
-              <Divider label="Seña 50% para confirmar" labelPosition="center" />
+              <Divider
+                label={esVirtual ? 'Pago del 100% para confirmar' : 'Seña 50% para confirmar'}
+                labelPosition="center"
+              />
               {venceSena && (
                 <Text size="sm" c={venceSena.getTime() <= Date.now() ? 'red' : 'orange'}>
                   {venceSena.getTime() <= Date.now()
-                    ? `⏰ La seña venció (${fmtVence.format(venceSena)}): el lugar se libera solo en la próxima corrida.`
+                    ? `⏰ ${esVirtual ? 'El pago' : 'La seña'} venció (${fmtVence.format(venceSena)}): el lugar se libera solo en la próxima corrida.`
                     : `⏰ El paciente ya tiene el link de pago por WhatsApp. Vence ${fmtVence.format(venceSena)}; después el lugar se libera solo.`}
                 </Text>
               )}
               <Group align="flex-end">
                 <Select label="Medio de pago" data={MEDIOS_SELECT} value={medioPago} onChange={setMedioPago} w={180} />
                 <Button color="bio" loading={cargando === 'sena'} onClick={() => void registrarSena()}>
-                  Registrar seña
+                  {esVirtual ? 'Registrar pago' : 'Registrar seña'}
                 </Button>
                 <Button variant="light" loading={cargando === 'mp'} onClick={() => void generarLinkMP('sena')}>
                   Link MercadoPago

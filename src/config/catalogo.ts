@@ -12,19 +12,31 @@
  * Regla de oro: los CÓDIGOS jamás cambian (contrato con portal/bots/Admin);
  * los códigos de equipo (IPC06, COT03) salen de los títulos visibles.
  *
- * ⚠️ **Tocar este archivo son DOS comandos, no uno** (2026-09-20):
+ * ⚠️ **Tocar este archivo son TRES pasos, no uno** (2026-09-20):
  *
- *     npm run seed          # publica las ActivityDefinition (lo que VE el portal)
- *     npm run deploy:bots   # re-bundlea el catálogo DENTRO de cada bot
+ *     npm run seed                       # publica las ActivityDefinition
+ *     npm run deploy:bots                # re-bundlea el catálogo en cada bot
+ *     git pull && npm run build:app      # EN EL SERVIDOR: el app de Recepción
  *
- * Este archivo no se lee del servidor: esbuild lo **compila adentro** de los
- * bots que lo importan (`bw-disponibilidad`, `bw-solicitar-turno`,
- * `bw-reservar-turno`, `bw-mover-turno`, `bw-validar-turno`,
- * `bw-proponer-reserva`, `bw-reservar-combo`). Con el seed solo, el servicio
- * nuevo aparece en la góndola —nombre, precio y descripción salen de la
- * `ActivityDefinition`— y al pedir horarios el bot contesta
- * **"Servicio desconocido: <código>"**, con el botón de reservar en gris.
- * Pasó con los dos servicios de PREAPERTURA el día que se crearon.
+ * Este archivo no se lee del servidor en ningún lado: se **compila adentro** de
+ * cada cosa que lo importa. Por eso un servicio nuevo falla de a poco, y cada
+ * falla parece un bug de otro:
+ *
+ *  1. Sin `seed` no hay `ActivityDefinition` y el servicio no existe para el
+ *     portal (no aparece en la góndola).
+ *  2. Sin `deploy:bots` el servicio SE VE bien —nombre, precio y descripción
+ *     salen de la `ActivityDefinition`— y al pedir horarios el bot contesta
+ *     **"Servicio desconocido: <código>"**, con reservar en gris. Lo bundlean
+ *     `bw-disponibilidad`, `bw-solicitar-turno`, `bw-reservar-turno`,
+ *     `bw-mover-turno`, `bw-validar-turno`, `bw-proponer-reserva` y
+ *     `bw-reservar-combo`.
+ *  3. Sin `build:app` la solicitud llega bien a Recepción y **Atender no
+ *     prellena el servicio**: la guarda de `Atender.tsx` (`SERVICIOS.some(...)`)
+ *     no reconoce el código y el select queda vacío. Se nota porque la fecha y
+ *     la hora SÍ se prellenan: ésas no tienen guarda.
+ *
+ * Los tres los pisamos en fila con los servicios de PREAPERTURA el día que se
+ * crearon. Ver `docs/puesta-en-produccion.md`.
  */
 import type { CategoriaServicio, Servicio, Split } from '../domain/types.js';
 import { MEDICOS, MEDICOS_POR_CODIGO, codigoConsulta, codigoTeleconsulta, type Medico } from './medicos.js';

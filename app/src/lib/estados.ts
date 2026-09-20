@@ -11,9 +11,18 @@ const COLOR: Record<string, string> = {
   cancelled: 'gray',
 };
 
+/**
+ * "Falta el pago" y no "falta la seña" (2026-09-20): esta etiqueta también le
+ * cae a las teleconsultas, que se cobran enteras por adelantado, y en un turno
+ * virtual ningún texto puede decir "seña" (Andrés, 2026-09-16) — prometería un
+ * saldo que después no hay dónde cobrar. `labelEstado` se usa en la agenda, los
+ * reportes y el timeline, donde la modalidad no está a mano: una palabra que es
+ * cierta en los dos casos vale más que dos ramas a medio enchufar. El monto
+ * exacto y su nombre están en el modal del turno, que sí sabe la modalidad.
+ */
 const LABEL: Record<string, string> = {
-  pending: 'Tentativo (falta seña)',
-  proposed: 'Tentativo (falta seña)',
+  pending: 'Tentativo (falta el pago)',
+  proposed: 'Tentativo (falta el pago)',
   booked: 'Confirmado',
   arrived: 'Llegó',
   'checked-in': 'En curso',
