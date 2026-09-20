@@ -31,7 +31,7 @@ import { estadoConsentimiento, type RegistroConsentimiento } from '../lib/consen
 import { evaluarScreening } from '../lib/screening.js';
 import { indiceSolicitudAResolver } from '../lib/solicitudes.js';
 import { esPlanBW, estadoDeCoverage, planCodigoDeCoverage } from '../fhir/coverage.js';
-import { modalidadDeTurno } from '../fhir/appointment.js';
+import { modalidadDeTurno, practitionerCodigoDeTurno } from '../fhir/appointment.js';
 import {
   calcularDisponibilidad,
   horarioOfrecido,
@@ -52,6 +52,7 @@ import { getMembresia } from '../config/membresias.js';
 import { claveSemana, perteneceASemana } from '../lib/semana-membresia.js';
 import { getPaquete } from '../config/paquetes.js';
 import { PORTAL_URL } from '../lib/onboarding.js';
+import { DASHBOARD_URL, avisoProfesionalReserva, secretsContactoProfesional, type AvisoProfesional } from '../lib/teleconsulta.js';
 import { calcularSenaARS, fraccionAnticipada, type ItemCobro, type LineaCobro, type TipoItemCobro } from '../lib/pricing.js';
 import { lineaComercialDeItem } from '../lib/cobros.js';
 import { cicloMes, motivoNoDisponible, parseClavePlan, saldoPlan } from '../lib/planes.js';
@@ -421,6 +422,8 @@ export async function enviarEmail(
     pacienteRef?: string;
     to?: string;
     about?: string;
+    /** Idempotencia, igual que en `enviarWhatsApp`: queda en la Communication. */
+    identifier?: { system: string; value: string };
     /** Remitente con nombre visible (debe ser una identidad SES verificada). */
     from?: string;
     /**
@@ -473,6 +476,7 @@ export async function enviarEmail(
     sent: new Date().toISOString(),
     // Con el tag demo, la limpieza de 48 h también borra estos mensajes.
     ...(modoAvion ? { meta: META_DEMO } : {}),
+    ...(params.identifier ? { identifier: [params.identifier] } : {}),
     ...(params.about ? { about: [{ reference: params.about }] } : {}),
     ...(params.pacienteRef
       ? { subject: { reference: params.pacienteRef }, recipient: [{ reference: params.pacienteRef }] }
@@ -485,6 +489,104 @@ export async function enviarEmail(
       ...(params.template ? [{ url: EXT.templateUsado, valueString: params.template }] : []),
     ],
   });
+}
+
+// ============================================================================
+// Avisos al PROFESIONAL (Andrés, 2026-09-20).
+// ============================================================================
+
+/** El Dashboard del profesional: secret `DASHBOARD_BASE_URL`, o el default. */
+export function dashboardUrl(secrets: Secrets): string {
+  return secrets['DASHBOARD_BASE_URL']?.valueString?.trim() || DASHBOARD_URL;
+}
+
+/**
+ * Contacto de un profesional, desde Project Secrets. No de `Practitioner.telecom`:
+ * los pacientes pueden leer `Practitioner` (ver `secretsContactoProfesional`).
+ * Sin secrets, `{}`: el profesional que no cargó contacto no recibe avisos.
+ */
+export function contactoProfesional(secrets: Secrets, practitionerCodigo: string): { whatsapp?: string; email?: string } {
+  const n = secretsContactoProfesional(practitionerCodigo);
+  const whatsapp = secrets[n.whatsapp]?.valueString?.trim();
+  const email = secrets[n.email]?.valueString?.trim();
+  return { ...(whatsapp ? { whatsapp } : {}), ...(email ? { email } : {}) };
+}
+
+/** Nombre del paciente para un aviso al profesional. Nunca rompe el envío. */
+export async function nombrePacienteParaAviso(medplum: MedplumClient, pacienteRef: string | undefined): Promise<string> {
+  const id = pacienteRef?.split('/')[1];
+  if (!id) {
+    return 'Un paciente';
+  }
+  const p = await medplum.readResource('Patient', id).catch(() => undefined);
+  return (p && getDisplayString(p)) || 'Un paciente';
+}
+
+export interface ResultadoAvisoProfesional {
+  whatsapp: boolean;
+  email: boolean;
+  /** Por qué no se mandó nada, si no se mandó. */
+  omitido: 'sin-contacto' | 'ya-avisado' | false;
+}
+
+/**
+ * Manda un aviso al profesional por los canales que tenga cargados (WhatsApp,
+ * email, los dos). Best-effort por canal: que Twilio rechace no frena el email,
+ * y nada de esto lanza — quien llama ya cobró o ya registró la presencia, y un
+ * aviso que no sale no puede deshacer eso.
+ *
+ * Idempotente por `clave`: la lleva la Communication del primer canal que se
+ * manda (WhatsApp si hay; si no, el email), y un reintento la encuentra. Sin
+ * eso, el webhook de MercadoPago —que reenvía— avisaría dos veces la misma
+ * reserva.
+ *
+ * El WhatsApp a un profesional está siempre fuera de la ventana de 24 h de
+ * Meta (él no nos escribió), así que sale por la plantilla genérica aprobada
+ * con el cuerpo entero en `{{1}}`: el mismo camino que `RECEPCION_WHATSAPP_TO`.
+ */
+export async function avisarProfesional(
+  medplum: MedplumClient,
+  secrets: Secrets,
+  opts: { practitionerCodigo: string; clave: string; template: string; aviso: AvisoProfesional; about?: string },
+): Promise<ResultadoAvisoProfesional> {
+  const contacto = contactoProfesional(secrets, opts.practitionerCodigo);
+  if (!contacto.whatsapp && !contacto.email) {
+    return { whatsapp: false, email: false, omitido: 'sin-contacto' };
+  }
+  const identifier = { system: SYSTEM.communication, value: opts.clave };
+  const existente = await medplum
+    .searchOne('Communication', `identifier=${SYSTEM.communication}|${opts.clave}`)
+    .catch(() => undefined);
+  if (existente) {
+    return { whatsapp: false, email: false, omitido: 'ya-avisado' };
+  }
+
+  let whatsapp = false;
+  let email = false;
+  if (contacto.whatsapp) {
+    const c = await enviarWhatsApp(medplum, secrets, {
+      template: opts.template,
+      to: contacto.whatsapp,
+      body: opts.aviso.whatsapp,
+      identifier,
+      ...(opts.about ? { about: opts.about } : {}),
+    }).catch(() => undefined);
+    whatsapp = c?.status === 'completed';
+  }
+  if (contacto.email) {
+    const c = await enviarEmail(medplum, {
+      asunto: opts.aviso.email.asunto,
+      cuerpo: opts.aviso.email.cuerpo,
+      template: opts.template,
+      to: contacto.email,
+      ...(opts.about ? { about: opts.about } : {}),
+      // La marca de idempotencia va en UN solo recurso: si el WhatsApp ya la
+      // lleva, el email no la repite.
+      ...(contacto.whatsapp ? {} : { identifier }),
+    }).catch(() => undefined);
+    email = c?.status === 'completed';
+  }
+  return { whatsapp, email, omitido: false };
 }
 
 /** Códigos de contraindicación activos de un Flag. */
@@ -1943,6 +2045,27 @@ export async function confirmarReserva(
       opts.medioPago ? ` (${opts.medioPago})` : ''
     }. ¡Gracias!`,
   });
+
+  // Aviso al PROFESIONAL (Andrés, 2026-09-20). Hasta acá el sistema le
+  // confirmaba al paciente y el médico se enteraba de su consulta mirando el
+  // Dashboard. Va ÚLTIMO y best-effort: el cobro ya quedó registrado y el
+  // paciente ya tiene su confirmación; que este aviso no salga no deshace nada.
+  const practitionerCodigo = practitionerCodigoDeTurno(appt);
+  if (practitionerCodigo) {
+    await avisarProfesional(medplum, secrets, {
+      practitionerCodigo,
+      clave: `prof-reserva-${opts.appointmentId}`,
+      template: 'profesional-reserva',
+      about: `Appointment/${opts.appointmentId}`,
+      aviso: avisoProfesionalReserva({
+        paciente: await nombrePacienteParaAviso(medplum, pacienteRef),
+        cuando: fechaTurnoNotif(appt.start),
+        servicio: appt.description ?? 'consulta',
+        modalidad,
+        link: dashboardUrl(secrets),
+      }),
+    }).catch(() => undefined);
+  }
 
   return { totalARS, senaARS, saldoARS, invoiceId: invoice.id, saldoInvoiceId, confirmados, yaConfirmado: false };
 }

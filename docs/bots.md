@@ -138,6 +138,14 @@ spamear a nadie. Estados resultantes:
 - `TWILIO_AUTH_TOKEN`
 - `TWILIO_WHATSAPP_FROM` (formato `whatsapp:+549...`)
 - `RECEPCION_WHATSAPP_TO` (número de Recepción, para el aviso de **solicitudes** del portal)
+- `PROFESIONAL_WHATSAPP_<código>` / `PROFESIONAL_EMAIL_<código>` (p. ej.
+  `PROFESIONAL_WHATSAPP_MED_DALESSANDRO`): el contacto de cada profesional para
+  los **avisos al profesional** (reserva confirmada, recordatorio de 2 h,
+  paciente en la sala). Van en secrets y no en `Practitioner.telecom` porque
+  los pacientes leen `Practitioner`. Sin secret, ese profesional no recibe
+  avisos y no es error. Ver `docs/teleconsulta.md` §6.10.
+- `DASHBOARD_BASE_URL` (default `https://dashboard.biowellness.ar`): el link
+  que llevan esos avisos.
 
 El destinatario sale de `Patient.telecom` (teléfono/SMS). El WhatsApp se dispara
 automático **al reservar** (turno tentativo), **al pagar la seña** (confirmado),

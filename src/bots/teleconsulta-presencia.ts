@@ -28,8 +28,9 @@
 import type { BotEvent, MedplumClient } from '@medplum/core';
 import type { Appointment, Encounter } from '@medplum/fhirtypes';
 import { SYSTEM, TIPO_AVISO } from '../fhir/identifiers.js';
-import type { RolSala } from '../lib/teleconsulta.js';
-import { crearAlertaRecepcion, enviarWhatsApp } from './_shared.js';
+import { avisoProfesionalPacienteEnLinea, type RolSala } from '../lib/teleconsulta.js';
+import { practitionerCodigoDeTurno } from '../fhir/appointment.js';
+import { avisarProfesional, crearAlertaRecepcion, dashboardUrl, enviarWhatsApp, nombrePacienteParaAviso } from './_shared.js';
 import { salaDelTurno } from './teleconsulta-token.js';
 
 export interface EntradaPresencia {
@@ -144,6 +145,23 @@ export async function handler(medplum: MedplumClient, event: BotEvent<EntradaPre
         about: `Appointment/${e.appointmentId}`,
         identifier: { system: SYSTEM.communication, value: `tc-en-linea-${e.appointmentId}` },
         body: `Biowellness · Tu paciente entró a la videollamada de ${nombre} y está esperando en la sala.`,
+      }).catch(() => undefined);
+    }
+
+    // Y al PROFESIONAL mismo, si cargó su contacto (Andrés, 2026-09-20). Es el
+    // aviso con más apuro de todos: hay una persona mirando una sala vacía.
+    // Idempotente por turno, como el de Recepción; best-effort, como todo acá.
+    const practitionerCodigo = practitionerCodigoDeTurno(appt);
+    if (practitionerCodigo) {
+      await avisarProfesional(medplum, event.secrets, {
+        practitionerCodigo,
+        clave: `tc-en-linea-prof-${e.appointmentId}`,
+        template: 'profesional-paciente-en-linea',
+        about: `Appointment/${e.appointmentId}`,
+        aviso: avisoProfesionalPacienteEnLinea({
+          paciente: await nombrePacienteParaAviso(medplum, pacienteRef),
+          link: dashboardUrl(event.secrets),
+        }),
       }).catch(() => undefined);
     }
   }

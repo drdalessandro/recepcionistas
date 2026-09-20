@@ -89,6 +89,7 @@ está aprobada. Los dos primeros por decisión explícita (ver la tabla de abajo
 | `turno-confirmado` | `TWILIO_CONTENT_SID_TURNO_CONFIRMADO` | `Biowellness: ¡tu turno quedó confirmado! {{1}}. Recibimos la seña de {{2}}. Saldo restante: {{3}}. ¡Te esperamos! 💚` | 1 turno · 2 seña (con $) · 3 saldo o "sin saldo pendiente" |
 | `recordatorio-48h` | `TWILIO_CONTENT_SID_RECORDATORIO_48H` | `Biowellness: te recordamos tu turno de {{1}} el {{2}}. ¡Te esperamos! 💚` | 1 servicio · 2 fecha/hora |
 | `recordatorio-2h` | `TWILIO_CONTENT_SID_RECORDATORIO_2H` | `Biowellness: ¡tu turno de {{1}} es hoy a las {{2}}! Te esperamos en un rato. 💚` | 1 servicio · 2 hora |
+| `profesional-reserva` · `profesional-recordatorio-2h` · `profesional-paciente-en-linea` | **NINGUNO por ahora.** | Avisos **al profesional** (no al paciente), 2026-09-20. Van por la **genérica** con el cuerpo entero en `{{1}}`: el profesional nunca nos escribió, así que están siempre fuera de la ventana de 24 h. Si algún día se quiere plantilla propia, tiene que ser de **una sola variable**: el bot manda `body` sin `variables`. Destino: `PROFESIONAL_WHATSAPP_<código>`. | — (el bot arma el cuerpo completo) |
 
 **Espejo de la bandeja de Mensajes** (respuestas de Recepción por WhatsApp):
 

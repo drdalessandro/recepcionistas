@@ -16,6 +16,8 @@
  * Visión y circuito completo: docs/teleconsulta.md.
  */
 
+import type { ModalidadAtencion } from '../domain/types.js';
+
 /** Parámetros de la teleconsulta. Cambiarlos es una decisión de negocio. */
 export const TELECONSULTA = {
   /**
@@ -309,5 +311,136 @@ export function emailRecordatorioTeleconsulta(d: {
       '',
       'Biowellness San Isidro',
     ].join('\n'),
+  };
+}
+
+// ============================================================================
+// Avisos al PROFESIONAL (Andrés, 2026-09-20).
+// ============================================================================
+
+/**
+ * El Dashboard del profesional: donde ve su agenda y atiende la videollamada.
+ * Default del secret `DASHBOARD_BASE_URL`, como `PORTAL_URL` lo es de
+ * `PORTAL_BASE_URL`. Se manda a la RAÍZ: el Dashboard es otro repo y no hay
+ * una ruta confirmada por ellos para "este turno"; el día que la confirmen,
+ * es un cambio acá y en el mismo deploy (misma regla que `rutaTeleconsulta`).
+ */
+export const DASHBOARD_URL = 'https://dashboard.biowellness.ar';
+
+/**
+ * Nombres de los Project Secrets con el contacto de un profesional.
+ *
+ * Por qué secrets y no `Practitioner.telecom`: la policy del portal deja leer
+ * `Practitioner` a los pacientes (`access-policies.ts`), así que el celular
+ * personal del médico quedaría a un pedido de API de cualquier paciente
+ * logueado. Un secret solo lo leen los bots. Son dos profesionales; si algún
+ * día son veinte, se muda a un recurso con policy propia.
+ *
+ * Sin secret no sale nada, y no es error: el profesional que no cargó su
+ * contacto no recibe avisos.
+ */
+export function secretsContactoProfesional(practitionerCodigo: string): { whatsapp: string; email: string } {
+  return {
+    whatsapp: `PROFESIONAL_WHATSAPP_${practitionerCodigo}`,
+    email: `PROFESIONAL_EMAIL_${practitionerCodigo}`,
+  };
+}
+
+/** Un aviso al profesional: el WhatsApp (una línea) y el email (asunto + cuerpo). */
+export interface AvisoProfesional {
+  whatsapp: string;
+  email: EmailTeleconsulta;
+}
+
+function tipoConsulta(modalidad: ModalidadAtencion): string {
+  return modalidad === 'virtual' ? 'teleconsulta' : 'consulta presencial';
+}
+
+/**
+ * "Te reservaron una consulta": sale al confirmarse el pago, junto con el
+ * WhatsApp al paciente. Lleva el nombre del paciente —el profesional lo va a
+ * atender— y nada clínico: los estudios y el cuestionario previo los ve en el
+ * Dashboard, con su login. El asunto del email no nombra al paciente (se lee
+ * en la pantalla bloqueada de un teléfono apoyado en un escritorio); el
+ * cuerpo sí.
+ */
+export function avisoProfesionalReserva(d: {
+  paciente: string;
+  cuando: string;
+  servicio: string;
+  modalidad: ModalidadAtencion;
+  link: string;
+}): AvisoProfesional {
+  const tipo = tipoConsulta(d.modalidad);
+  return {
+    whatsapp: `Biowellness · Te reservaron una ${tipo}: ${d.paciente}, ${d.cuando} (${d.servicio}). La ves en tu Dashboard: ${d.link}`,
+    email: {
+      asunto: `Nueva ${tipo} · ${d.cuando} · Biowellness`,
+      cuerpo: [
+        `Te reservaron una ${tipo}:`,
+        '',
+        `Paciente: ${d.paciente}`,
+        `Cuándo: ${d.cuando}`,
+        `Servicio: ${d.servicio}`,
+        '',
+        `La ves en tu Dashboard: ${d.link}`,
+        ...(d.modalidad === 'virtual'
+          ? ['', 'Dos horas antes te llega un recordatorio con el acceso a la videollamada.']
+          : []),
+        '',
+        'Biowellness San Isidro',
+      ].join('\n'),
+    },
+  };
+}
+
+/** Recordatorio de 2 h al profesional (el del paciente vive en `bw-recordatorios`). */
+export function avisoProfesionalRecordatorio(d: {
+  paciente: string;
+  hora: string;
+  servicio: string;
+  modalidad: ModalidadAtencion;
+  link: string;
+}): AvisoProfesional {
+  const tipo = tipoConsulta(d.modalidad);
+  const entrada = d.modalidad === 'virtual' ? `Entrá desde tu Dashboard: ${d.link}` : `Tu agenda: ${d.link}`;
+  return {
+    whatsapp: `Biowellness · Hoy a las ${d.hora} tenés ${tipo} con ${d.paciente} (${d.servicio}). ${entrada}`,
+    email: {
+      asunto: `Hoy a las ${d.hora}: ${tipo} · Biowellness`,
+      cuerpo: [
+        `Hoy a las ${d.hora} tenés una ${tipo}:`,
+        '',
+        `Paciente: ${d.paciente}`,
+        `Servicio: ${d.servicio}`,
+        '',
+        entrada,
+        ...(d.modalidad === 'virtual'
+          ? ['', `Podés entrar desde ${TELECONSULTA.accesoAntesMin} minutos antes. El paciente recibe el mismo aviso.`]
+          : []),
+        '',
+        'Biowellness San Isidro',
+      ].join('\n'),
+    },
+  };
+}
+
+/**
+ * "Tu paciente entró a la sala": el único aviso con apuro. Hasta hoy iba al
+ * número de Recepción (`RECEPCION_WHATSAPP_TO`); ahora también al profesional.
+ */
+export function avisoProfesionalPacienteEnLinea(d: { paciente: string; link: string }): AvisoProfesional {
+  return {
+    whatsapp: `Biowellness · ${d.paciente} entró a la videollamada y está esperando en la sala. Entrá desde tu Dashboard: ${d.link}`,
+    email: {
+      asunto: 'Tu paciente está en la sala · Biowellness',
+      cuerpo: [
+        `${d.paciente} entró a la videollamada y está esperando en la sala.`,
+        '',
+        `Entrá desde tu Dashboard: ${d.link}`,
+        '',
+        'Biowellness San Isidro',
+      ].join('\n'),
+    },
   };
 }

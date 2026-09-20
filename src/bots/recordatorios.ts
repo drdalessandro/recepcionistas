@@ -15,11 +15,11 @@
 import type { BotEvent, MedplumClient } from '@medplum/core';
 import type { Appointment } from '@medplum/fhirtypes';
 import { SYSTEM } from '../fhir/identifiers.js';
-import { modalidadDeTurno } from '../fhir/appointment.js';
+import { modalidadDeTurno, practitionerCodigoDeTurno } from '../fhir/appointment.js';
 import { PORTAL_URL } from '../lib/onboarding.js';
-import { emailRecordatorioTeleconsulta, rutaTeleconsulta } from '../lib/teleconsulta.js';
+import { avisoProfesionalRecordatorio, emailRecordatorioTeleconsulta, rutaTeleconsulta } from '../lib/teleconsulta.js';
 import { recordatorioDue, VENTANA_MAX_MS, type TipoRecordatorio } from '../lib/recordatorios.js';
-import { enviarEmail, enviarWhatsApp, notificarPortal } from './_shared.js';
+import { avisarProfesional, dashboardUrl, enviarEmail, enviarWhatsApp, nombrePacienteParaAviso, notificarPortal } from './_shared.js';
 
 export interface EntradaRecordatorios {
   /** Fecha de referencia ISO (default: ahora). Útil para pruebas/reprocesos. */
@@ -170,6 +170,27 @@ export async function handler(
         template: 'recordatorio-2h-virtual',
         pacienteRef,
         about: `Appointment/${appt.id}`,
+      }).catch(() => undefined);
+    }
+
+    // Al PROFESIONAL, solo el de 2 h (Andrés, 2026-09-20): el de 48 h existe
+    // para que el paciente se organice; al médico le alcanza con el del día,
+    // con el acceso a su Dashboard. Best-effort e idempotente por su propia
+    // clave, como todo lo de arriba.
+    const practitionerCodigo = practitionerCodigoDeTurno(appt);
+    if (tipo === '2h' && practitionerCodigo) {
+      await avisarProfesional(medplum, event.secrets, {
+        practitionerCodigo,
+        clave: `recordatorio-2h-prof-${groupId}`,
+        template: 'profesional-recordatorio-2h',
+        about: `Appointment/${appt.id}`,
+        aviso: avisoProfesionalRecordatorio({
+          paciente: await nombrePacienteParaAviso(medplum, pacienteRef),
+          hora: fmtHora.format(inicio),
+          servicio: descripcion,
+          modalidad: esVirtual ? 'virtual' : 'presencial',
+          link: dashboardUrl(event.secrets),
+        }),
       }).catch(() => undefined);
     }
 
