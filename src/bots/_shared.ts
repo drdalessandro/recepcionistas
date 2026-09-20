@@ -51,6 +51,7 @@ import { codigoAgenda } from '../config/medicos.js';
 import { getMembresia } from '../config/membresias.js';
 import { claveSemana, perteneceASemana } from '../lib/semana-membresia.js';
 import { getPaquete } from '../config/paquetes.js';
+import { PORTAL_URL } from '../lib/onboarding.js';
 import { calcularSenaARS, fraccionAnticipada, type ItemCobro, type LineaCobro, type TipoItemCobro } from '../lib/pricing.js';
 import { lineaComercialDeItem } from '../lib/cobros.js';
 import { cicloMes, motivoNoDisponible, parseClavePlan, saldoPlan } from '../lib/planes.js';
@@ -1377,7 +1378,13 @@ export async function crearPreferenciaMP(
   if (!token) {
     return { ok: false, mensaje: 'MercadoPago no está configurado (falta MERCADOPAGO_ACCESS_TOKEN en Project Secrets).' };
   }
-  const appUrl = secrets['APP_BASE_URL']?.valueString ?? 'https://recepcion.biowellness.ar';
+  // Adónde vuelve quien pagó ("volver al sitio"): al PORTAL del paciente. Quien
+  // paga un link de MP es siempre el paciente —seña, saldo, cuota de plan— y
+  // hasta el 2026-09-20 esto leía `APP_BASE_URL`, la app de recepción, que es
+  // una pantalla de login del personal: pagaba y caía ahí (Andrés). Mismo
+  // secret y mismo default que la invitación al portal y el reset de
+  // contraseña, para que "el portal" sea una sola URL en todo el repo.
+  const portalUrl = secrets['PORTAL_BASE_URL']?.valueString ?? PORTAL_URL;
   const notifUrl = secrets['MP_WEBHOOK_URL']?.valueString;
   // Sin webhook NO se genera link: el pago real se acreditaría sin que el
   // sistema se entere (la tentativa vencería con la seña ya cobrada). Antes
@@ -1410,7 +1417,7 @@ export async function crearPreferenciaMP(
       // liquidación. Es una decisión comercial: vive en config/reglas.ts.
       payment_methods: { installments: MERCADOPAGO.maxCuotas },
       ...(opts.soloAprobacionInmediata ? { binary_mode: true } : {}),
-      back_urls: { success: appUrl, pending: appUrl, failure: appUrl },
+      back_urls: { success: portalUrl, pending: portalUrl, failure: portalUrl },
       auto_return: 'approved',
       notification_url: notifUrl,
       ...(opts.expira ? { expires: true, expiration_date_to: isoArgentina(opts.expira) } : {}),

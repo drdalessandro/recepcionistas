@@ -278,7 +278,7 @@ async function cobrarTarjetaGuardada(
 /**
  * Cuota por link de pago: preferencia compartida (`crearPreferenciaMP`, la
  * misma del link de seña — antes había una copia local con OTRO default de
- * APP_BASE_URL) + WhatsApp. Si el link no se pudo generar, el WhatsApp ofrece
+ * la URL de retorno) + WhatsApp. Si el link no se pudo generar, el WhatsApp ofrece
  * pagar en recepción Y queda una alerta: un fallo del cron era invisible y la
  * cuota quedaba pendiente sin que nadie lo supiera.
  */
