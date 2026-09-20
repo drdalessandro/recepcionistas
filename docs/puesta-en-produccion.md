@@ -403,8 +403,11 @@ cargado el que decide** si un link cobra de verdad.
    - `MP_WEBHOOK_URL` → `https://api.medplum.com.ar/webhooks/mercadopago`.
      **Obligatorio**: sin él los bots se niegan a generar links (un pago sin
      webhook se acreditaría sin confirmar nada).
-   - `APP_BASE_URL` → adónde vuelve el pagador al terminar el checkout
-     (`back_urls`). Hoy: la app de recepción.
+   - `PORTAL_BASE_URL` → adónde vuelve el pagador al terminar el checkout
+     (`back_urls`): el **portal del paciente** (`https://app.biowellness.ar`,
+     que es también el default si el secret no está). Hasta el 2026-09-20 las
+     back_urls leían `APP_BASE_URL` (la app de recepción) y el paciente caía
+     en la pantalla de login del personal. `APP_BASE_URL` ya no la lee nadie.
    - Los secrets se leen en cada ejecución: **no hace falta redeployar bots**.
 2. **Panel de MP** (Tus integraciones → tu app → Webhooks → **modo
    productivo**): evento **Pagos**, URL `https://api.medplum.com.ar/webhooks/mercadopago`.

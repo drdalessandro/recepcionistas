@@ -101,7 +101,7 @@ para no volver a revisarlo desde cero.
 | --- | --- | --- |
 | `expiration_date_to` | `"2017-02-28T12:00:00.000-04:00"` | `isoArgentina` (`lib/sena.ts`) da `…T17:05:00.000-03:00` — **exacto**, con milisegundos y offset. Ojo: el otro `isoArgentina` del repo (`isoHorarioPortal`) NO lleva milisegundos y acá no sirve |
 | `binary_mode` | válido; advierte que **baja la tasa de aprobación** | Solo en la seña, a propósito: un ticket de Rapipago acredita en días y la tentativa vence en horas |
-| `auto_return` + `back_urls` | `"approved"` con las tres URLs | ✓ |
+| `auto_return` + `back_urls` | `"approved"` con las tres URLs | ✓ Las tres al **portal del paciente** (`PORTAL_BASE_URL`, default `https://app.biowellness.ar`). Hasta el 2026-09-20 iban a la app de recepción, que es un login de personal: el paciente pagaba y caía en una pantalla que no era para él |
 | `payment_methods.installments` | `"installments": 12` | ✓ (de `MERCADOPAGO.maxCuotas`) |
 | `statement_descriptor` | `"MINEGOCIO"` | ✓ `BIOWELLNESS` |
 | Firma: template del manifiesto | `id:…;request-id:…;ts:…;` | ✓ |

@@ -299,3 +299,50 @@ describe('link del saldo · envío por WhatsApp', () => {
     expect(mensajes(creadas)).toHaveLength(0);
   });
 });
+
+describe('link de MercadoPago · "volver al sitio" lleva al PORTAL del paciente', () => {
+  function bodyMP(fn: ReturnType<typeof vi.fn>): { back_urls: Record<string, string> } {
+    const llamada = fn.mock.calls.find(([url]) => String(url).includes('mercadopago.com'));
+    expect(llamada, 'no se llamó a MercadoPago').toBeDefined();
+    return JSON.parse((llamada![1] as RequestInit).body as string);
+  }
+
+  it('sin secret, las tres back_urls van a app.biowellness.ar y NUNCA a recepción', async () => {
+    // Reportado por Andrés el 2026-09-20: pagaba y volvía a
+    // recepcion.biowellness.ar, que es el login del personal. Quien paga un
+    // link de MP es el paciente: vuelve a SU app.
+    const fetch = mockFetch();
+    const { medplum } = fakeMedplum({ saldo: invoiceSaldo('issued') });
+
+    await handler(medplum, evento({ appointmentId: APPOINTMENT_ID, concepto: 'saldo' }));
+
+    const { back_urls } = bodyMP(fetch);
+    expect(back_urls).toEqual({
+      success: 'https://app.biowellness.ar',
+      pending: 'https://app.biowellness.ar',
+      failure: 'https://app.biowellness.ar',
+    });
+    for (const u of Object.values(back_urls)) {
+      expect(u).not.toContain('recepcion');
+    }
+  });
+
+  it('manda PORTAL_BASE_URL si está cargado, e ignora APP_BASE_URL aunque siga en Project Secrets', async () => {
+    // APP_BASE_URL era el secret viejo (la app de recepción). Puede seguir
+    // cargado en el servidor: tiene que ser inerte.
+    const fetch = mockFetch();
+    const { medplum } = fakeMedplum({ saldo: invoiceSaldo('issued') });
+    const secrets = {
+      ...(SECRETS as unknown as Record<string, unknown>),
+      PORTAL_BASE_URL: { name: 'PORTAL_BASE_URL', valueString: 'https://portal.example' },
+      APP_BASE_URL: { name: 'APP_BASE_URL', valueString: 'https://recepcion.example' },
+    } as unknown as BotEvent['secrets'];
+
+    await handler(medplum, { input: { appointmentId: APPOINTMENT_ID, concepto: 'saldo' }, secrets } as unknown as BotEvent<EntradaLinkMP>);
+
+    const { back_urls } = bodyMP(fetch);
+    expect(back_urls.success).toBe('https://portal.example');
+    expect(back_urls.pending).toBe('https://portal.example');
+    expect(back_urls.failure).toBe('https://portal.example');
+  });
+});
