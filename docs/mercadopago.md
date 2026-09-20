@@ -9,6 +9,7 @@ paso de credenciales de [`puesta-en-produccion.md`](puesta-en-produccion.md) §7
 | --- | --- |
 | Link de pago de la **seña** (50 %, R-19, con vencimiento) | ✅ |
 | Link del **saldo restante** | ✅ |
+| **Envío** del link del saldo por WhatsApp (botón en el turno) | ✅ desde 2026-09-20 |
 | Link de la **cuota mensual** de membresía | ✅ |
 | **Webhook** de pagos (verifica contra la API de MP, no confía en el payload) | ✅ |
 | Acreditación automática: turno confirmado / plan activado / saldo saldado | ✅ |
@@ -134,6 +135,44 @@ para no volver a revisarlo desde cero.
 > cobra bien lo que se le pide; cuánto pedir en la Multiplaza depende del piso de
 > facturación de 3 personas (`Math.max(ocupantes, 3)` en `lib/pricing.ts`), que
 > es una decisión comercial abierta — ver "Lo que sigue sin resolver".
+
+## El saldo: el camino existía y no lo usaba nadie (2026-09-20)
+
+El link del saldo estaba construido desde el principio, con el mismo mecanismo
+que la seña. Lo que faltaba era que **alguien se lo mandara al paciente**: no
+había plantilla, ni envío automático, ni recordatorio de saldo impago, ni forma
+de que la paciente se lo generara desde el portal (el bot no está en su
+AccessPolicy). El único que podía era Recepción, copiando la URL a mano de la
+pantalla del turno. Un camino de cobro que exige copiar y pegar es un camino
+que no se usa.
+
+Ahora `bw-link-mercadopago` acepta `enviar: true` (solo con `concepto: 'saldo'`)
+y manda el link por WhatsApp, con un botón propio en el modal del turno. **No es
+idempotente a propósito**: reenviar un link que la paciente perdió es una acción
+legítima del mostrador y no hay cron que pueda dispararlo de más. Cada envío
+queda como `Communication` en el hilo.
+
+La seña queda afuera de `enviar`: su link ya sale solo al reservar y de nuevo
+60 min antes de vencer (R-19), así que un envío manual duplicaría.
+
+### Dos diferencias del link del saldo contra el de la seña
+
+| | Seña | Saldo |
+| --- | --- | --- |
+| `binary_mode` | sí | **no** |
+| Vencimiento | 2 h (R-19) | **ninguno** |
+
+Las dos salen del mismo hecho: **el saldo no sostiene ningún lugar**. Si no
+entra, el turno sigue en pie y se cobra en el mostrador, así que no hay nada
+que liberar a las dos horas. Lo que sí implica, y conviene decidirlo: el link
+acepta medios que acreditan en días y **no caduca solo**. Un pago que llegue
+después de que Recepción cobró en efectivo no rompe nada —el candado de
+`resolverInvoicePlan` lo detecta y levanta alerta de pago duplicado— pero eso
+es una red, no un diseño.
+
+> **Para Andrés:** ponerle vencimiento al link del saldo es una decisión
+> comercial, no técnica: ¿hasta cuándo se puede pagar a distancia? Ahora que el
+> link se manda por WhatsApp y queda en el chat, la pregunta pesa más que antes.
 
 ## Lo que sigue sin resolver
 

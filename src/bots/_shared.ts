@@ -1470,6 +1470,118 @@ export async function linkSena(
   return { senaARS, url: pref.url, mensaje: pref.mensaje };
 }
 
+/** Lo que devuelve un link de saldo: el monto, el link, y por qué no salió. */
+export interface ResultadoLinkSaldo {
+  ok: boolean;
+  montoARS?: number;
+  url?: string;
+  mensaje?: string;
+  /** Solo lo setea `enviarLinkSaldo`: si el WhatsApp con el link salió. */
+  enviado?: boolean;
+}
+
+/**
+ * Link de MercadoPago del SALDO de un turno. Espejo de `linkSena`, con dos
+ * diferencias que no son casuales:
+ *
+ *  - **El monto NO se recalcula.** Sale del Invoice `saldo-{turno}` que emitió
+ *    `confirmarReserva` al acreditar la seña, con el TC de ese día ya
+ *    congelado adentro. Recalcularlo acá le movería el precio a alguien que ya
+ *    tiene el turno confirmado, cada vez que cambiara el tipo de cambio.
+ *  - **No lleva `soloAprobacionInmediata` ni vencimiento**, al revés que la
+ *    seña. El saldo no sostiene ningún lugar: si no entra, el turno sigue en
+ *    pie y se cobra en el mostrador, así que no hay nada que liberar a las dos
+ *    horas. Lo que sí implica, y conviene tenerlo presente: el link acepta
+ *    medios que acreditan en días y **no caduca solo**. Un pago que llegue
+ *    después de que Recepción cobró en efectivo no rompe nada —el candado de
+ *    `resolverInvoicePlan` lo detecta y levanta alerta de pago duplicado— pero
+ *    eso es una red, no un diseño. Ponerle vencimiento es una decisión
+ *    comercial abierta (ver docs/mercadopago.md).
+ *
+ * El `mensaje` distingue "no corresponde" de "falló": sin Invoice emitido
+ * (turno virtual, que se cobra entero por adelantado, o seña cobrada con una
+ * versión anterior del sistema) o saldo ya resuelto.
+ */
+export async function linkSaldo(
+  medplum: MedplumClient,
+  secrets: Secrets,
+  appt: Appointment,
+): Promise<ResultadoLinkSaldo> {
+  if (!appt.id) {
+    return { ok: false, mensaje: 'El turno no tiene id.' };
+  }
+  const inv = await medplum.searchOne('Invoice', `identifier=${SYSTEM.invoice}|saldo-${appt.id}`);
+  if (!inv) {
+    return {
+      ok: false,
+      mensaje: 'Este turno no tiene saldo registrado (¿se cobró la seña con esta versión del sistema?).',
+    };
+  }
+  if (inv.status !== 'issued') {
+    return { ok: false, mensaje: `El saldo ya está ${inv.status === 'balanced' ? 'pagado' : inv.status}.` };
+  }
+  const montoARS = inv.totalGross?.value ?? 0;
+  const pref = await crearPreferenciaMP(secrets, {
+    titulo: inv.lineItem?.[0]?.chargeItemCodeableConcept?.text ?? `Saldo · ${appt.description ?? 'turno'}`,
+    montoARS,
+    referencia: `saldo-${appt.id}`,
+    idempotencia: `saldo-${appt.id}`,
+    appointmentId: appt.id,
+  });
+  return pref.ok ? { ok: true, montoARS, url: pref.url } : { ok: false, montoARS, mensaje: pref.mensaje };
+}
+
+/**
+ * Genera el link del saldo y **se lo manda al paciente por WhatsApp**.
+ *
+ * Por qué existe: hasta el 2026-09-20 el camino de MercadoPago para el saldo
+ * estaba construido y no lo usaba nadie. No había plantilla, ni envío
+ * automático, ni recordatorio de saldo impago, ni forma de que la paciente se
+ * lo generara desde el portal: el único que podía era Recepción, copiando una
+ * URL a mano de la pantalla del turno. Un camino de cobro que exige copiar y
+ * pegar es un camino que no se usa, y la plata queda colgada.
+ *
+ * **No es idempotente, a propósito.** Reenviar un link que la paciente perdió
+ * es una acción legítima del mostrador, y no hay cron que pueda dispararlo de
+ * más: lo aprieta una persona. Cada envío queda como `Communication` en el
+ * hilo, así que se ve que ya salió.
+ *
+ * Mientras Meta no apruebe la plantilla propia (`biowellness_saldo_link_v1`,
+ * ver `src/seed/crear-plantillas.ts`) el mensaje viaja por la **genérica**,
+ * que mete el cuerpo entero en `{{1}}`. Las `variables` se mandan igual para
+ * que el día que el secret exista salga por la plantilla buena sin tocar una
+ * línea de código.
+ */
+export async function enviarLinkSaldo(
+  medplum: MedplumClient,
+  secrets: Secrets,
+  appt: Appointment,
+): Promise<ResultadoLinkSaldo> {
+  const link = await linkSaldo(medplum, secrets, appt);
+  if (!link.ok || !link.url) {
+    return { ...link, enviado: false };
+  }
+  const pacienteRef = appt.participant?.find((p) => p.actor?.reference?.startsWith('Patient/'))?.actor?.reference;
+  if (!pacienteRef) {
+    // El link es válido: se devuelve igual para que Recepción lo comparta a
+    // mano. Lo que falla es el envío, y hay que decir cuál de las dos cosas.
+    return { ...link, enviado: false, mensaje: 'El turno no tiene paciente: el link se generó pero no se pudo enviar.' };
+  }
+  const servicio = (appt.description ?? 'tu turno').split(' · ')[0] ?? 'tu turno';
+  const cuando = fechaTurnoNotif(appt.start);
+  const monto = `$${(link.montoARS ?? 0).toLocaleString('es-AR')}`;
+  await enviarWhatsApp(medplum, secrets, {
+    template: 'saldo-link',
+    pacienteRef,
+    // Plantilla: {{1}} servicio · {{2}} fecha/hora · {{3}} monto · {{4}} link.
+    variables: [servicio, cuando, monto, link.url],
+    body:
+      `Te quedó pendiente el saldo de tu turno de ${servicio} del ${cuando}: ${monto}. ` +
+      `Podés abonarlo acá: ${link.url} o en recepción el día de la sesión.`,
+  });
+  return { ...link, enviado: true };
+}
+
 /**
  * Una notificación de MP llegó por una seña YA registrada: ¿retry benigno o
  * pago doble? Espejo de `autocurarInvoiceSaldado` §1, para señas:

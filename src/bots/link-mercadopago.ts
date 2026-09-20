@@ -10,20 +10,33 @@
  *    `linkSena` leyendo el turno, no este bot;
  *  - concepto 'saldo': el 50% restante (lee el Invoice pendiente `saldo-{turno}`).
  *    Un turno virtual no tiene saldo, así que este concepto no aplica.
+ *
+ * Con `enviar: true` (solo en 'saldo') además **se lo manda al paciente por
+ * WhatsApp**. Hasta el 2026-09-20 no existía: el link del saldo había que
+ * copiarlo a mano de la pantalla, así que el camino de MercadoPago para el
+ * saldo estaba construido y no lo usaba nadie.
+ *
  * La creación de la preferencia vive en `_shared.crearPreferenciaMP` (la misma
  * que usa el link automático de la reserva). Requiere el secret
  * MERCADOPAGO_ACCESS_TOKEN; si no está, devuelve un aviso claro (el cobro
  * presencial sigue funcionando).
  */
 import type { BotEvent, MedplumClient } from '@medplum/core';
-import { SYSTEM } from '../fhir/identifiers.js';
-import { crearPreferenciaMP, linkSena } from './_shared.js';
+import { enviarLinkSaldo, linkSaldo, linkSena } from './_shared.js';
 
 export interface EntradaLinkMP {
   appointmentId: string;
   /** Qué se cobra: la seña del 50% (default) o el saldo restante. */
   concepto?: 'sena' | 'saldo';
   tc?: number;
+  /**
+   * Además de generar el link, mandárselo al paciente por WhatsApp.
+   *
+   * **Solo aplica a `concepto: 'saldo'`.** El de la seña ya sale solo al
+   * reservar y vuelve a salir 60 min antes de vencer (R-19): un envío manual
+   * ahí duplicaría un mensaje que el sistema ya manda.
+   */
+  enviar?: boolean;
 }
 
 export interface ResultadoLinkMP {
@@ -37,6 +50,8 @@ export interface ResultadoLinkMP {
    */
   senaARS?: number;
   url?: string;
+  /** Solo con `enviar: true`: si el WhatsApp con el link salió de verdad. */
+  enviado?: boolean;
 }
 
 export async function handler(medplum: MedplumClient, event: BotEvent<EntradaLinkMP>): Promise<ResultadoLinkMP> {
@@ -44,23 +59,20 @@ export async function handler(medplum: MedplumClient, event: BotEvent<EntradaLin
   const concepto = event.input.concepto ?? 'sena';
 
   if (concepto === 'saldo') {
-    // El monto sale del Invoice pendiente emitido al cobrar la seña (no se recalcula).
-    const saldoInv = await medplum.searchOne('Invoice', `identifier=${SYSTEM.invoice}|saldo-${event.input.appointmentId}`);
-    if (!saldoInv) {
-      return { ok: false, mensaje: 'Este turno no tiene saldo registrado (¿se cobró la seña con esta versión del sistema?).' };
-    }
-    if (saldoInv.status !== 'issued') {
-      return { ok: false, mensaje: `El saldo ya está ${saldoInv.status === 'balanced' ? 'pagado' : saldoInv.status}.` };
-    }
-    const montoARS = saldoInv.totalGross?.value ?? 0;
-    const pref = await crearPreferenciaMP(event.secrets, {
-      titulo: saldoInv.lineItem?.[0]?.chargeItemCodeableConcept?.text ?? `Saldo · ${appt.description ?? 'turno'}`,
-      montoARS,
-      referencia: `saldo-${event.input.appointmentId}`,
-      idempotencia: `saldo-${event.input.appointmentId}`,
-      appointmentId: event.input.appointmentId,
-    });
-    return pref.ok ? { ok: true, montoARS, url: pref.url } : { ok: false, montoARS, mensaje: pref.mensaje };
+    // El monto sale del Invoice pendiente emitido al cobrar la seña (no se
+    // recalcula): el porqué está en `linkSaldo`. Con `enviar` además se lo
+    // manda al paciente por WhatsApp, que es lo que hasta ahora no hacía
+    // nadie y dejaba el camino de MP del saldo sin usar.
+    const r = event.input.enviar
+      ? await enviarLinkSaldo(medplum, event.secrets, appt)
+      : await linkSaldo(medplum, event.secrets, appt);
+    return {
+      ok: r.ok,
+      ...(r.montoARS !== undefined ? { montoARS: r.montoARS } : {}),
+      ...(r.url ? { url: r.url } : {}),
+      ...(r.mensaje ? { mensaje: r.mensaje } : {}),
+      ...(r.enviado !== undefined ? { enviado: r.enviado } : {}),
+    };
   }
 
   try {
