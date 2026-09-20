@@ -11,6 +11,20 @@
  * títulos son nombres comerciales y las descripciones van en voz de paciente.
  * Regla de oro: los CÓDIGOS jamás cambian (contrato con portal/bots/Admin);
  * los códigos de equipo (IPC06, COT03) salen de los títulos visibles.
+ *
+ * ⚠️ **Tocar este archivo son DOS comandos, no uno** (2026-09-20):
+ *
+ *     npm run seed          # publica las ActivityDefinition (lo que VE el portal)
+ *     npm run deploy:bots   # re-bundlea el catálogo DENTRO de cada bot
+ *
+ * Este archivo no se lee del servidor: esbuild lo **compila adentro** de los
+ * bots que lo importan (`bw-disponibilidad`, `bw-solicitar-turno`,
+ * `bw-reservar-turno`, `bw-mover-turno`, `bw-validar-turno`,
+ * `bw-proponer-reserva`, `bw-reservar-combo`). Con el seed solo, el servicio
+ * nuevo aparece en la góndola —nombre, precio y descripción salen de la
+ * `ActivityDefinition`— y al pedir horarios el bot contesta
+ * **"Servicio desconocido: <código>"**, con el botón de reservar en gris.
+ * Pasó con los dos servicios de PREAPERTURA el día que se crearon.
  */
 import type { CategoriaServicio, Servicio, Split } from '../domain/types.js';
 import { MEDICOS, MEDICOS_POR_CODIGO, codigoConsulta, codigoTeleconsulta, type Medico } from './medicos.js';

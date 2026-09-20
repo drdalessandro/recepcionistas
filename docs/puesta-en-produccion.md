@@ -56,11 +56,34 @@ Reporta por bot `✓ OK` / `⚠ SIN CÓDIGO` (existe pero nunca se deployó) /
 
 **`bots:check` no mira el cron**: un bot puede salir `✓ OK` y no estar programado.
 
+**Ni mira si el código es el último**: `✓ OK` significa "tiene *algún* código
+deployado". La columna `deploy:` es la fecha — si es anterior al commit que
+estás probando, el bot está corriendo otra cosa.
+
 ### Qué se deploya de lo último
 
 La lista de espera vive en `src/bots/_shared.ts` (`avisarListaDeEspera`), que se
 bundlea **dentro de cada bot**. Sin redeploy, `bw-estado-turno` y
 `bw-vencer-tentativas` siguen corriendo la versión vieja y el aviso nunca sale.
+
+### El catálogo también va adentro del bundle
+
+**Un servicio nuevo son dos comandos: `npm run seed` *y* `npm run deploy:bots`.**
+
+`src/config/catalogo.ts` no se lee del servidor: esbuild lo compila adentro de
+cada bot que lo importa (`bw-disponibilidad`, `bw-solicitar-turno`,
+`bw-reservar-turno`, `bw-mover-turno`, `bw-validar-turno`, `bw-proponer-reserva`,
+`bw-reservar-combo`). Con el seed solo, el síntoma engaña: el servicio **aparece
+bien** en la góndola —nombre, precio y descripción salen de la
+`ActivityDefinition` recién publicada— y recién al pedir horarios
+`bw-disponibilidad` contesta `Servicio desconocido: <código>` y el botón de
+reservar queda gris. Da la sensación de un bug del portal y no lo es.
+
+Pasó con `HBOT_MULTIPLAZA_PREAPERTURA` y
+`TELECONSULTA_PREAPERTURA_MED_DALESSANDRO` el 2026-09-20, el día que se
+crearon. Lo mismo vale para cualquier cambio de precio o de regla en
+`src/config` o `src/lib`: el seed publica lo que se **ve**, el deploy actualiza
+lo que se **decide**.
 
 ## 2. Cron de los bots
 
