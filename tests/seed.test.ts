@@ -23,7 +23,10 @@ describe('Seed — composición', () => {
     // endocrinología de la Dra. Albarellos). El Dr. Carrieri NO suma servicio:
     // existe como Practitioner pero su consulta no se publica hasta que haya
     // precio.
-    expect(seed.activityDefinitions.length).toBe(40);
+    // 42 = 40 + los dos de PREAPERTURA (Multiplaza y teleconsulta al 90 %,
+    // Andrés 2026-09-20). Al abrir el centro se retiran y este número NO baja:
+    // pasan a contarse entre los `retired` de la línea siguiente.
+    expect(seed.activityDefinitions.length).toBe(42);
     expect(seed.activityDefinitions.filter((a) => a.status === 'retired')).toHaveLength(6);
     expect(seed.combos.length).toBe(9);
     expect(seed.membresias.length).toBe(10);

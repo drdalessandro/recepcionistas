@@ -316,6 +316,73 @@ export const SERVICIOS: Servicio[] = [
       'Tu evaluación inicial completa: consulta médica, orden de laboratorio y devolución con tu plan personalizado.',
     nota: 'Precio = consulta (2026-07-20); si cambia, ajustar acá y avisar al portal.',
   },
+
+  // ---------------------- 11 · PREAPERTURA (promoción temporal) ----------------------
+  //
+  // Dos productos al 90 % para la etapa previa a la apertura (Andrés,
+  // 2026-09-20). Son códigos PROPIOS y no un descuento sobre los de siempre,
+  // por dos motivos:
+  //
+  //  1. No existe mecanismo genérico de descuento en el sistema. Los que hay
+  //     son de producto (combo, paquete) o de cliente (FM, socio a la carta).
+  //  2. Administración los cuenta **separados** del ingreso a precio lleno, que
+  //     es lo que se quiere de una promoción: si bajáramos el precio del
+  //     servicio real, la promo se mezclaría con la venta normal y el día que
+  //     termine nadie sabría cuánto fue cada cosa.
+  //
+  // ⚠️ AL ABRIR EL CENTRO: marcarlos `retirado: true` y moverlos a
+  // `SERVICIOS_RETIRADOS`. NO borrar la entrada — los turnos y cobros que los
+  // referencien tienen que seguir resolviendo (ver el comentario de esa lista).
+  //
+  // `fmAplica: false` en los dos: un 20 % de Founding Member encima de un 90 %
+  // ya aplicado no es una promoción, es un error de cálculo.
+  {
+    codigo: 'HBOT_MULTIPLAZA_PREAPERTURA',
+    nombre: 'Cámara Hiperbárica (HBOT) — Multiplaza Preapertura',
+    categoria: 'HBOT',
+    duracionMin: 60,
+    // USD 8 = el 90 % de los 80 de lista.
+    precioUSD: 8,
+    requierePrescripcion: false,
+    // MISMA regla que el Multiplaza real, piso de 3 incluido (decisión de
+    // Andrés, 2026-09-20). Con `POR_SESION` el precio saldría por un camino que
+    // el Multiplaza no usa, y la prueba dejaría de reflejar producción: una
+    // persona sola paga USD 24, no USD 8. Es el mismo mecanismo que produjo la
+    // seña de $174.000 del 2026-09-11, acá con plata chica y a la vista.
+    reglaPricing: 'HBOT_MULTIPLAZA',
+    split: BW100,
+    fmAplica: false,
+    orden: 23, // pegado al Multiplaza de lista
+    descripcion: 'Sesión grupal de hasta 6 personas, con precio de preapertura.',
+    nota: 'Promoción de preapertura (90 % off). Piso de facturación de 3 personas, igual que el Multiplaza de lista.',
+  },
+  {
+    codigo: 'TELECONSULTA_PREAPERTURA_MED_DALESSANDRO',
+    // El nombre lo eligió Andrés (2026-09-20). Trae "Teleconsulta" y el
+    // apellido, que son las dos palabras con las que se la va a buscar en el
+    // modal de reserva — el buscador filtra por este texto (ver el comentario
+    // de `teleconsulta()` más abajo, y el reporte del 2026-09-17).
+    nombre: "Teleconsulta Preapertura — Dr. D'Alessandro",
+    categoria: 'CONSULTA',
+    modalidad: 'virtual',
+    duracionMin: TELECONSULTA.slotMin,
+    precioUSD: 0,
+    // ARS 15.000 = el 90 % de los 150.000 de su teleconsulta de cardiología.
+    // Va en pesos y no en dólares, igual que todas las consultas: no se
+    // convierte ni se mueve con el TC.
+    precioARS: 15_000,
+    practitionerCodigo: 'MED_DALESSANDRO',
+    requierePrescripcion: false,
+    reglaPricing: 'POR_SESION',
+    split: BW100,
+    fmAplica: false,
+    orden: 16, // después de la teleconsulta de lista (15)
+    categoriaComercial: ESPECIALIDADES.cardiologia,
+    descripcion:
+      'Consulta de cardiología por videollamada, desde donde estés, con precio de preapertura. ' +
+      'Antes del turno podés subir tus estudios para que el profesional los revise.',
+    nota: 'Promoción de preapertura (90 % off). Virtual ⇒ se cobra el 100 % por adelantado, sin saldo.',
+  },
 ];
 
 /**
