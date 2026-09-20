@@ -67,6 +67,7 @@ import { RegistrarConsulta } from '../components/RegistrarConsulta';
 import { FoundingMember } from '../components/FoundingMember';
 import { esFm } from '@bw/fhir/founding';
 import { SERVICIOS, nombreServicioRecepcion } from '@bw/config/catalogo';
+import { avisoTurnoReservado } from '@bw/lib/pricing';
 import { COMBOS } from '@bw/config/combos';
 import { MEMBRESIAS } from '@bw/config/membresias';
 import { PAQUETES } from '@bw/config/paquetes';
@@ -1157,9 +1158,7 @@ function PanelReserva({
 
         {resultado?.creado && (
           <Alert color="bio" title="Turno reservado ✓">
-            {resultado.planRestantes !== undefined
-              ? `Confirmado con el plan. Quedan ${resultado.planRestantes} sesiones. La sala queda ocupada en la agenda.`
-              : 'La sala queda ocupada en la agenda. Tentativo hasta cobrar la seña del 50%.'}
+            {avisoTurnoReservado(servicio?.modalidad, resultado.planRestantes)}
           </Alert>
         )}
         {resultado && !resultado.creado && (

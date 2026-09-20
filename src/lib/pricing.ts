@@ -303,6 +303,37 @@ export function fraccionAnticipada(modalidad?: ModalidadAtencion): number {
   return modalidad === 'virtual' ? FRACCION_TOTAL : FRACCION_SENA;
 }
 
+/**
+ * Lo que ve Recepción cuando el turno queda reservado.
+ *
+ * Es `fraccionAnticipada` dicha en palabras, y vive al lado por eso: son la
+ * misma decisión. El cobro de un turno virtual ya salía bien —el 100 % por
+ * adelantado, sin saldo— pero el cartel del mostrador seguía diciendo "seña del
+ * 50 %" (visto en producción el 2026-09-20, reservando la teleconsulta de
+ * preapertura). Que la plata esté bien y el texto no es peor que un bug a
+ * secas: la recepcionista le repite al paciente lo que dice la pantalla.
+ *
+ * Regla de Andrés (2026-09-16, comunicada al Portal el 2026-09-17): **en
+ * ningún texto de un turno virtual puede decir "seña"**. No es una preferencia
+ * de redacción — prometer una seña del 50 % es prometer que después se cobra el
+ * resto, y en una videollamada no hay mostrador donde cobrarlo.
+ *
+ * El concepto con el que viaja la plata (checkout de MercadoPago, Invoice,
+ * ChargeItem) lo arma `conceptoAnticipado` en `src/bots/_shared.ts`, que no se
+ * puede importar desde el navegador. Si cambia el vocabulario, cambian los dos.
+ */
+export function avisoTurnoReservado(modalidad?: ModalidadAtencion, planRestantes?: number): string {
+  // Una teleconsulta no toma sala: decirle "sala" a una videollamada manda a
+  // Recepción a buscar un consultorio que nadie ocupó.
+  const lugar = modalidad === 'virtual' ? 'El horario queda tomado en la agenda.' : 'La sala queda ocupada en la agenda.';
+  if (planRestantes !== undefined) {
+    return `Confirmado con el plan. Quedan ${planRestantes} sesiones. ${lugar}`;
+  }
+  return modalidad === 'virtual'
+    ? `${lugar} Tentativo hasta cobrar la consulta completa: por videollamada se paga el 100 % por adelantado y no queda saldo.`
+    : `${lugar} Tentativo hasta cobrar la seña del 50 %.`;
+}
+
 /** Total a cobrar y seña (50%) de una reserva, en ARS. */
 export function calcularSenaARS(
   items: ItemCobro[],

@@ -56,11 +56,43 @@ Reporta por bot `✓ OK` / `⚠ SIN CÓDIGO` (existe pero nunca se deployó) /
 
 **`bots:check` no mira el cron**: un bot puede salir `✓ OK` y no estar programado.
 
+**Ni mira si el código es el último**: `✓ OK` significa "tiene *algún* código
+deployado". La columna `deploy:` es la fecha — si es anterior al commit que
+estás probando, el bot está corriendo otra cosa.
+
 ### Qué se deploya de lo último
 
 La lista de espera vive en `src/bots/_shared.ts` (`avisarListaDeEspera`), que se
 bundlea **dentro de cada bot**. Sin redeploy, `bw-estado-turno` y
 `bw-vencer-tentativas` siguen corriendo la versión vieja y el aviso nunca sale.
+
+### El catálogo vive en TRES lados
+
+`src/config/catalogo.ts` no se lee del servidor en ningún lado: se compila
+adentro de cada cosa que lo importa. Un servicio nuevo son tres pasos, y si
+falta alguno el síntoma aparece lejos y parece un bug de otro:
+
+| Copia | Qué la actualiza | Qué se rompe si falta |
+|---|---|---|
+| `ActivityDefinition` en Medplum | `npm run seed` | el servicio no aparece en la góndola del portal |
+| Bundle de cada bot (esbuild) | `npm run deploy:bots` | `Servicio desconocido: <código>` al pedir horarios |
+| Bundle del app de Recepción (vite) | `git pull && npm run build:app` **en el servidor** | Atender no prellena el servicio de la solicitud |
+
+Lo bundlean `bw-disponibilidad`, `bw-solicitar-turno`, `bw-reservar-turno`,
+`bw-mover-turno`, `bw-validar-turno`, `bw-proponer-reserva` y
+`bw-reservar-combo`.
+
+Los tres síntomas engañan por el mismo motivo: **lo que se ve sale de la
+`ActivityDefinition` y lo que se decide sale del bundle.** Con el seed solo, la
+tarjeta del portal se ve perfecta —nombre, precio, descripción— y falla al pedir
+horarios. Con los bots al día pero el app viejo, la solicitud llega completa a
+Recepción y Atender deja el select vacío; se reconoce porque **la fecha y la
+hora sí se prellenan** (`Atender.tsx` sólo tiene guarda de catálogo sobre el
+servicio).
+
+Los tres los pisamos en fila el 2026-09-20 con `HBOT_MULTIPLAZA_PREAPERTURA` y
+`TELECONSULTA_PREAPERTURA_MED_DALESSANDRO`, el día que se crearon. Lo mismo vale
+para cualquier cambio de precio o de regla en `src/config` o `src/lib`.
 
 ## 2. Cron de los bots
 

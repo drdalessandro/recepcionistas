@@ -71,7 +71,10 @@ export function ProximosTurnos({ dias }: { dias: number }): JSX.Element {
             </Text>
             {dia.tentativos > 0 && (
               <Badge color="yellow" variant="light">
-                {dia.tentativos} sin seña
+                {/* "sin pagar": el contador mezcla presenciales (seña del 50 %)
+                    con teleconsultas (el 100 %), y en un turno virtual ningún
+                    texto dice "seña". */}
+                {dia.tentativos} sin pagar
               </Badge>
             )}
           </Group>
