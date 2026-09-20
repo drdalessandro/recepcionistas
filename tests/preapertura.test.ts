@@ -4,8 +4,8 @@ import { calcularCobro, calcularSenaARS, fraccionAnticipada } from '../src/lib/p
 
 /**
  * Los dos productos de PREAPERTURA (Andrés, 2026-09-20): Multiplaza y
- * teleconsulta al 90 %, para probar el circuito completo de turnos mientras el
- * centro está cerrado.
+ * teleconsulta al 98 % off, para probar el circuito completo de turnos mientras
+ * el centro está cerrado. Arrancaron al 90 % y bajaron a 98 % el mismo día.
  *
  * Lo que fijan estos casos no es el precio, que va a cambiar: son las dos
  * decisiones que se tomaron a conciencia y que a alguien le va a parecer un
@@ -17,15 +17,15 @@ const MULTIPLAZA = 'HBOT_MULTIPLAZA_PREAPERTURA';
 const TELECONSULTA = 'TELECONSULTA_PREAPERTURA_MED_DALESSANDRO';
 
 describe('preapertura · los dos servicios existen y son promocionales', () => {
-  it('están en el catálogo con el 90 % aplicado sobre el precio de lista', () => {
-    // 8 = 90 % off de los 80 del Multiplaza; 15.000 = 90 % off de los 150.000
+  it('están en el catálogo con el 98 % aplicado sobre el precio de lista', () => {
+    // 1,60 = el 2 % de los 80 del Multiplaza; 3.000 = el 2 % de los 150.000
     // de la teleconsulta de cardiología.
-    expect(SERVICIOS_POR_CODIGO.get(MULTIPLAZA)?.precioUSD).toBe(8);
-    expect(SERVICIOS_POR_CODIGO.get(TELECONSULTA)?.precioARS).toBe(15_000);
+    expect(SERVICIOS_POR_CODIGO.get(MULTIPLAZA)?.precioUSD).toBe(1.6);
+    expect(SERVICIOS_POR_CODIGO.get(TELECONSULTA)?.precioARS).toBe(3_000);
   });
 
   it('ninguno acumula el descuento de Founding Member', () => {
-    // Un 20 % encima de un 90 % ya aplicado no es una promoción, es un error
+    // Un 20 % encima de un 98 % ya aplicado no es una promoción, es un error
     // de cálculo.
     expect(SERVICIOS_POR_CODIGO.get(MULTIPLAZA)?.fmAplica).toBe(false);
     expect(SERVICIOS_POR_CODIGO.get(TELECONSULTA)?.fmAplica).toBe(false);
@@ -37,6 +37,19 @@ describe('preapertura · los dos servicios existen y son promocionales', () => {
     // venta normal y al terminar nadie sabría cuánto fue cada cosa.
     expect(SERVICIOS_POR_CODIGO.get('HBOT_MULTIPLAZA')?.precioUSD).toBe(80);
     expect(SERVICIOS_POR_CODIGO.get('TELECONSULTA_MED_DALESSANDRO')?.precioARS).toBe(150_000);
+  });
+
+  it('"PREAPERTURA" va en mayúsculas en los dos nombres, y sigue siendo texto', () => {
+    // Andrés pidió que se distinga (2026-09-20). El título es un `string` de
+    // FHIR, así que no hay negrita: la mayúscula es lo que se distingue en el
+    // portal, en Recepción y en los WhatsApp sin dejar de ser buscable. Si
+    // alguien lo pasa a Unicode "negrita" (𝗣𝗿𝗲𝗮𝗽𝗲𝗿𝘁𝘂𝗿𝗮), el buscador del modal
+    // de reserva deja de encontrarlo por esa palabra.
+    for (const codigo of [MULTIPLAZA, TELECONSULTA]) {
+      const nombre = SERVICIOS_POR_CODIGO.get(codigo)?.nombre ?? '';
+      expect(nombre).toContain('PREAPERTURA');
+      expect(nombre.toLowerCase()).toContain('preapertura'); // ASCII, buscable
+    }
   });
 });
 
@@ -50,16 +63,24 @@ describe('preapertura · Multiplaza: el piso de 3 se mantiene', () => {
     // producción. Es el mismo mecanismo que produjo la seña de $174.000 del
     // 2026-09-11, acá con plata chica y a la vista.
     //
-    // Si esto empieza a dar 11.600 (USD 8 × 1), alguien le sacó el piso: eso
-    // es una decisión comercial abierta, no un arreglo.
-    expect(cobro(1)).toBe(34_800); // USD 8 × 3 × 1450
-    expect(cobro(2)).toBe(34_800);
-    expect(cobro(3)).toBe(34_800);
+    // Si esto empieza a dar 2.320 (USD 1,60 × 1), alguien le sacó el piso:
+    // eso es una decisión comercial abierta, no un arreglo.
+    expect(cobro(1)).toBe(6_960); // USD 1,60 × 3 × 1450
+    expect(cobro(2)).toBe(6_960);
+    expect(cobro(3)).toBe(6_960);
   });
 
   it('a partir de tres sí cobra por persona', () => {
-    expect(cobro(4)).toBe(46_400); // USD 32
-    expect(cobro(6)).toBe(69_600); // USD 48
+    expect(cobro(4)).toBe(9_280); // USD 6,40
+    expect(cobro(6)).toBe(13_920); // USD 9,60
+  });
+
+  it('el precio con decimales no deja centavos sueltos en pesos', () => {
+    // USD 1,60 es el primer precio del catálogo que no es entero: 1.6 × 3 en
+    // punto flotante da 4.800000000000001, y eso multiplicado por el TC tiene
+    // que salir en pesos enteros igual.
+    expect(Number.isInteger(cobro(1))).toBe(true);
+    expect(Number.isInteger(cobro(5))).toBe(true);
   });
 
   it('la seña es la mitad, y queda saldo', () => {
@@ -69,9 +90,9 @@ describe('preapertura · Multiplaza: el piso de 3 se mantiene', () => {
       tc: TC,
       fraccion: fraccionAnticipada(SERVICIOS_POR_CODIGO.get(MULTIPLAZA)?.modalidad),
     });
-    expect(totalARS).toBe(34_800);
-    expect(senaARS).toBe(17_400);
-    expect(totalARS - senaARS).toBe(17_400);
+    expect(totalARS).toBe(6_960);
+    expect(senaARS).toBe(3_480);
+    expect(totalARS - senaARS).toBe(3_480);
   });
 });
 
@@ -88,8 +109,8 @@ describe('preapertura · teleconsulta: el 100 % por adelantado, sin saldo', () =
       tc: TC,
       fraccion: fraccionAnticipada(servicio?.modalidad),
     });
-    expect(totalARS).toBe(15_000);
-    expect(senaARS).toBe(15_000);
+    expect(totalARS).toBe(3_000);
+    expect(senaARS).toBe(3_000);
     // Lo que importa: no queda nada pendiente, así que no se emite Invoice de
     // saldo y el link de saldo no aplica.
     expect(totalARS - senaARS).toBe(0);
@@ -97,7 +118,15 @@ describe('preapertura · teleconsulta: el 100 % por adelantado, sin saldo', () =
 
   it('el precio va en pesos: no se mueve con el tipo de cambio', () => {
     const conOtroTC = calcularCobro([{ tipo: 'servicio', codigo: TELECONSULTA }], { tc: 3000 }).totalARS;
-    expect(conOtroTC).toBe(15_000);
+    expect(conOtroTC).toBe(3_000);
+  });
+
+  it('dura 20 minutos, y la de lista sigue durando 60', () => {
+    // Andrés, 2026-09-20. La agenda del médico sigue publicada en bloques de
+    // 60: la reserva se valida por el inicio del Slot, no por la duración, así
+    // que un turno de 20 toma un bloque entero igual. Ver la nota del servicio.
+    expect(SERVICIOS_POR_CODIGO.get(TELECONSULTA)?.duracionMin).toBe(20);
+    expect(SERVICIOS_POR_CODIGO.get('TELECONSULTA_MED_DALESSANDRO')?.duracionMin).toBe(60);
   });
 
   it("la atiende el Dr. D'Alessandro y se busca por su apellido", () => {

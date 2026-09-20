@@ -345,9 +345,9 @@ export const SERVICIOS: Servicio[] = [
 
   // ---------------------- 11 · PREAPERTURA (promoción temporal) ----------------------
   //
-  // Dos productos al 90 % para la etapa previa a la apertura (Andrés,
-  // 2026-09-20). Son códigos PROPIOS y no un descuento sobre los de siempre,
-  // por dos motivos:
+  // Dos productos al 98 % off para la etapa previa a la apertura (Andrés,
+  // 2026-09-20; arrancaron al 90 % y bajaron a 98 % el mismo día). Son códigos
+  // PROPIOS y no un descuento sobre los de siempre, por dos motivos:
   //
   //  1. No existe mecanismo genérico de descuento en el sistema. Los que hay
   //     son de producto (combo, paquete) o de cliente (FM, socio a la carta).
@@ -360,27 +360,43 @@ export const SERVICIOS: Servicio[] = [
   // `SERVICIOS_RETIRADOS`. NO borrar la entrada — los turnos y cobros que los
   // referencien tienen que seguir resolviendo (ver el comentario de esa lista).
   //
-  // `fmAplica: false` en los dos: un 20 % de Founding Member encima de un 90 %
+  // `fmAplica: false` en los dos: un 20 % de Founding Member encima de un 98 %
   // ya aplicado no es una promoción, es un error de cálculo.
+  //
+  // "PREAPERTURA" va en MAYÚSCULAS y no en negrita (pedido de Andrés,
+  // 2026-09-20: que se distinga). El campo es `ActivityDefinition.title`, un
+  // `string` de FHIR: no hay negrita posible ahí. Las dos formas de simularla
+  // rompen cosas que ya andan, así que no se usan:
+  //
+  //  - Unicode matemático (𝗣𝗿𝗲𝗮𝗽𝗲𝗿𝘁𝘂𝗿𝗮) no es texto buscable. El buscador del
+  //    modal de reserva filtra por este mismo nombre: quien tipee "preapertura"
+  //    no encontraría nada, que es exactamente el bug del apóstrofo reportado
+  //    el 2026-09-17. Además viaja a los WhatsApp, a los Invoice y a lo que
+  //    exporta Administración.
+  //  - Asteriscos (`*Preapertura*`) los renderiza WhatsApp, pero el portal y
+  //    Recepción mostrarían los asteriscos literales.
+  //
+  // La mayúscula distingue en los tres lados y sigue siendo texto.
   {
     codigo: 'HBOT_MULTIPLAZA_PREAPERTURA',
-    nombre: 'Cámara Hiperbárica (HBOT) — Multiplaza Preapertura',
+    nombre: 'Cámara Hiperbárica (HBOT) — Multiplaza PREAPERTURA',
     categoria: 'HBOT',
     duracionMin: 60,
-    // USD 8 = el 90 % de los 80 de lista.
-    precioUSD: 8,
+    // USD 1,60 = el 2 % de los 80 de lista (98 % off).
+    precioUSD: 1.6,
     requierePrescripcion: false,
     // MISMA regla que el Multiplaza real, piso de 3 incluido (decisión de
     // Andrés, 2026-09-20). Con `POR_SESION` el precio saldría por un camino que
     // el Multiplaza no usa, y la prueba dejaría de reflejar producción: una
-    // persona sola paga USD 24, no USD 8. Es el mismo mecanismo que produjo la
-    // seña de $174.000 del 2026-09-11, acá con plata chica y a la vista.
+    // persona sola paga USD 4,80, no USD 1,60. Es el mismo mecanismo que
+    // produjo la seña de $174.000 del 2026-09-11, acá con plata chica y a la
+    // vista.
     reglaPricing: 'HBOT_MULTIPLAZA',
     split: BW100,
     fmAplica: false,
     orden: 23, // pegado al Multiplaza de lista
     descripcion: 'Sesión grupal de hasta 6 personas, con precio de preapertura.',
-    nota: 'Promoción de preapertura (90 % off). Piso de facturación de 3 personas, igual que el Multiplaza de lista.',
+    nota: 'Promoción de preapertura (98 % off). Piso de facturación de 3 personas, igual que el Multiplaza de lista.',
   },
   {
     codigo: 'TELECONSULTA_PREAPERTURA_MED_DALESSANDRO',
@@ -388,15 +404,22 @@ export const SERVICIOS: Servicio[] = [
     // apellido, que son las dos palabras con las que se la va a buscar en el
     // modal de reserva — el buscador filtra por este texto (ver el comentario
     // de `teleconsulta()` más abajo, y el reporte del 2026-09-17).
-    nombre: "Teleconsulta Preapertura — Dr. D'Alessandro",
+    nombre: "Teleconsulta PREAPERTURA — Dr. D'Alessandro",
     categoria: 'CONSULTA',
     modalidad: 'virtual',
-    duracionMin: TELECONSULTA.slotMin,
+    // 20 minutos (Andrés, 2026-09-20), no los 60 de la teleconsulta de lista.
+    // OJO: la agenda del médico sigue publicada en bloques de
+    // `TELECONSULTA.slotMin` (60), y la reserva se valida por el INICIO del
+    // Slot, no por la duración (`chequearAgendaMedico`). O sea: el turno dura
+    // 20 minutos, pero cada reserva toma un bloque entero de la agenda, igual
+    // que una de 60. Publicar la agenda de a 20 es otra decisión (cambia
+    // también la teleconsulta de lista) y no se tomó.
+    duracionMin: 20,
     precioUSD: 0,
-    // ARS 15.000 = el 90 % de los 150.000 de su teleconsulta de cardiología.
-    // Va en pesos y no en dólares, igual que todas las consultas: no se
-    // convierte ni se mueve con el TC.
-    precioARS: 15_000,
+    // ARS 3.000 = el 2 % de los 150.000 de su teleconsulta de cardiología
+    // (98 % off). Va en pesos y no en dólares, igual que todas las consultas:
+    // no se convierte ni se mueve con el TC.
+    precioARS: 3_000,
     practitionerCodigo: 'MED_DALESSANDRO',
     requierePrescripcion: false,
     reglaPricing: 'POR_SESION',
@@ -407,7 +430,7 @@ export const SERVICIOS: Servicio[] = [
     descripcion:
       'Consulta de cardiología por videollamada, desde donde estés, con precio de preapertura. ' +
       'Antes del turno podés subir tus estudios para que el profesional los revise.',
-    nota: 'Promoción de preapertura (90 % off). Virtual ⇒ se cobra el 100 % por adelantado, sin saldo.',
+    nota: 'Promoción de preapertura (98 % off), 20 minutos. Virtual ⇒ se cobra el 100 % por adelantado, sin saldo.',
   },
 ];
 
