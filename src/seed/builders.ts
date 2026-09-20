@@ -100,7 +100,9 @@ export function buildActivityDefinition(s: Servicio): ActivityDefinition {
     // Un servicio retirado se publica igual, pero como `retired`: el seed hace
     // upsert y no borra, así que sacarlo del archivo lo dejaría `active` en el
     // servidor y el portal lo seguiría ofreciendo. El portal filtra por status.
-    status: s.retirado ? 'retired' : 'active',
+    // `draft` es lo mismo con vuelta atrás: oculto en la góndola mientras dure
+    // la marca (preapertura), y `active` de nuevo en cuanto se saca.
+    status: s.retirado ? 'retired' : s.ocultoEnPortal ? 'draft' : 'active',
     kind: 'ServiceRequest',
     identifier: [{ system: SYSTEM.servicioCodigo, value: s.codigo }],
     // Sección COMERCIAL de la góndola (el código interno de categoría no viaja:
