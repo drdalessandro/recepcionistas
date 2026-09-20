@@ -1476,7 +1476,12 @@ export interface ResultadoLinkSaldo {
   montoARS?: number;
   url?: string;
   mensaje?: string;
-  /** Solo lo setea `enviarLinkSaldo`: si el WhatsApp con el link salió. */
+  /**
+   * Solo lo setea `enviarLinkSaldo`: si el WhatsApp con el link **salió de
+   * verdad** (status `completed` de la Communication), no si se intentó. En
+   * `false` viene con `mensaje` explicando qué pasó, y `url` sigue siendo
+   * válida para compartirla a mano.
+   */
   enviado?: boolean;
 }
 
@@ -1570,16 +1575,44 @@ export async function enviarLinkSaldo(
   const servicio = (appt.description ?? 'tu turno').split(' · ')[0] ?? 'tu turno';
   const cuando = fechaTurnoNotif(appt.start);
   const monto = `$${(link.montoARS ?? 0).toLocaleString('es-AR')}`;
-  await enviarWhatsApp(medplum, secrets, {
-    template: 'saldo-link',
-    pacienteRef,
-    // Plantilla: {{1}} servicio · {{2}} fecha/hora · {{3}} monto · {{4}} link.
-    variables: [servicio, cuando, monto, link.url],
-    body:
-      `Te quedó pendiente el saldo de tu turno de ${servicio} del ${cuando}: ${monto}. ` +
-      `Podés abonarlo acá: ${link.url} o en recepción el día de la sesión.`,
-  });
-  return { ...link, enviado: true };
+  // `enviado` refleja el envío REAL (status de la Communication), no el
+  // intento — misma convención que `invitar-paciente` y `solicitar-turno`.
+  // `enviarWhatsApp` NO lanza cuando el mensaje no sale: si la ficha no tiene
+  // teléfono deja la Communication en `preparation`, y si Twilio la rechaza en
+  // `entered-in-error`. Dar por bueno el `await` le diría a Recepción "se lo
+  // mandamos" sobre un mensaje que nunca salió, y el saldo quedaría esperando
+  // a alguien que no recibió nada.
+  //
+  // El try/catch cubre lo que sí lanza (la red contra Twilio no tiene timeout,
+  // y crear la Communication puede fallar): el link de MP ya está generado y
+  // es válido, así que se devuelve igual para compartirlo a mano en vez de
+  // perderlo con la excepción.
+  try {
+    const comm = await enviarWhatsApp(medplum, secrets, {
+      template: 'saldo-link',
+      pacienteRef,
+      // Plantilla: {{1}} servicio · {{2}} fecha/hora · {{3}} monto · {{4}} link.
+      variables: [servicio, cuando, monto, link.url],
+      body:
+        `Te quedó pendiente el saldo de tu turno de ${servicio} del ${cuando}: ${monto}. ` +
+        `Podés abonarlo acá: ${link.url} o en recepción el día de la sesión.`,
+    });
+    return comm.status === 'completed'
+      ? { ...link, enviado: true }
+      : {
+          ...link,
+          enviado: false,
+          mensaje: 'El link se generó pero el WhatsApp no salió (revisá Twilio / el teléfono de la ficha): compartilo a mano.',
+        };
+  } catch (err) {
+    return {
+      ...link,
+      enviado: false,
+      mensaje: `El link se generó pero el WhatsApp no salió (${
+        err instanceof Error ? err.message : 'error'
+      }): compartilo a mano.`,
+    };
+  }
 }
 
 /**

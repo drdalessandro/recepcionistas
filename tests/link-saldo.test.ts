@@ -65,13 +65,23 @@ function invoiceSaldo(status: 'issued' | 'balanced' | 'cancelled') {
   };
 }
 
-function fakeMedplum(opts: { saldo?: ReturnType<typeof invoiceSaldo>; conPaciente?: boolean } = {}) {
+function fakeMedplum(
+  opts: { saldo?: ReturnType<typeof invoiceSaldo>; conPaciente?: boolean; conTelefono?: boolean } = {},
+) {
   const creadas: Record<string, unknown>[] = [];
   const medplum = {
     readResource: async (tipo: string) =>
       tipo === 'Appointment'
         ? turno({ conPaciente: opts.conPaciente })
-        : { resourceType: 'Patient', id: 'p1', telecom: [{ system: 'phone', value: '+5491169315830' }] },
+        : {
+            resourceType: 'Patient',
+            id: 'p1',
+            // El teléfono es opcional en el alta: hay fichas sin él.
+            telecom:
+              opts.conTelefono === false
+                ? [{ system: 'email', value: 'ana@example.com' }]
+                : [{ system: 'phone', value: '+5491169315830' }],
+          },
     // La ventana de 24 h mira Communications previas: sin ninguna, cerrada.
     searchResources: async () => [],
     searchOne: async (tipo: string) => (tipo === 'Invoice' ? opts.saldo : undefined),
@@ -90,7 +100,8 @@ function mensajes(creadas: Record<string, unknown>[]): string[] {
     .flatMap((r) => ((r.payload ?? []) as Array<{ contentString?: string }>).map((p) => p.contentString ?? ''));
 }
 
-function mockFetch(): ReturnType<typeof vi.fn> {
+/** `twilio`: qué hace la llamada a Twilio — responde ok, la rechaza, o lanza. */
+function mockFetch(opts: { twilio?: 'ok' | 'rechaza' | 'lanza' } = {}): ReturnType<typeof vi.fn> {
   const fn = vi.fn(async (url: string | URL) => {
     const u = String(url);
     if (u.includes('mercadopago.com')) {
@@ -98,6 +109,17 @@ function mockFetch(): ReturnType<typeof vi.fn> {
         ok: true,
         status: 200,
         json: async () => ({ init_point: 'https://mp.example/checkout/abc123' }),
+      } as unknown as Response;
+    }
+    if (opts.twilio === 'lanza') {
+      throw new TypeError('fetch failed: ECONNRESET');
+    }
+    if (opts.twilio === 'rechaza') {
+      return {
+        ok: false,
+        status: 400,
+        json: async () => ({ code: 63016 }),
+        text: async () => '{"code":63016}',
       } as unknown as Response;
     }
     return { ok: true, status: 201, json: async () => ({ sid: 'SM1' }), text: async () => '' } as unknown as Response;
@@ -216,6 +238,50 @@ describe('link del saldo · envío por WhatsApp', () => {
     expect(r.enviado).toBe(false);
     expect(r.mensaje).toContain('no se pudo enviar');
     expect(mensajes(creadas)).toHaveLength(0);
+  });
+
+  // `enviado` tiene que reflejar el envío REAL, no el intento. `enviarWhatsApp`
+  // NO lanza cuando el mensaje no sale: deja la Communication en un status que
+  // lo dice. Darlo por bueno le avisaría a Recepción "se lo mandamos" sobre un
+  // mensaje que nunca salió, y el saldo quedaría esperando a alguien que no
+  // recibió nada. Misma convención que `invitar-paciente` y `solicitar-turno`.
+  it('ficha sin teléfono: el link sirve, pero NO dice que se envió', async () => {
+    mockFetch();
+    const { medplum } = fakeMedplum({ saldo: invoiceSaldo('issued'), conTelefono: false });
+
+    const r = await handler(medplum, evento({ appointmentId: APPOINTMENT_ID, concepto: 'saldo', enviar: true }));
+
+    expect(r.ok).toBe(true);
+    expect(r.url).toBe('https://mp.example/checkout/abc123');
+    expect(r.enviado).toBe(false);
+    expect(r.mensaje).toContain('no salió');
+  });
+
+  it('Twilio rechaza el mensaje: el link sirve, pero NO dice que se envió', async () => {
+    mockFetch({ twilio: 'rechaza' });
+    const { medplum } = fakeMedplum({ saldo: invoiceSaldo('issued') });
+
+    const r = await handler(medplum, evento({ appointmentId: APPOINTMENT_ID, concepto: 'saldo', enviar: true }));
+
+    expect(r.ok).toBe(true);
+    expect(r.url).toBe('https://mp.example/checkout/abc123');
+    expect(r.enviado).toBe(false);
+    expect(r.mensaje).toContain('no salió');
+  });
+
+  it('si el envío explota, el link generado NO se pierde', async () => {
+    // La llamada a Twilio no tiene timeout: un ECONNRESET lanza. La preferencia
+    // de MercadoPago ya está creada y es válida — perderla con la excepción
+    // dejaría a Recepción con un error crudo y sin link que compartir.
+    mockFetch({ twilio: 'lanza' });
+    const { medplum } = fakeMedplum({ saldo: invoiceSaldo('issued') });
+
+    const r = await handler(medplum, evento({ appointmentId: APPOINTMENT_ID, concepto: 'saldo', enviar: true }));
+
+    expect(r.ok).toBe(true);
+    expect(r.url).toBe('https://mp.example/checkout/abc123');
+    expect(r.enviado).toBe(false);
+    expect(r.mensaje).toContain('ECONNRESET');
   });
 
   it('`enviar` no tiene efecto sobre la seña: ese link ya sale solo', async () => {
