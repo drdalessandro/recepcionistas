@@ -33,6 +33,7 @@ import {
 } from '@tabler/icons-react';
 import type { Invoice, Patient } from '@medplum/fhirtypes';
 import { COD_CONSENTIMIENTO } from '@bw/fhir/identifiers';
+import { esPendienteCobrable } from '@bw/lib/cobros';
 import { textoConsentimiento } from '@bw/lib/consentimiento';
 import { accionSeguridad, tituloSeguridad } from '@bw/lib/seguridad';
 import { getDisplayString } from '@medplum/core';
@@ -713,9 +714,14 @@ function PagosPendientes({
           medplum.searchResources('Invoice', { subject: `Patient/${paciente.id}`, status: 'cancelled', _count: 20 }),
         ]);
         if (activo) {
-          const esCobrable = (i: Invoice): boolean =>
-            Boolean(i.identifier?.some((x) => x.value?.startsWith('plan-') || x.value?.startsWith('saldo-')));
-          setPendientes([...issued, ...cancelled].filter(esCobrable));
+          // `cancelled` NO es lo mismo en una cuota de plan (rechazo de MP:
+          // se debe) que en un saldo de turno (turno cancelado: no se debe).
+          // Ver `esPendienteCobrable`.
+          setPendientes(
+            [...issued, ...cancelled].filter((i) =>
+              esPendienteCobrable({ status: i.status, claves: (i.identifier ?? []).map((x) => x.value ?? '') }),
+            ),
+          );
         }
       } catch {
         // sin permisos o sin datos: no mostrar el panel
