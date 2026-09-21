@@ -175,11 +175,34 @@ si se activa antes de verificar la IP, se acumulan meses de eventos con
    - Mirar `agent[0].network.address`. **Tiene que ser la IP de esa conexión.**
      Si dice `127.0.0.1`, la cadena del proxy está cortada: no seguir, revisar
      §2 antes de dejar que se acumule.
-4. **Primera corrida en seco**, para ver el volumen real antes de borrar:
-   ejecutar el bot desde el admin con `{ "dryRun": true }`. Devuelve cuántos
-   borraría sin tocar nada.
+4. **Probar la purga HOY, no en diciembre.** Con la retención en 90 días y la
+   auditoría recién encendida, la purga no toca nada durante meses: un permiso
+   mal puesto se descubriría cuando la cola ya es enorme y nadie se acuerda de
+   esto. Un cron que no hace nada y uno que falla se ven igual. Ejecutar el bot
+   desde el admin con un plazo corto y en seco:
+
+   ```json
+   { "dryRun": true, "retencionDias": 5 }
+   ```
+
+   Tiene que devolver `ok: true` y un `borrados` mayor que cero **sin borrar
+   nada**. Eso ejercita la cadena entera —permisos, búsqueda, decisión,
+   paginado— y el número lo prueba. Si devuelve `ok: false`, el mensaje dice qué
+   falta (casi siempre: permiso de lectura o borrado sobre `AuditEvent`).
+
+   `retencionDias` **solo se acepta con `dryRun`**, y esa restricción es la
+   razón de ser del parámetro: un `retencionDias: 1` de dedo gordo borraría
+   meses de evidencia sin vuelta atrás. El plazo real vive en
+   `src/lib/auditoria.ts` y se cambia con un commit que alguien revisa.
 5. **A los pocos días, mirar el crecimiento.** Es el número que decide si 90
    días es el plazo correcto o hay que bajarlo.
+
+   ⚠️ **Los comandos operativos producen picos y arruinan el promedio.** Medido
+   el 2026-09-21: una corrida de `deploy:bots` sumó **~900 eventos en un
+   minuto** (lee cada `Bot` y su `Binary` de código). Un `seed` hace lo suyo. Si
+   el total salta entre dos corridas del diagnóstico, mirá primero si alguien
+   deployó: para dimensionar la retención sirve el ritmo de un día NORMAL, no
+   el de un día de deploy.
 
 ## 5. Dos cosas que sorprenden
 
