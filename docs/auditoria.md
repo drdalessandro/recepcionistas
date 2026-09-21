@@ -181,6 +181,13 @@ si se activa antes de verificar la IP, se acumulan meses de eventos con
 5. **A los pocos días, mirar el crecimiento.** Es el número que decide si 90
    días es el plazo correcto o hay que bajarlo.
 
+   ⚠️ **Los comandos operativos producen picos y arruinan el promedio.** Medido
+   el 2026-09-21: una corrida de `deploy:bots` sumó **~900 eventos en un
+   minuto** (lee cada `Bot` y su `Binary` de código). Un `seed` hace lo suyo. Si
+   el total salta entre dos corridas del diagnóstico, mirá primero si alguien
+   deployó: para dimensionar la retención sirve el ritmo de un día NORMAL, no
+   el de un día de deploy.
+
 ## 5. Dos cosas que sorprenden
 
 **La purga NO se audita a sí misma** (corregido el 2026-09-21; acá decía lo
