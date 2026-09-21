@@ -100,13 +100,42 @@ si se activa antes de verificar la IP, se acumulan meses de eventos con
    cero borrados, que se leería como "estaba limpio".
 2. **Activar el flag** en la config del servidor. Medplum la carga con
    `file:medplum.config.json`, `aws:<path de SSM>`, `env` o una combinación
-   (`config/loader.ts:35-43`): hay que tocar **la fuente que use esa
-   instancia**, no inventar un archivo nuevo.
-   ```jsonc
-   "saveAuditEvents": true,
-   "redactAuditEvents": true   // recomendado, ver §1
+   (`config/loader.ts:35-43`), y elige la fuente por el **argumento con el que
+   arranca el proceso** (`index.ts:63`; sin argumento, `file:medplum.config.json`
+   relativo a su cwd). O sea que lo primero es averiguar **cuál usa esta
+   instancia**, no inventar un archivo nuevo:
+
+   ```bash
+   pm2 describe <nombre>       # "script args" y "exec cwd" dicen cuál y dónde
    ```
-   Reiniciar el proceso (`pm2 restart <nombre>`).
+
+   Si es un archivo (el caso normal):
+
+   ```bash
+   cd <exec cwd>
+   cp medplum.config.json medplum.config.json.bak-$(date +%F)   # primero la red
+   nano medplum.config.json                                      # agregar las dos claves
+   python3 -m json.tool medplum.config.json > /dev/null && echo "JSON válido"
+   pm2 restart <nombre> && pm2 logs <nombre> --lines 40
+   ```
+
+   Las dos claves, al mismo nivel que el resto (⚠️ **es JSON estricto**: sin
+   comentarios y sin coma de más al final):
+
+   ```json
+   "saveAuditEvents": true,
+   "redactAuditEvents": true
+   ```
+
+   Si `pm2 describe` muestra `aws:` es SSM Parameter Store: las claves son dos
+   parámetros bajo ese prefijo, y se cargan con
+   `aws ssm put-parameter --name "<prefijo>saveAuditEvents" --value "true" --type String --overwrite`.
+
+   **Volver atrás** es poner `false` y reiniciar; lo ya guardado no se borra
+   solo (lo purga `bw-purgar-auditoria` cuando cumpla su plazo).
+
+   > No hay endpoint que devuelva la config, así que **que el flag tomó se
+   > comprueba con el paso 3**: si aparecen `AuditEvent` nuevos, está activo.
 3. **Prueba de humo de la IP** — esto es lo que no se puede saltear:
    - Entrar a la app de Recepción y abrir una ficha, desde una conexión cuya IP
      pública se conozca (por ejemplo desde el celular con datos móviles).
