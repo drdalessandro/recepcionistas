@@ -1,0 +1,212 @@
+/**
+ * Retención de la auditoría.
+ *
+ * Lo que se defiende acá es la asimetría: entre guardar de más y borrar
+ * evidencia, se guarda de más. Un `AuditEvent` sin fecha se conserva; la
+ * escritura que prueba una firma vive diez años; una LECTURA de ese mismo
+ * consentimiento, noventa días, porque se generan en cada apertura de ficha.
+ */
+import { describe, expect, it } from 'vitest';
+import type { BotEvent, MedplumClient } from '@medplum/core';
+import type { AuditEvent } from '@medplum/fhirtypes';
+import {
+  RETENCION_DIAS,
+  RETENCION_FIRMA_DIAS,
+  corteDeRetencion,
+  decidirPurga,
+  esEvidenciaDeFirma,
+  type EventoAuditoria,
+} from '../src/lib/auditoria.js';
+import { handler as purgar } from '../src/bots/purgar-auditoria.js';
+
+const AHORA = new Date('2026-09-21T12:00:00.000Z');
+const haceDias = (d: number): string => new Date(AHORA.getTime() - d * 24 * 60 * 60 * 1000).toISOString();
+
+const evento = (over: Partial<EventoAuditoria> = {}): EventoAuditoria => ({
+  fechaISO: haceDias(1),
+  subtipos: ['search'],
+  entidades: ['Appointment/a1'],
+  ...over,
+});
+
+describe('decidirPurga — los dos plazos', () => {
+  it('lo común se borra a los 90 días, no antes', () => {
+    expect(decidirPurga(evento({ fechaISO: haceDias(RETENCION_DIAS - 1) }), AHORA)).toBe('conservar');
+    expect(decidirPurga(evento({ fechaISO: haceDias(RETENCION_DIAS + 1) }), AHORA)).toBe('purgar');
+  });
+
+  it('la ESCRITURA de un consentimiento vive el plazo largo', () => {
+    // Es lo que se muestra el día que alguien impugna una firma: quién la
+    // creó, cuándo y desde qué IP. Ese día puede caer años después.
+    const firma = evento({ subtipos: ['create'], entidades: ['Consent/c1'] });
+    expect(decidirPurga({ ...firma, fechaISO: haceDias(RETENCION_DIAS + 1) }, AHORA)).toBe('conservar');
+    expect(decidirPurga({ ...firma, fechaISO: haceDias(RETENCION_FIRMA_DIAS + 1) }, AHORA)).toBe('purgar');
+    // Y el DocumentReference de la evidencia, igual.
+    expect(
+      decidirPurga(
+        { ...firma, entidades: ['DocumentReference/d1'], fechaISO: haceDias(1000) },
+        AHORA,
+      ),
+    ).toBe('conservar');
+  });
+
+  it('LEER un consentimiento no es evidencia de la firma: plazo corto', () => {
+    // `bw-estado-consentimiento` lee el consentimiento en cada apertura de
+    // ficha y en cada reserva. Guardar diez años de eso cuesta como guardar la
+    // evidencia mil veces y no prueba nada sobre quién firmó.
+    for (const subtipo of ['read', 'search', 'vread', 'history']) {
+      const lectura = evento({ subtipos: [subtipo], entidades: ['Consent/c1'], fechaISO: haceDias(RETENCION_DIAS + 1) });
+      expect(esEvidenciaDeFirma(lectura), subtipo).toBe(false);
+      expect(decidirPurga(lectura, AHORA), subtipo).toBe('purgar');
+    }
+  });
+
+  it('una escritura sobre OTRO recurso no hereda el plazo largo', () => {
+    const turno = evento({ subtipos: ['update'], entidades: ['Appointment/a1'], fechaISO: haceDias(RETENCION_DIAS + 1) });
+    expect(decidirPurga(turno, AHORA)).toBe('purgar');
+  });
+
+  it('sin fecha, o con una fecha ilegible, se CONSERVA', () => {
+    // Falla cerrado: un evento que no se sabe cuándo pasó no se puede declarar
+    // viejo, y entre guardar de más y borrar evidencia, se guarda de más.
+    expect(decidirPurga(evento({ fechaISO: undefined }), AHORA)).toBe('conservar');
+    expect(decidirPurga(evento({ fechaISO: 'ayer a la tarde' }), AHORA)).toBe('conservar');
+  });
+
+  it('los plazos son los decididos, y el corte se calcula hacia atrás', () => {
+    expect(RETENCION_DIAS).toBe(90);
+    expect(RETENCION_FIRMA_DIAS).toBe(3653); // 10 años
+    expect(corteDeRetencion(AHORA, 90)).toBe(haceDias(90));
+  });
+});
+
+// ---------------------------------------------------------------------------
+
+/** Un servidor de mentira con N eventos, que respeta el filtro y el cursor. */
+function servidorCon(eventos: AuditEvent[]): { medplum: MedplumClient; borrados: string[] } {
+  const vivos = new Map(eventos.map((a) => [a.id as string, a]));
+  const borrados: string[] = [];
+  const medplum = {
+    searchResources: async (_tipo: string, query: string) => {
+      const params = new URLSearchParams(query.replace(/&/g, '&'));
+      const lts = query.match(/_lastUpdated=lt([^&]+)/)?.[1];
+      const ges = query.match(/_lastUpdated=ge([^&]+)/)?.[1];
+      const count = Number(params.get('_count') ?? 20);
+      return [...vivos.values()]
+        .filter((a) => {
+          const f = a.meta?.lastUpdated as string;
+          return (!lts || f < decodeURIComponent(lts)) && (!ges || f >= decodeURIComponent(ges));
+        })
+        .sort((a, b) => (a.meta!.lastUpdated! < b.meta!.lastUpdated! ? -1 : 1))
+        .slice(0, count);
+    },
+    deleteResource: async (_tipo: string, id: string) => {
+      vivos.delete(id);
+      borrados.push(id);
+    },
+  } as unknown as MedplumClient;
+  return { medplum, borrados };
+}
+
+function ae(id: string, dias: number, over: Partial<AuditEvent> = {}): AuditEvent {
+  const f = haceDias(dias);
+  return {
+    resourceType: 'AuditEvent',
+    id,
+    recorded: f,
+    meta: { lastUpdated: f },
+    type: { code: 'rest' },
+    agent: [],
+    source: {},
+    subtype: [{ code: 'search' }],
+    entity: [{ what: { reference: 'Appointment/a1' } }],
+    ...over,
+  } as AuditEvent;
+}
+
+const correr = (medplum: MedplumClient, input: Record<string, unknown> = {}): ReturnType<typeof purgar> =>
+  purgar(medplum, { input: { ahora: AHORA.toISOString(), ...input }, secrets: {} } as unknown as BotEvent<never>);
+
+describe('bw-purgar-auditoria', () => {
+  it('borra lo viejo, deja lo nuevo y deja la evidencia de la firma', async () => {
+    const firma = ae('firma', 200, { subtype: [{ code: 'create' }], entity: [{ what: { reference: 'Consent/c1' } }] });
+    const { medplum, borrados } = servidorCon([ae('viejo1', 100), ae('viejo2', 120), ae('nuevo', 10), firma]);
+
+    const r = await correr(medplum);
+
+    expect(r.ok).toBe(true);
+    expect(borrados.sort()).toEqual(['viejo1', 'viejo2']);
+    expect(r.borrados).toBe(2);
+    expect(r.conservados).toBe(1); // la firma; el nuevo ni se trae
+  });
+
+  it('el cursor AVANZA aunque la primera página sea toda de conservados', async () => {
+    // Sin cursor, los conservados quedan siempre al frente de la página 1 y la
+    // purga no llega nunca a los de atrás: un bucle que reporta éxito sin
+    // borrar nada. Acá hay 3 conservados más viejos que los purgables.
+    const firmas = [200, 199, 198].map((d, i) =>
+      ae(`firma${i}`, d, { subtype: [{ code: 'create' }], entity: [{ what: { reference: 'Consent/c1' } }] }),
+    );
+    const { medplum, borrados } = servidorCon([...firmas, ae('viejo', 100), ae('viejo2', 95)]);
+
+    const r = await correr(medplum, { porPagina: 3 });
+
+    expect(borrados.sort()).toEqual(['viejo', 'viejo2']);
+    expect(r.conservados).toBe(3);
+  });
+
+  it('respeta el tope por corrida y avisa que queda trabajo', async () => {
+    const { medplum, borrados } = servidorCon([100, 101, 102, 103, 104].map((d, i) => ae(`v${i}`, d)));
+
+    const r = await correr(medplum, { maxBorrados: 2 });
+
+    expect(borrados).toHaveLength(2);
+    expect(r.quedaTrabajo).toBe(true);
+  });
+
+  it('con dryRun cuenta y no borra nada', async () => {
+    // La primera corrida en producción se hace así: ver el volumen antes de
+    // borrar por primera vez.
+    const { medplum, borrados } = servidorCon([ae('v1', 100), ae('v2', 110)]);
+
+    const r = await correr(medplum, { dryRun: true });
+
+    expect(r.borrados).toBe(2);
+    expect(r.dryRun).toBe(true);
+    expect(borrados).toHaveLength(0);
+  });
+
+  it('si no puede leer los AuditEvent, lo dice en vez de reportar cero', async () => {
+    // Sin permiso, devolver `borrados: 0` se lee como "estaba limpio".
+    const roto = {
+      searchResources: async () => {
+        throw new Error('403 Forbidden');
+      },
+    } as unknown as MedplumClient;
+
+    const r = await correr(roto);
+
+    expect(r.ok).toBe(false);
+    expect(r.mensaje).toContain('403');
+    expect(r.quedaTrabajo).toBe(true);
+  });
+
+  it('un borrado que falla no frena a los demás', async () => {
+    const { medplum } = servidorCon([ae('v1', 100), ae('v2', 110)]);
+    const original = medplum.deleteResource.bind(medplum) as (t: string, id: string) => Promise<void>;
+    let primera = true;
+    (medplum as unknown as { deleteResource: unknown }).deleteResource = async (t: string, id: string) => {
+      if (primera) {
+        primera = false;
+        throw new Error('409');
+      }
+      return original(t, id);
+    };
+
+    const r = await correr(medplum);
+
+    expect(r.borrados).toBe(1);
+    expect(r.fallidos).toBe(1);
+    expect(r.mensaje).toContain('no se pudieron borrar');
+  });
+});

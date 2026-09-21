@@ -204,18 +204,26 @@ son decisiones y no implementación:
    volumen y el costo de almacenamiento son reales, y activarlo sin definir la
    purga es la clase de cosa que se descubre en la factura. Va con retención
    definida o no va.
-2. **La IP detrás de nginx**: es nuestro y lo vamos a verificar. Si la confianza
-   en el proxy no está configurada, todos los `AuditEvent` registran la IP del
-   proxy y la evidencia no sirve para lo que se la quiere.
+2. **La IP detrás de nginx**: verificado a medias, y la mitad que faltaba es la
+   buena noticia. `deploy/nginx-api-proxy.conf` frontea TODO
+   `api.medplum.com.ar` (`location /` → `127.0.0.1:8103`) y **cada** `location`
+   manda `X-Real-IP` y `X-Forwarded-For` (líneas 88-89, 123-124, 146-147,
+   160-161). Falta la otra mitad, que es del servidor y no se ve desde este
+   repo: que Medplum esté configurado para **confiar** en el proxy (el `trust
+   proxy` de Express). Sin eso lee la IP del socket —`127.0.0.1`— y los
+   `AuditEvent` guardan el proxy, no al paciente.
 3. **`Provenance` con `Signature`**: coincidimos con ustedes en la **opción 2**
    (lo escribe un bot). Es consistente con "la app pide, el bot escribe" y no
    amplía la superficie de escritura del paciente — el mismo criterio por el que
    `bw-ingreso-presencial` existe en vez de dejar que Recepción escriba `Consent`.
 
 Queda anotado en [`decisiones-pendientes.md`](decisiones-pendientes.md).
-**Antes de decidir hay que confirmar la versión de Medplum en producción**: todo
-el punto 3 sale de leer `packages/server` 5.1.39 y el repo acá fija `@medplum/core`
-en **5.1.24**, que es la del cliente, no la del servidor.
+
+✅ **La versión ya está confirmada: producción corre 5.1.39** (Andrés,
+2026-09-21). O sea que su análisis sale del código exacto que está corriendo y
+se aplica tal cual — era la duda que teníamos y ya no existe. De paso, este
+repo pasó de `5.1.24` a `5.1.39` en los cinco paquetes del cliente, así que
+cliente y servidor quedan en la misma versión.
 
 ## 7. Resumen para su backlog
 
