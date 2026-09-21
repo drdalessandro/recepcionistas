@@ -368,11 +368,20 @@ export const SERVICIOS: Servicio[] = [
     nota: 'Precio = consulta (2026-07-20); si cambia, ajustar acá y avisar al portal.',
   },
 
-  // ---------------------- 11 · PREAPERTURA (promoción temporal) ----------------------
+  // ---------------------- 11 · TEST (servicios de prueba) ----------------------
   //
-  // Dos productos al 98 % off para la etapa previa a la apertura (Andrés,
-  // 2026-09-20; arrancaron al 90 % y bajaron a 98 % el mismo día). Son códigos
-  // PROPIOS y no un descuento sobre los de siempre, por dos motivos:
+  // Dos productos al **99,9 % off** para probar el circuito de turnos y cobros
+  // con plata real pero despreciable (Andrés: 90 % el 2026-09-20, 98 % el mismo
+  // día, 99,9 % y renombrados a TEST el 2026-09-21).
+  //
+  // ⚠️ LOS CÓDIGOS SIGUEN DICIENDO `PREAPERTURA` a propósito, aunque el nombre
+  // visible diga TEST. La regla de oro del catálogo es que los códigos no
+  // cambian: hay turnos, Invoices y ChargeItems que ya los referencian —entre
+  // ellos la teleconsulta reservada y pagada el 2026-09-20— y renombrarlos los
+  // dejaría sin servicio que resolver, que es el "Servicio desconocido" de
+  // siempre. El nombre es la vidriera; el código es el contrato.
+  //
+  // Son códigos PROPIOS y no un descuento sobre los de siempre, por dos motivos:
   //
   //  1. No existe mecanismo genérico de descuento en el sistema. Los que hay
   //     son de producto (combo, paquete) o de cliente (FM, socio a la carta).
@@ -387,8 +396,8 @@ export const SERVICIOS: Servicio[] = [
   // Y poner `PREAPERTURA = false` (arriba de todo): eso devuelve a la vidriera
   // las teleconsultas de lista, que mientras tanto están ocultas.
   //
-  // `fmAplica: false` en los dos: un 20 % de Founding Member encima de un 98 %
-  // ya aplicado no es una promoción, es un error de cálculo.
+  // `fmAplica: false` en los dos: un 20 % de Founding Member encima de un
+  // 99,9 % ya aplicado no es una promoción, es un error de cálculo.
   //
   // "PREAPERTURA" va en MAYÚSCULAS y no en negrita (pedido de Andrés,
   // 2026-09-20: que se distinga). El campo es `ActivityDefinition.title`, un
@@ -406,24 +415,24 @@ export const SERVICIOS: Servicio[] = [
   // La mayúscula distingue en los tres lados y sigue siendo texto.
   {
     codigo: 'HBOT_MULTIPLAZA_PREAPERTURA',
-    nombre: 'Cámara Hiperbárica (HBOT) — Multiplaza PREAPERTURA',
+    nombre: 'Cámara Hiperbárica (HBOT) — Multiplaza TEST',
     categoria: 'HBOT',
     duracionMin: 60,
-    // USD 1,60 = el 2 % de los 80 de lista (98 % off).
-    precioUSD: 1.6,
+    // USD 0,08 = el 0,1 % de los 80 de lista (99,9 % off).
+    precioUSD: 0.08,
     requierePrescripcion: false,
     // MISMA regla que el Multiplaza real, piso de 3 incluido (decisión de
     // Andrés, 2026-09-20). Con `POR_SESION` el precio saldría por un camino que
     // el Multiplaza no usa, y la prueba dejaría de reflejar producción: una
-    // persona sola paga USD 4,80, no USD 1,60. Es el mismo mecanismo que
-    // produjo la seña de $174.000 del 2026-09-11, acá con plata chica y a la
-    // vista.
+    // persona sola paga USD 0,24, no USD 0,08 — al TC 1535, $368,40 y no
+    // $122,80. Es el mismo mecanismo que produjo la seña de $174.000 del
+    // 2026-09-11, acá con plata chica y a la vista.
     reglaPricing: 'HBOT_MULTIPLAZA',
     split: BW100,
     fmAplica: false,
     orden: 23, // pegado al Multiplaza de lista
-    descripcion: 'Sesión grupal de hasta 6 personas, con precio de preapertura.',
-    nota: 'Promoción de preapertura (98 % off). Piso de facturación de 3 personas, igual que el Multiplaza de lista.',
+    descripcion: 'Sesión grupal de hasta 6 personas. Servicio de PRUEBA del sistema.',
+    nota: 'Servicio de TEST (99,9 % off). Piso de facturación de 3 personas, igual que el Multiplaza de lista: una sola persona paga por tres.',
   },
   {
     codigo: 'TELECONSULTA_PREAPERTURA_MED_DALESSANDRO',
@@ -431,7 +440,7 @@ export const SERVICIOS: Servicio[] = [
     // apellido, que son las dos palabras con las que se la va a buscar en el
     // modal de reserva — el buscador filtra por este texto (ver el comentario
     // de `teleconsulta()` más abajo, y el reporte del 2026-09-17).
-    nombre: "Teleconsulta PREAPERTURA — Dr. D'Alessandro",
+    nombre: "Teleconsulta TEST — Dr. D'Alessandro",
     categoria: 'CONSULTA',
     modalidad: 'virtual',
     // 20 minutos (Andrés, 2026-09-20), no los 60 de la teleconsulta de lista.
@@ -443,10 +452,10 @@ export const SERVICIOS: Servicio[] = [
     // también la teleconsulta de lista) y no se tomó.
     duracionMin: 20,
     precioUSD: 0,
-    // ARS 3.000 = el 2 % de los 150.000 de su teleconsulta de cardiología
-    // (98 % off). Va en pesos y no en dólares, igual que todas las consultas:
+    // ARS 150 = el 0,1 % de los 150.000 de su teleconsulta de cardiología
+    // (99,9 % off). Va en pesos y no en dólares, igual que todas las consultas:
     // no se convierte ni se mueve con el TC.
-    precioARS: 3_000,
+    precioARS: 150,
     practitionerCodigo: 'MED_DALESSANDRO',
     requierePrescripcion: false,
     reglaPricing: 'POR_SESION',
@@ -455,9 +464,9 @@ export const SERVICIOS: Servicio[] = [
     orden: 16, // después de la teleconsulta de lista (15)
     categoriaComercial: ESPECIALIDADES.cardiologia,
     descripcion:
-      'Consulta de cardiología por videollamada, desde donde estés, con precio de preapertura. ' +
+      'Consulta de cardiología por videollamada, desde donde estés. Servicio de PRUEBA del sistema. ' +
       'Antes del turno podés subir tus estudios para que el profesional los revise.',
-    nota: 'Promoción de preapertura (98 % off), 20 minutos. Virtual ⇒ se cobra el 100 % por adelantado, sin saldo.',
+    nota: 'Servicio de TEST (99,9 % off), 20 minutos. Virtual ⇒ se cobra el 100 % por adelantado, sin saldo.',
   },
 ];
 

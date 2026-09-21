@@ -4,9 +4,14 @@ import { calcularCobro, calcularSenaARS, fraccionAnticipada } from '../src/lib/p
 import { buildActivityDefinition, buildSeed } from '../src/seed/builders.js';
 
 /**
- * Los dos productos de PREAPERTURA (Andrés, 2026-09-20): Multiplaza y
- * teleconsulta al 98 % off, para probar el circuito completo de turnos mientras
- * el centro está cerrado. Arrancaron al 90 % y bajaron a 98 % el mismo día.
+ * Los dos servicios de TEST (Andrés): Multiplaza y teleconsulta al **99,9 %
+ * off**, para probar el circuito completo de turnos y cobros con plata real
+ * pero despreciable. 90 % y 98 % el 2026-09-20; 99,9 % y renombrados a TEST el
+ * 2026-09-21.
+ *
+ * Los CÓDIGOS siguen diciendo `PREAPERTURA` aunque el nombre visible diga TEST:
+ * hay turnos y cobros que ya los referencian y renombrarlos los dejaría sin
+ * servicio que resolver.
  *
  * Lo que fijan estos casos no es el precio, que va a cambiar: son las dos
  * decisiones que se tomaron a conciencia y que a alguien le va a parecer un
@@ -18,15 +23,15 @@ const MULTIPLAZA = 'HBOT_MULTIPLAZA_PREAPERTURA';
 const TELECONSULTA = 'TELECONSULTA_PREAPERTURA_MED_DALESSANDRO';
 
 describe('preapertura · los dos servicios existen y son promocionales', () => {
-  it('están en el catálogo con el 98 % aplicado sobre el precio de lista', () => {
-    // 1,60 = el 2 % de los 80 del Multiplaza; 3.000 = el 2 % de los 150.000
+  it('están en el catálogo con el 99,9 % aplicado sobre el precio de lista', () => {
+    // 0,08 = el 0,1 % de los 80 del Multiplaza; 150 = el 0,1 % de los 150.000
     // de la teleconsulta de cardiología.
-    expect(SERVICIOS_POR_CODIGO.get(MULTIPLAZA)?.precioUSD).toBe(1.6);
-    expect(SERVICIOS_POR_CODIGO.get(TELECONSULTA)?.precioARS).toBe(3_000);
+    expect(SERVICIOS_POR_CODIGO.get(MULTIPLAZA)?.precioUSD).toBe(0.08);
+    expect(SERVICIOS_POR_CODIGO.get(TELECONSULTA)?.precioARS).toBe(150);
   });
 
   it('ninguno acumula el descuento de Founding Member', () => {
-    // Un 20 % encima de un 98 % ya aplicado no es una promoción, es un error
+    // Un 20 % encima de un 99,9 % ya aplicado no es una promoción, es un error
     // de cálculo.
     expect(SERVICIOS_POR_CODIGO.get(MULTIPLAZA)?.fmAplica).toBe(false);
     expect(SERVICIOS_POR_CODIGO.get(TELECONSULTA)?.fmAplica).toBe(false);
@@ -40,7 +45,7 @@ describe('preapertura · los dos servicios existen y son promocionales', () => {
     expect(SERVICIOS_POR_CODIGO.get('TELECONSULTA_MED_DALESSANDRO')?.precioARS).toBe(150_000);
   });
 
-  it('"PREAPERTURA" va en mayúsculas en los dos nombres, y sigue siendo texto', () => {
+  it('"TEST" va en mayúsculas en los dos nombres, y sigue siendo texto', () => {
     // Andrés pidió que se distinga (2026-09-20). El título es un `string` de
     // FHIR, así que no hay negrita: la mayúscula es lo que se distingue en el
     // portal, en Recepción y en los WhatsApp sin dejar de ser buscable. Si
@@ -48,8 +53,11 @@ describe('preapertura · los dos servicios existen y son promocionales', () => {
     // de reserva deja de encontrarlo por esa palabra.
     for (const codigo of [MULTIPLAZA, TELECONSULTA]) {
       const nombre = SERVICIOS_POR_CODIGO.get(codigo)?.nombre ?? '';
-      expect(nombre).toContain('PREAPERTURA');
-      expect(nombre.toLowerCase()).toContain('preapertura'); // ASCII, buscable
+      expect(nombre).toContain('TEST');
+      expect(nombre.toLowerCase()).toContain('test'); // ASCII, buscable
+      // Y el CÓDIGO no cambió: los turnos y cobros que ya lo referencian
+      // tienen que seguir resolviendo (regla de oro del catálogo).
+      expect(codigo).toContain('PREAPERTURA');
     }
   });
 });
@@ -64,22 +72,22 @@ describe('preapertura · Multiplaza: el piso de 3 se mantiene', () => {
     // producción. Es el mismo mecanismo que produjo la seña de $174.000 del
     // 2026-09-11, acá con plata chica y a la vista.
     //
-    // Si esto empieza a dar 2.320 (USD 1,60 × 1), alguien le sacó el piso:
-    // eso es una decisión comercial abierta, no un arreglo.
-    expect(cobro(1)).toBe(6_960); // USD 1,60 × 3 × 1450
-    expect(cobro(2)).toBe(6_960);
-    expect(cobro(3)).toBe(6_960);
+    // Si esto empieza a dar 116 (USD 0,08 × 1), alguien le sacó el piso: eso
+    // es una decisión comercial abierta, no un arreglo.
+    expect(cobro(1)).toBe(348); // USD 0,08 × 3 × 1450
+    expect(cobro(2)).toBe(348);
+    expect(cobro(3)).toBe(348);
   });
 
   it('a partir de tres sí cobra por persona', () => {
-    expect(cobro(4)).toBe(9_280); // USD 6,40
-    expect(cobro(6)).toBe(13_920); // USD 9,60
+    expect(cobro(4)).toBe(464); // USD 0,32
+    expect(cobro(6)).toBe(696); // USD 0,48
   });
 
   it('el precio con decimales no deja centavos sueltos en pesos', () => {
-    // USD 1,60 es el primer precio del catálogo que no es entero: 1.6 × 3 en
-    // punto flotante da 4.800000000000001, y eso multiplicado por el TC tiene
-    // que salir en pesos enteros igual.
+    // USD 0,08 no es entero y 0.08 × 3 en punto flotante da
+    // 0.24000000000000002: multiplicado por el TC tiene que salir en pesos
+    // enteros igual.
     expect(Number.isInteger(cobro(1))).toBe(true);
     expect(Number.isInteger(cobro(5))).toBe(true);
   });
@@ -91,9 +99,9 @@ describe('preapertura · Multiplaza: el piso de 3 se mantiene', () => {
       tc: TC,
       fraccion: fraccionAnticipada(SERVICIOS_POR_CODIGO.get(MULTIPLAZA)?.modalidad),
     });
-    expect(totalARS).toBe(6_960);
-    expect(senaARS).toBe(3_480);
-    expect(totalARS - senaARS).toBe(3_480);
+    expect(totalARS).toBe(348);
+    expect(senaARS).toBe(174);
+    expect(totalARS - senaARS).toBe(174);
   });
 });
 
@@ -110,8 +118,8 @@ describe('preapertura · teleconsulta: el 100 % por adelantado, sin saldo', () =
       tc: TC,
       fraccion: fraccionAnticipada(servicio?.modalidad),
     });
-    expect(totalARS).toBe(3_000);
-    expect(senaARS).toBe(3_000);
+    expect(totalARS).toBe(150);
+    expect(senaARS).toBe(150);
     // Lo que importa: no queda nada pendiente, así que no se emite Invoice de
     // saldo y el link de saldo no aplica.
     expect(totalARS - senaARS).toBe(0);
@@ -119,7 +127,7 @@ describe('preapertura · teleconsulta: el 100 % por adelantado, sin saldo', () =
 
   it('el precio va en pesos: no se mueve con el tipo de cambio', () => {
     const conOtroTC = calcularCobro([{ tipo: 'servicio', codigo: TELECONSULTA }], { tc: 3000 }).totalARS;
-    expect(conOtroTC).toBe(3_000);
+    expect(conOtroTC).toBe(150);
   });
 
   it('dura 20 minutos, y la de lista sigue durando 60', () => {
@@ -133,7 +141,7 @@ describe('preapertura · teleconsulta: el 100 % por adelantado, sin saldo', () =
   it('en la góndola queda SOLA: las teleconsultas de lista se publican ocultas', () => {
     // Andrés, 2026-09-20: "que sólo quede Teleconsulta Preapertura, las otras
     // quitarlas, para no confundir". La de cardiología a $150.000 aparecía
-    // pegada a la de preapertura a $3.000.
+    // pegada a la de prueba.
     //
     // Este test es de la ETAPA: cuando se abra el centro y `PREAPERTURA` pase
     // a false, la primera aserción es la que tiene que cambiar (y la de abajo
