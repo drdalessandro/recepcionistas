@@ -164,9 +164,15 @@ async function main(): Promise<void> {
     console.log(`  ${String(n).padStart(3)} × ${d}${nota}`);
   }
 
-  // Redacción: se mira sobre los más NUEVOS porque no es retroactiva — los
-  // guardados antes del cambio conservan los nombres hasta que la purga llegue.
+  // Redacción. La pregunta es "¿tomó?", y la contesta UNO solo: el más nuevo.
+  // El conteo sobre los diez no alcanza —la redacción no es retroactiva, así
+  // que los anteriores al cambio siguen trayendo nombres y el número queda
+  // alto aunque haya tomado hace un minuto—. Además se busca el ÚLTIMO con
+  // nombres: su hora es el momento en que el cambio empezó a aplicarse.
   const conNombres = eventos.filter((ae) => traeNombres(nombres(ae))).length;
+  const masNuevoRedactado = eventos.length > 0 && !traeNombres(nombres(eventos[0] as AuditEvent));
+  const ultimoConNombres = eventos.find((ae) => traeNombres(nombres(ae)));
+  const cuandoUltimoConNombres = ultimoConNombres?.recorded ?? ultimoConNombres?.meta?.lastUpdated;
 
   const veredicto = veredictoIp(eventos.map((ae) => direccion(ae)));
   const soloBots = eventos.every((ae) => esBot(ae));
@@ -179,14 +185,20 @@ async function main(): Promise<void> {
   }
   console.log(`  Retención: ${RETENCION_DIAS} días · ${RETENCION_FIRMA_DIAS} días la evidencia de una firma`);
   if (eventos.length > 0) {
-    console.log(
-      conNombres === 0
-        ? `  Redacción: ✓ ninguno de los últimos ${eventos.length} trae nombres (redactAuditEvents activo).`
-        : `  Redacción: ${conNombres} de los últimos ${eventos.length} todavía traen nombres propios.` +
-            (conNombres < eventos.length
-              ? ' Los viejos los conservan: la redacción no es retroactiva.'
-              : ' Si ya activaste redactAuditEvents, generá tráfico nuevo y repetí.'),
-    );
+    if (masNuevoRedactado) {
+      console.log('  Redacción: ✓ el evento MÁS NUEVO ya sale sin nombres → redactAuditEvents tomó.');
+      if (cuandoUltimoConNombres) {
+        console.log(
+          `             Los ${conNombres} que todavía los traen son anteriores al cambio ` +
+            `(el último, ${fmt.format(new Date(cuandoUltimoConNombres))}). No es retroactiva:`,
+        );
+        console.log('             esos conservan los nombres hasta que la purga los levante.');
+      }
+    } else {
+      console.log('  Redacción: ⚠ el evento MÁS NUEVO todavía trae nombres propios.');
+      console.log('             Si ya activaste redactAuditEvents y reiniciaste, generá tráfico');
+      console.log('             nuevo (abrí una ficha) y repetí: quizá estos son todos de antes.');
+    }
   }
   console.log('');
 

@@ -285,3 +285,27 @@ describe('traeNombres — verificar redactAuditEvents', () => {
     expect(traeNombres(['   '])).toBe(false);
   });
 });
+
+describe('redacción: la pregunta la contesta el evento MÁS NUEVO', () => {
+  // Del más nuevo al más viejo, como los devuelve `_sort=-_lastUpdated`.
+  const conNombre = ['Valentina Pereyra'];
+  const redactado = [undefined, undefined];
+
+  it('el conteo solo NO alcanza: los viejos conservan los nombres', () => {
+    // Caso real del 2026-09-21: 8 de los últimos 10 traían nombres y aun así
+    // el flag había tomado hacía minutos. Mirar el número engaña; mirar el
+    // primero, no.
+    const pagina = [redactado, redactado, conNombre, conNombre, conNombre];
+    expect(pagina.filter(traeNombres)).toHaveLength(3);
+    expect(traeNombres(pagina[0] as string[])).toBe(false); // tomó
+  });
+
+  it('si el más nuevo TODAVÍA trae nombres, no tomó', () => {
+    expect(traeNombres([conNombre, redactado][0] as string[])).toBe(true);
+  });
+
+  it('el último con nombres marca cuándo empezó a aplicarse', () => {
+    const pagina = [redactado, conNombre, conNombre];
+    expect(pagina.findIndex(traeNombres)).toBe(1);
+  });
+});
