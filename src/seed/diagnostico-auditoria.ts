@@ -10,7 +10,7 @@
  *
  *   1. ¿`saveAuditEvents` tomó? → si hay eventos, sí. No hay endpoint que
  *      devuelva la config del servidor, así que esta es LA forma de saberlo.
- *   2. ¿La IP es la del cliente o la del proxy? → `agent[0].network.address`.
+ *   2. ¿La IP es la del cliente o la del proxy? → `agent[].network.address`.
  *      Si todas dicen `127.0.0.1`, la cadena del proxy está cortada y la
  *      auditoría no sirve para lo único que se la quiere.
  *
@@ -19,7 +19,15 @@
 import 'dotenv/config';
 import { MedplumClient } from '@medplum/core';
 import type { AuditEvent } from '@medplum/fhirtypes';
-import { RETENCION_DIAS, RETENCION_FIRMA_DIAS, esDireccionLocal, veredictoIp } from '../lib/auditoria.js';
+import {
+  RETENCION_DIAS,
+  RETENCION_FIRMA_DIAS,
+  direccionDe,
+  esDireccionLocal,
+  requestorDe,
+  traeNombres,
+  veredictoIp,
+} from '../lib/auditoria.js';
 
 function requireEnv(nombre: string): string {
   const v = process.env[nombre];
@@ -62,12 +70,37 @@ function etiqueta(ae: AuditEvent): string {
 
 /** ¿El agente es uno de nuestros bots? Todos se llaman `bw-*`. */
 function esBot(ae: AuditEvent): boolean {
-  return (ae.agent?.[0]?.who?.display ?? '').startsWith('bw-') || etiqueta(ae) === 'execute';
+  return (quien(ae) ?? '').startsWith('bw-') || etiqueta(ae) === 'execute';
+}
+
+/** Los agentes del evento, en la forma que espera `src/lib/auditoria.ts`. */
+function agentes(ae: AuditEvent): { direccion?: string; nombre?: string; esRequestor?: boolean }[] {
+  return (ae.agent ?? []).map((a) => ({
+    direccion: a.network?.address,
+    nombre: a.who?.display ?? a.who?.reference,
+    esRequestor: a.requestor,
+  }));
+}
+
+/**
+ * Los `display` del evento: los tres lugares donde `redactAuditEvents` los
+ * vacía (`agent[].who`, `entity[].what`, `source.observer`).
+ */
+function nombres(ae: AuditEvent): (string | undefined)[] {
+  return [
+    ...(ae.agent ?? []).map((a) => a.who?.display),
+    ...(ae.entity ?? []).map((e) => e.what?.display),
+    ae.source?.observer?.display,
+  ];
+}
+
+/** La IP del evento, mirando TODOS los agentes (ver `direccionDe`). */
+function direccion(ae: AuditEvent): string | undefined {
+  return direccionDe(agentes(ae));
 }
 
 function quien(ae: AuditEvent): string {
-  const a = ae.agent?.[0];
-  return a?.who?.display ?? a?.who?.reference ?? '(sin agente)';
+  return requestorDe(agentes(ae)) ?? '(sin agente)';
 }
 
 async function main(): Promise<void> {
@@ -98,7 +131,7 @@ async function main(): Promise<void> {
 
   console.log(`=== Últimos ${eventos.length} eventos ===`);
   for (const ae of eventos) {
-    const ip = ae.agent?.[0]?.network?.address;
+    const ip = direccion(ae);
     const marca = ip ? (esDireccionLocal(ip) ? `${ip}  ⚠ local` : ip) : '(sin dirección)';
     const cuando = ae.recorded ?? ae.meta?.lastUpdated;
     console.log(
@@ -122,16 +155,20 @@ async function main(): Promise<void> {
   // que diez filas sueltas.
   const porDireccion = new Map<string, number>();
   for (const ae of eventos) {
-    const d = ae.agent?.[0]?.network?.address ?? '(sin dirección)';
+    const d = direccion(ae) ?? '(sin dirección)';
     porDireccion.set(d, (porDireccion.get(d) ?? 0) + 1);
   }
   console.log('\n=== Direcciones vistas ===');
   for (const [d, n] of [...porDireccion.entries()].sort((a, b) => b[1] - a[1])) {
-    const nota = d === '(sin dirección)' ? ' (ejecución de bot: no lleva IP)' : esDireccionLocal(d) ? '  ⚠ local' : '';
+    const nota = d === '(sin dirección)' ? ' (ejecución de bot: NINGÚN agente lleva IP)' : esDireccionLocal(d) ? '  ⚠ local' : '';
     console.log(`  ${String(n).padStart(3)} × ${d}${nota}`);
   }
 
-  const veredicto = veredictoIp(eventos.map((ae) => ae.agent?.[0]?.network?.address));
+  // Redacción: se mira sobre los más NUEVOS porque no es retroactiva — los
+  // guardados antes del cambio conservan los nombres hasta que la purga llegue.
+  const conNombres = eventos.filter((ae) => traeNombres(nombres(ae))).length;
+
+  const veredicto = veredictoIp(eventos.map((ae) => direccion(ae)));
   const soloBots = eventos.every((ae) => esBot(ae));
   console.log(`\n=== Veredicto ===`);
   if (total !== undefined) {
@@ -140,7 +177,18 @@ async function main(): Promise<void> {
   if (masViejo) {
     console.log(`  El más viejo es del ${fmt.format(new Date(masViejo))} → se está guardando desde entonces.`);
   }
-  console.log(`  Retención: ${RETENCION_DIAS} días · ${RETENCION_FIRMA_DIAS} días la evidencia de una firma\n`);
+  console.log(`  Retención: ${RETENCION_DIAS} días · ${RETENCION_FIRMA_DIAS} días la evidencia de una firma`);
+  if (eventos.length > 0) {
+    console.log(
+      conNombres === 0
+        ? `  Redacción: ✓ ninguno de los últimos ${eventos.length} trae nombres (redactAuditEvents activo).`
+        : `  Redacción: ${conNombres} de los últimos ${eventos.length} todavía traen nombres propios.` +
+            (conNombres < eventos.length
+              ? ' Los viejos los conservan: la redacción no es retroactiva.'
+              : ' Si ya activaste redactAuditEvents, generá tráfico nuevo y repetí.'),
+    );
+  }
+  console.log('');
 
   switch (veredicto) {
     case 'sin-eventos':

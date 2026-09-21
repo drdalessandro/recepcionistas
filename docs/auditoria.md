@@ -23,21 +23,45 @@ tema ya nos mintió una vez (`cronTimer`).
 | `redactAuditEvents` | Borra el `display` de las referencias del evento. | `types.ts:176` |
 
 `Repository.logEvent` (`fhir/repo.ts:2310`) se llama en create, read, vread,
-history, update, delete, patch y search. La **única** exclusión es
-`if (isSystem && (isReadOnlyAction(subtype) || resourceType === 'AuditEvent'))`:
-solo tapa las lecturas hechas con identidad `system` y la auditoría sobre sí
-misma **cuando el autor es system**. Un bot no es `system` — ver §5.
+history, update, delete, patch y search. Pero **no todo lo que se registra se
+guarda**: la guarda del save (`repo.ts:2373`) es
+
+```ts
+if (getConfig().saveAuditEvents && isResource(resource) && resource?.resourceType !== 'AuditEvent')
+```
+
+De ahí salen dos cosas que conviene tener claras y que no son obvias:
+
+- **Las búsquedas NO se persisten.** Un `search` no trae recurso, así que
+  `isResource(resource)` da falso. Verificado contra producción el 2026-09-21:
+  con la app abierta y polleando, entre dos corridas del diagnóstico solo
+  aparecieron `read`. El polling de Avisos cada 30 segundos no deja rastro; los
+  `read` que dispara, sí.
+- **Un `AuditEvent` sobre un `AuditEvent` no se guarda nunca**, sea quien sea el
+  autor. Por eso la purga no genera cola nueva (§5).
+
+Hay además una salida temprana en `logEvent` —
+`if (isSystem && (isReadOnlyAction(subtype) || resourceType === 'AuditEvent')) return`—
+que ni siquiera registra las lecturas hechas con identidad `system`.
 
 El evento guarda `agent.network.address` con la IP
 (`util/auditevent.ts:231-233`), `who`, `entity.what`, el subtipo, el resultado y
 la duración.
 
-**Sobre `redactAuditEvents`**: lo recomendamos en `true`. El evento sigue
-identificando el recurso por referencia (`Patient/abc`), que es lo que sirve
-como prueba, pero deja de arrastrar el **nombre** de la paciente al `display`.
-Es el principio 3 del `CLAUDE.md` aplicado a un registro que va a ser largo y
-que mira más gente que la historia clínica. Se puede poner global o por
-proyecto (`Project.setting` con `name: 'redactAuditEvents'`).
+**Sobre `redactAuditEvents`** (activado en producción el 2026-09-21): el evento
+sigue identificando el recurso por referencia (`Practitioner/074875f0…`), que es
+lo que sirve como prueba, pero deja de arrastrar el **nombre** al `display`. Es
+el principio 3 del `CLAUDE.md` aplicado a un registro que va a ser largo y que
+mira más gente que la historia clínica. Se puede poner global o por proyecto
+(`Project.setting` con `name: 'redactAuditEvents'`).
+
+Vacía el `display` en los **tres** lugares donde el evento lleva una referencia
+—`agent[].who`, `entity[].what` y `source.observer`— vía
+`applyOptionalRedaction` (`util/auditevent.ts:298`).
+
+⚠️ **No es retroactiva.** Se aplica al escribir: los eventos guardados antes del
+cambio conservan los nombres hasta que la purga los levante. `auditoria:check`
+lo mira sobre los más nuevos por eso, y lo dice en el veredicto.
 
 ## 2. La IP del cliente — ya funciona, y por qué
 
@@ -59,9 +83,9 @@ habría que revisarlo.
 
 ## 3. La purga — `bw-purgar-auditoria`
 
-Un evento por cada interacción, lecturas incluidas, y la app de Recepción sola
-relee Avisos cada 30 segundos: sin purga, la tabla no tiene techo. **Dos
-plazos**, en `src/lib/auditoria.ts`:
+Un evento por cada interacción sobre un recurso, lecturas incluidas: sin purga,
+la tabla no tiene techo. (Las búsquedas no cuentan — ver §1.) **Dos plazos**, en
+`src/lib/auditoria.ts`:
 
 | Qué | Plazo | Por qué |
 |---|---|---|
@@ -159,12 +183,11 @@ si se activa antes de verificar la IP, se acumulan meses de eventos con
 
 ## 5. Dos cosas que sorprenden
 
-**La purga se audita a sí misma.** La exclusión de Medplum tapa los
-`AuditEvent` sobre `AuditEvent` solo cuando el autor es `system`, y un bot no lo
-es: cada borrado deja su propio evento de `delete`. No es un bucle infinito
-—esos eventos son de hoy y recién serán purgables dentro de 90 días, y para
-entonces los borra una corrida futura— pero explica por qué los números no
-bajan tanto como uno esperaría en las primeras corridas.
+**La purga NO se audita a sí misma** (corregido el 2026-09-21; acá decía lo
+contrario). La guarda de `repo.ts:2373` excluye `resourceType === 'AuditEvent'`
+**para cualquier autor**, no solo para `system`: borrar no genera cola nueva.
+Lo que sí es cierto es que un bot no es `system`, y por eso las demás
+operaciones de los bots sí quedan registradas.
 
 **Esto no reemplaza el hash.** La integridad del documento firmado la prueba el
 `hash` del adjunto contra la **versión 1** del recurso (`/_history`), no el

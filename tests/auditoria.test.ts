@@ -14,7 +14,10 @@ import {
   RETENCION_FIRMA_DIAS,
   corteDeRetencion,
   decidirPurga,
+  direccionDe,
   esEvidenciaDeFirma,
+  requestorDe,
+  traeNombres,
   veredictoIp,
   type EventoAuditoria,
 } from '../src/lib/auditoria.js';
@@ -233,5 +236,52 @@ describe('veredictoIp — la prueba de humo, en una función', () => {
     // otro es que solo hubo movimiento interno.
     expect(veredictoIp([undefined, undefined])).toBe('sin-direccion');
     expect(veredictoIp(['   '])).toBe('sin-direccion');
+  });
+});
+
+describe('direccionDe / requestorDe — FHIR permite varios agentes', () => {
+  // La forma real de un evento de ejecución de bot, tal como lo devolvió
+  // producción el 2026-09-21: primero la PERSONA que lo disparó (sin IP),
+  // después el bot.
+  const ejecucionDeBot = [
+    { nombre: 'Valentina Pereyra', esRequestor: true },
+    { nombre: 'bw-estado-seguridad', esRequestor: false },
+  ];
+
+  it('la dirección se busca en TODOS los agentes, no solo en el primero', () => {
+    // Mirar `agent[0]` es el error fácil: reportaría "(sin dirección)" sobre un
+    // evento que sí la tiene, solo porque el orden vino al revés.
+    expect(direccionDe([{ nombre: 'app' }, { direccion: '181.104.26.111' }])).toBe('181.104.26.111');
+    expect(direccionDe([{ direccion: '  ' }, { direccion: '181.104.26.111' }])).toBe('181.104.26.111');
+  });
+
+  it('una ejecución de bot no trae IP en NINGÚN agente', () => {
+    // No es una falla del proxy: ese tipo de evento no la lleva. Lo que sí la
+    // lleva son las interacciones (read, update, create).
+    expect(direccionDe(ejecucionDeBot)).toBeUndefined();
+  });
+
+  it('quién lo hizo es el requestor: la persona, no el bot', () => {
+    expect(requestorDe(ejecucionDeBot)).toBe('Valentina Pereyra');
+    // Aunque venga en segundo lugar.
+    expect(requestorDe([...ejecucionDeBot].reverse())).toBe('Valentina Pereyra');
+    // Sin requestor marcado, el primero.
+    expect(requestorDe([{ nombre: 'bw-recordatorios' }])).toBe('bw-recordatorios');
+    expect(requestorDe([])).toBeUndefined();
+  });
+});
+
+describe('traeNombres — verificar redactAuditEvents', () => {
+  it('detecta cualquier nombre propio que haya quedado', () => {
+    expect(traeNombres(['Valentina Pereyra'])).toBe(true);
+    expect(traeNombres([undefined, 'bw-estado-seguridad', undefined])).toBe(true);
+  });
+
+  it('un evento redactado no trae ninguno', () => {
+    // Queda la referencia (Practitioner/074875f0…), que es lo que prueba, sin
+    // el nombre. El servidor vacía el `display` en los tres lugares.
+    expect(traeNombres([undefined, undefined, undefined])).toBe(false);
+    expect(traeNombres([])).toBe(false);
+    expect(traeNombres(['   '])).toBe(false);
   });
 });

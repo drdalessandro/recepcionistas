@@ -1,11 +1,18 @@
 /**
  * Retención de la auditoría (`AuditEvent`) — lógica pura, sin FHIR ni red.
  *
- * Con `saveAuditEvents` activado, Medplum guarda un `AuditEvent` por CADA
- * interacción, lecturas incluidas (`read`, `vread`, `search`, `history`). Eso
- * es exactamente lo que se quiere —"quién abrió el consentimiento de esta
- * paciente, cuándo y desde qué IP"— y también lo que hace que la tabla crezca
- * sin techo: la app de Recepción sola relee Avisos cada 30 segundos.
+ * Con `saveAuditEvents` activado, Medplum guarda un `AuditEvent` por cada
+ * interacción **sobre un recurso concreto**, lecturas incluidas (`read`,
+ * `vread`, `history`). Eso es exactamente lo que se quiere —"quién abrió el
+ * consentimiento de esta paciente, cuándo y desde qué IP"— y también lo que
+ * hace que la tabla crezca sin techo.
+ *
+ * Las BÚSQUEDAS no se guardan: la guarda del servidor es
+ * `saveAuditEvents && isResource(resource)` (`fhir/repo.ts:2373`) y un `search`
+ * no trae recurso. Verificado el 2026-09-21 contra producción — entre dos
+ * corridas del diagnóstico, con la app abierta, solo aparecieron `read`. Es una
+ * buena noticia para el volumen y conviene no olvidarla: el polling de Avisos
+ * cada 30 segundos NO deja rastro, los `read` que dispara sí.
  *
  * Por eso la purga se decidió **junto con la activación** y no después (Andrés,
  * 2026-09-21): un registro que nadie borra deja de ser una decisión y pasa a
@@ -147,4 +154,52 @@ export function veredictoIp(direcciones: readonly (string | undefined)[]): Vered
     return 'sin-direccion';
   }
   return conDireccion.some((d) => !esDireccionLocal(d)) ? 'ok' : 'solo-local';
+}
+
+/**
+ * Un agente del evento, reducido a lo que se mira. FHIR permite VARIOS: en la
+ * ejecución de un bot vienen dos —la persona que la disparó (`requestor`) y el
+ * bot— y el orden no está garantizado.
+ */
+export interface AgenteAuditoria {
+  direccion?: string;
+  nombre?: string;
+  esRequestor?: boolean;
+}
+
+/**
+ * La dirección del evento, buscando en TODOS los agentes.
+ *
+ * Mirar solo `agent[0]` es el error fácil: en un evento de ejecución de bot el
+ * primero es la persona (sin `network`) y el segundo es el bot. Si algún día el
+ * orden se invierte, leer el índice 0 reportaría "(sin dirección)" sobre un
+ * evento que sí la tiene.
+ */
+export function direccionDe(agentes: readonly AgenteAuditoria[]): string | undefined {
+  return agentes.find((a) => a.direccion?.trim())?.direccion;
+}
+
+/**
+ * Quién lo hizo. El `requestor` manda: es la PERSONA que disparó la acción, y
+ * en una ejecución de bot es lo único que dice quién estuvo detrás.
+ */
+export function requestorDe(agentes: readonly AgenteAuditoria[]): string | undefined {
+  return (agentes.find((a) => a.esRequestor) ?? agentes[0])?.nombre;
+}
+
+/**
+ * ¿Este evento todavía trae nombres propios?
+ *
+ * Con `redactAuditEvents` el servidor vacía el `display` de las tres
+ * referencias del evento — `agent[].who`, `entity[].what` y `source.observer`
+ * (`util/auditevent.ts`, `applyOptionalRedaction`) —, así que queda la
+ * referencia (`Practitioner/074875f0…`), que es lo que prueba, sin el nombre.
+ *
+ * **La redacción NO es retroactiva**: se aplica al escribir. Los eventos
+ * guardados antes del cambio conservan los nombres hasta que la purga los
+ * levante. Por eso esto se mira sobre los eventos MÁS NUEVOS, no sobre el
+ * total.
+ */
+export function traeNombres(displays: readonly (string | undefined)[]): boolean {
+  return displays.some((d) => Boolean(d?.trim()));
 }
