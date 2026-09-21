@@ -12,11 +12,22 @@
  * Regla de oro: los CÓDIGOS jamás cambian (contrato con portal/bots/Admin);
  * los códigos de equipo (IPC06, COT03) salen de los títulos visibles.
  *
- * ⚠️ **Tocar este archivo son TRES pasos, no uno** (2026-09-20):
+ * ⚠️ **Tocar este archivo son TRES pasos, no uno** (2026-09-20), y los tres
+ * empiezan por bajarse el commit — el seed publica lo que hay EN EL DISCO desde
+ * donde se lo corre, no lo que está mergeado en `main`:
  *
+ *     git pull                           # ← PRIMERO. Sin esto se publica lo viejo
  *     npm run seed                       # publica las ActivityDefinition
  *     npm run deploy:bots                # re-bundlea el catálogo en cada bot
  *     git pull && npm run build:app      # EN EL SERVIDOR: el app de Recepción
+ *
+ * Dos formas de que el paso 1 no pase y NINGUNA da error: saltearlo, o correr
+ * el seed desde un repo desatrasado —que publica el catálogo viejo encima del
+ * nuevo y deja todo "en verde"—. El síntoma es el mismo y es mudo: el portal
+ * sigue mostrando lo de antes. Pasó el 2026-09-21 con el cambio a TEST.
+ *
+ * Antes de dudar del portal: `git log --oneline -1` en el repo desde donde se
+ * corrió el seed, y volver a correrlo.
  *
  * Este archivo no se lee del servidor en ningún lado: se **compila adentro** de
  * cada cosa que lo importa. Por eso un servicio nuevo falla de a poco, y cada

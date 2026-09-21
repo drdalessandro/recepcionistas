@@ -74,13 +74,24 @@ falta alguno el síntoma aparece lejos y parece un bug de otro:
 
 | Copia | Qué la actualiza | Qué se rompe si falta |
 |---|---|---|
-| `ActivityDefinition` en Medplum | `npm run seed` | el servicio no aparece en la góndola del portal |
+| `ActivityDefinition` en Medplum | `git pull` **y después** `npm run seed` | el servicio no aparece en la góndola del portal |
 | Bundle de cada bot (esbuild) | `npm run deploy:bots` | `Servicio desconocido: <código>` al pedir horarios |
 | Bundle del app de Recepción (vite) | `git pull && npm run build:app` **en el servidor** | Atender no prellena el servicio de la solicitud |
 
 Lo bundlean `bw-disponibilidad`, `bw-solicitar-turno`, `bw-reservar-turno`,
 `bw-mover-turno`, `bw-validar-turno`, `bw-proponer-reserva` y
 `bw-reservar-combo`.
+
+⚠️ **El `git pull` de la primera fila no es decorativo**, y el paso puede
+fallar de dos maneras que se ven igual: saltear el `seed`, o correrlo desde un
+repo desatrasado — el seed publica lo que hay **en el disco de donde se lo
+corre**, no lo que está mergeado en `main`, así que pisa el catálogo nuevo con
+el viejo. Ninguna de las dos da error: el portal simplemente sigue mostrando lo
+de antes. Pasó el 2026-09-21 con el cambio a TEST (`PREAPERTURA` y `$3.000`
+después de tocar el catálogo).
+
+Antes de dudar del portal: `git log --oneline -1` en el repo desde donde se
+corrió el seed, y volver a correrlo.
 
 Los tres síntomas engañan por el mismo motivo: **lo que se ve sale de la
 `ActivityDefinition` y lo que se decide sale del bundle.** Con el seed solo, la
