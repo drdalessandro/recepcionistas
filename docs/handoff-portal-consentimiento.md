@@ -141,6 +141,82 @@ Flujo B es lo que destraba la pantalla de Recepción.
 
 Viven en `src/fhir/identifiers.ts` (`COD_CONSENTIMIENTO`).
 
+## 8. Traza de la firma — respuesta al handoff del 2026-09-21
+
+Los tres pedidos del portal, verificados contra el código. **Los dos primeros
+están hechos**; el tercero es una decisión de Andrés.
+
+### 8.1 Al leer el estado, gana el `Consent` ✅ (hecho)
+
+`leerRegistrosConsentimiento` (`src/bots/_shared.ts`) ya no suma la fila del
+`DocumentReference` cuando el paciente tiene un `Consent` de atención. El
+diagnóstico del portal era correcto: `estadoConsentimiento` se queda con la
+fecha MAYOR, así que un celular adelantado le ganaba al instante del servidor y
+el arreglo se perdía en el badge de Atender.
+
+⚠️ **El snippet propuesto (`if (registros.length === 0)`) no se puede usar tal
+cual**: descarta los documentos apenas existe *cualquier* `Consent`, y hay tres
+códigos (§6). Un paciente con `Consent` de terapia biológica y su firma de
+atención vieja solo como documento pasaba a "no registrado", y R-20 le bloqueaba
+las reservas. La condición quedó por **código**:
+
+```ts
+const tieneConsentDeAtencion = registros.some((r) => r.codigo === COD_CONSENTIMIENTO.atencion);
+if (!tieneConsentDeAtencion) { /* … las filas del DocumentReference … */ }
+```
+
+De regalo arregla algo que no estaba en el pedido: la revocación toca el
+`Consent` y **no** el `DocumentReference` (`ingreso-presencial` solo actualiza
+Consent), así que un consentimiento dado de baja seguía leyéndose como firmado
+por la fila del documento. Hay test de los cuatro casos, y de los dos mutantes.
+
+**Sobre la vigencia**: tenían razón en que convenía resolverlo antes. Con una
+sola fila por paciente, el día que se active `vigenciaMeses` no hay dos fechas
+compitiendo. Sigue sin vencimiento hasta que Andrés defina otra cosa.
+
+### 8.2 El kiosco deja la misma evidencia ✅ (hecho)
+
+`bw-ingreso-presencial` tenía razón el reproche: su encabezado promete "la misma
+evidencia que el portal" y no la daba.
+
+- **`size` y `hash`** (SHA-1 en base64, lo que define FHIR R4) sobre los mismos
+  bytes que van en `data`. Antes una firma del mostrador no se podía comprobar.
+- **`Consent.dateTime`** sale ahora del `meta.lastUpdated` de la versión 1 del
+  `DocumentReference`, igual que ustedes. El riesgo acá era chico —el reloj es
+  el del runtime del bot, un servidor— pero sin esto las dos firmas no eran
+  comparables campo a campo, que era el punto.
+- **`DocumentReference.date` y `attachment.creation` siguen con el reloj del
+  bot**, a propósito y por el mismo motivo que ustedes: es la hora que quedó
+  **impresa dentro del texto** que el paciente leyó y firmó. Hay un test que
+  verifica que coinciden con el texto.
+
+Tomamos la aclaración de que el hash prueba integridad y no autoría, y quedó
+escrita en el código: la comprobación que vale es contra la **versión 1**
+(`/_history`), no contra la actual.
+
+### 8.3 `AuditEvent` y `Provenance` — decisión de Andrés ⚠️
+
+Gracias por esto: es el hallazgo más valioso del handoff y nos corrige algo que
+dábamos por imposible. No lo activamos por nuestra cuenta porque las tres partes
+son decisiones y no implementación:
+
+1. **`saveAuditEvents` en `api.medplum.com.ar`**: audita CADA lectura. El
+   volumen y el costo de almacenamiento son reales, y activarlo sin definir la
+   purga es la clase de cosa que se descubre en la factura. Va con retención
+   definida o no va.
+2. **La IP detrás de nginx**: es nuestro y lo vamos a verificar. Si la confianza
+   en el proxy no está configurada, todos los `AuditEvent` registran la IP del
+   proxy y la evidencia no sirve para lo que se la quiere.
+3. **`Provenance` con `Signature`**: coincidimos con ustedes en la **opción 2**
+   (lo escribe un bot). Es consistente con "la app pide, el bot escribe" y no
+   amplía la superficie de escritura del paciente — el mismo criterio por el que
+   `bw-ingreso-presencial` existe en vez de dejar que Recepción escriba `Consent`.
+
+Queda anotado en [`decisiones-pendientes.md`](decisiones-pendientes.md).
+**Antes de decidir hay que confirmar la versión de Medplum en producción**: todo
+el punto 3 sale de leer `packages/server` 5.1.39 y el repo acá fija `@medplum/core`
+en **5.1.24**, que es la del cliente, no la del servidor.
+
 ## 7. Resumen para su backlog
 
 1. **Flujo B**: agregar el `Consent` de §3 (≈15 líneas, no toca lo existente).

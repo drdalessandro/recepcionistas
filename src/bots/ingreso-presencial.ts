@@ -26,6 +26,7 @@
  */
 import type { BotEvent, MedplumClient } from '@medplum/core';
 import { createReference } from '@medplum/core';
+import { createHash } from 'node:crypto';
 import type { Consent, DocumentReference, Patient, QuestionnaireResponse, QuestionnaireResponseItem } from '@medplum/fhirtypes';
 import {
   COD_CONSENTIMIENTO,
@@ -89,6 +90,10 @@ export async function handler(
     usoDatosAceptado: e.usoDatosAceptado === true,
     canal: 'mostrador',
   });
+  // Los bytes exactos que se firman, una sola vez: de acá salen `data`, `size`
+  // y `hash`, y los tres tienen que describir lo MISMO o la comprobación de
+  // integridad no prueba nada.
+  const bytes = Buffer.from(texto, 'utf-8');
 
   // 1) La evidencia. Mismo tipo LOINC que el portal: el bot de la señal y el
   //    banner de Atender lo reconocen sin cambios.
@@ -110,7 +115,17 @@ export async function handler(
         attachment: {
           contentType: 'text/plain; charset=utf-8',
           title: 'Consentimiento Informado BIOWELLNESS.txt',
-          data: Buffer.from(texto, 'utf-8').toString('base64'),
+          data: bytes.toString('base64'),
+          // Integridad del adjunto, igual que el portal (handoff 2026-09-21).
+          // SHA-1 en base64 porque es lo que FHIR R4 define para este campo —
+          // no es una elección criptográfica nuestra.
+          //
+          // Prueba integridad, no autoría: quien pueda escribir el documento
+          // puede reescribir `data`, `size` y `hash` a juego. Lo que no puede
+          // tocar es el historial, así que la comprobación que vale es contra
+          // la VERSIÓN 1 (`/_history`), que tiene el hash del momento de firmar.
+          size: bytes.byteLength,
+          hash: createHash('sha1').update(bytes).digest('base64'),
           creation: timestamp,
         },
       },
@@ -124,7 +139,17 @@ export async function handler(
     scope: { coding: [{ system: 'http://terminology.hl7.org/CodeSystem/consentscope', code: 'treatment' }] },
     category: [{ coding: [{ system: LOINC_CONSENTIMIENTO, code: COD_LOINC_CONSENTIMIENTO, display: 'Patient Consent' }] }],
     patient: createReference(paciente),
-    dateTime: timestamp,
+    // El instante JURÍDICO sale del servidor —el `meta.lastUpdated` que Medplum
+    // le puso a la versión 1 de la evidencia—, no del reloj del runtime del
+    // bot. Acá el riesgo era chico (el bot corre en un servidor, no en el
+    // teléfono de nadie), pero sin esto las dos firmas no eran comparables
+    // campo a campo, que es la premisa del encabezado de este bot. Mismo
+    // criterio que el portal (handoff 2026-09-21).
+    //
+    // `date` y `attachment.creation` del documento SIGUEN con `timestamp` a
+    // propósito: es la hora que quedó impresa dentro del texto que el paciente
+    // leyó y firmó, y tienen que coincidir con él.
+    dateTime: doc.meta?.lastUpdated ?? timestamp,
     performer: [createReference(paciente)],
     sourceReference: createReference(doc),
     policyRule: {
