@@ -723,20 +723,39 @@ export async function leerRegistrosConsentimiento(
         c.category?.flatMap((cat) => cat.coding ?? []).find((cod) => cod.system === SYSTEM.consentimiento)?.code,
     }));
 
-    const docs = await medplum
-      .searchResources('DocumentReference', {
-        subject: pacienteRef,
-        type: `${LOINC_CONSENTIMIENTO}|${COD_LOINC_CONSENTIMIENTO}`,
-        _count: 20,
-      })
-      .catch(() => []);
-    for (const d of docs) {
-      // `superseded`/`entered-in-error` no cuentan como firma vigente.
-      registros.push({
-        estado: d.status === 'current' ? 'active' : 'inactive',
-        fechaISO: d.date,
-        codigo: COD_CONSENTIMIENTO.atencion,
-      });
+    // El `DocumentReference` es RESPALDO de compatibilidad, no una segunda
+    // fuente: cubre las firmas anteriores a que el portal creara el `Consent`,
+    // y por eso sus filas se etiquetan siempre `atencion`.
+    //
+    // Solo cuenta si el paciente NO tiene un `Consent` de atención (handoff del
+    // portal, 2026-09-21). Desde que el portal saca `Consent.dateTime` del
+    // `meta.lastUpdated` del servidor y deja `DocumentReference.date` con el
+    // reloj del dispositivo que firmó, tener las dos filas hacía ganar al reloj
+    // del celular: `estadoConsentimiento` se queda con la fecha MAYOR, así que
+    // un teléfono adelantado le ponía su hora al badge de Atender. El instante
+    // se arreglaba en el recurso y se perdía en la pantalla.
+    //
+    // La condición mira el CÓDIGO, no `registros.length`: un paciente puede
+    // tener un `Consent` de terapia biológica y su firma de atención vieja solo
+    // como documento. Descartando los documentos apenas hay algún `Consent`,
+    // esa firma desaparecía y el banner pasaba a "no registrado".
+    const tieneConsentDeAtencion = registros.some((r) => r.codigo === COD_CONSENTIMIENTO.atencion);
+    if (!tieneConsentDeAtencion) {
+      const docs = await medplum
+        .searchResources('DocumentReference', {
+          subject: pacienteRef,
+          type: `${LOINC_CONSENTIMIENTO}|${COD_LOINC_CONSENTIMIENTO}`,
+          _count: 20,
+        })
+        .catch(() => []);
+      for (const d of docs) {
+        // `superseded`/`entered-in-error` no cuentan como firma vigente.
+        registros.push({
+          estado: d.status === 'current' ? 'active' : 'inactive',
+          fechaISO: d.date,
+          codigo: COD_CONSENTIMIENTO.atencion,
+        });
+      }
     }
     return registros;
   } catch {
