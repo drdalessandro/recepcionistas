@@ -41,6 +41,21 @@ interface DefPlantilla {
 // WhatsApp ya muestra "Biowellness | San Isidro" como remitente en cada
 // mensaje y el prefijo era redundante. Nombres versionados: el contenido en
 // Twilio es inmutable y los nombres ya usados/rechazados quedan quemados.
+// ── El "Hola:" de las dos genéricas SE QUEDA (José y Andrés, 2026-09-21) ──
+// Andrés pidió sacarlo el 2026-09-20: en la pantalla queda "Hola: Reservamos tu
+// turno de…", que es raro. No se puede, y la razón es de Meta: el cuerpo NO
+// PUEDE EMPEZAR con una variable (error 2388299, validado en `erroresDeMeta`
+// más abajo), así que algo tiene que ir adelante del {{1}} y ese algo se ve en
+// todos los mensajes que viajan por la genérica.
+//
+// Se evaluaron tres reemplazos —un encabezado con la marca en su renglón,
+// "Biowellness:" en línea, y un neutro tipo "Aviso:"— y los tres cuestan lo
+// mismo: una versión v5 a aprobación de Meta, con el nombre QUEMADO aunque la
+// rechacen, y el riesgo de quedarse sin la genérica, que es la que habilita
+// TODO lo que sale fuera de la ventana de 24 h. Decisión: no se toca.
+//
+// Si alguna vez se retoma, el trabajo está relevado: hay que sacar además el
+// "Biowellness:" que escriben los cuerpos de los bots, o aparecería dos veces.
 const PLANTILLAS: DefPlantilla[] = [
   {
     nombre: 'biowellness_generico_v4',
