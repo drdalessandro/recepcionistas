@@ -104,3 +104,47 @@ export function decidirPurga(
     : (opts.retencionDias ?? RETENCION_DIAS);
   return fecha.toISOString() < corteDeRetencion(ahora, dias) ? 'purgar' : 'conservar';
 }
+
+// ============================================================================
+// Veredicto de la prueba de humo (`npm run auditoria:check`).
+// ============================================================================
+
+export type VeredictoIp =
+  /** No hay eventos: el flag `saveAuditEvents` no está activo (o nadie tocó nada). */
+  | 'sin-eventos'
+  /** TODAS las direcciones son locales: la cadena del proxy está cortada. */
+  | 'solo-local'
+  /** Hay direcciones reales: la IP del cliente está llegando. */
+  | 'ok'
+  /** Hay eventos pero ninguno trae dirección. */
+  | 'sin-direccion';
+
+/** Direcciones que significan "no llegó la del cliente". */
+const LOCALES = new Set(['127.0.0.1', '::1', '::ffff:127.0.0.1', 'localhost']);
+
+export function esDireccionLocal(direccion: string | undefined): boolean {
+  return direccion !== undefined && LOCALES.has(direccion.trim());
+}
+
+/**
+ * Qué decir después de mirar las últimas direcciones registradas.
+ *
+ * `solo-local` es el caso que justifica el comando: detrás de nginx, sin
+ * confianza en el proxy, TODOS los eventos guardan `127.0.0.1` y la auditoría
+ * no sirve para lo único que se la quiere. Se detecta en un minuto y se
+ * descubre tarde a los seis meses.
+ *
+ * Basta UNA dirección real para dar `ok`: los bots y los crons entran por
+ * loopback legítimamente, así que convivir con locales es normal — lo que no
+ * puede pasar es que no haya ninguna real.
+ */
+export function veredictoIp(direcciones: readonly (string | undefined)[]): VeredictoIp {
+  if (direcciones.length === 0) {
+    return 'sin-eventos';
+  }
+  const conDireccion = direcciones.filter((d): d is string => Boolean(d?.trim()));
+  if (conDireccion.length === 0) {
+    return 'sin-direccion';
+  }
+  return conDireccion.some((d) => !esDireccionLocal(d)) ? 'ok' : 'solo-local';
+}
