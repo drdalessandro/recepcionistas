@@ -57,6 +57,16 @@ Los demás `template` del código (`reserva-tentativa`, `lista-espera-hueco`,
 tienen plantilla propia y no la necesitan**: viajan por la genérica, que también
 está aprobada. Los dos primeros por decisión explícita (ver la tabla de abajo).
 
+> **El `Hola:` de la genérica se queda** (José y Andrés, 2026-09-21). Andrés
+> pidió sacarlo el 20-09 —en pantalla queda "Hola: Reservamos tu turno de…", que
+> es raro— y **no se puede**: Meta no acepta un cuerpo que EMPIECE con una
+> variable (`2388299`), así que algo tiene que ir delante del `{{1}}`. No es que
+> Meta pida la palabra "Hola": pide texto fijo, y el texto fijo que hay es ese.
+> Cambiarlo cuesta una v5 a aprobación, con el nombre **quemado aunque la
+> rechacen**, y arriesga la genérica, que es la que habilita todo lo que sale
+> fuera de la ventana de 24 h. Si alguna vez se retoma: hay que sacar también el
+> "Biowellness:" que escriben los cuerpos de los bots, o aparecería dos veces.
+
 > **Aprobada ≠ en uso.** Que Meta la haya aprobado no alcanza: su `HX…` tiene que
 > estar cargado como Project Secret. Cómo saberlo sin entrar a Medplum: mirar el
 > texto entregado en `npm run whatsapp:entregas`. La genérica **prefija `Hola: `**;
