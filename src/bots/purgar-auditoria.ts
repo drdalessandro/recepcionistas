@@ -10,10 +10,21 @@
  * 2026-09-21): un registro que nadie borra deja de ser una decisión y pasa a
  * ser una factura.
  *
- * ACOTADO POR DISEÑO. Un bot de Medplum corre en Lambda con un tope de tiempo,
- * así que esto no intenta vaciar la cola de una: borra hasta `maxBorrados` por
- * corrida y vuelve en la siguiente. Correrlo de más es inocuo —lo ya borrado no
- * está— y correrlo de menos solo retrasa la limpieza.
+ * ACOTADO POR DISEÑO, Y POR ESO CORRE CADA HORA. Un bot de Medplum corre en
+ * Lambda con un tope de tiempo, así que esto no intenta vaciar la cola de una:
+ * borra hasta `maxBorrados` (500) por corrida y vuelve en la siguiente.
+ *
+ * El tope y la frecuencia se eligen JUNTOS, y de eso depende que la purga
+ * sirva. Medido en producción el 2026-09-21: entran ~1.300 eventos por día, o
+ * sea que otros tantos cumplen plazo por día en régimen. Con el cron diario que
+ * tenía al principio —500 por corrida, una vez al día— la purga borraba 500 y
+ * se le acumulaban 800: quedaba atrás para siempre y la tabla crecía igual,
+ * con la purga informando `quedaTrabajo: true` todos los días sin que nadie lo
+ * leyera. Por hora son 12.000 de capacidad contra 1.300 de entrada, con margen
+ * para cuando el centro abra.
+ *
+ * Correrlo de más es inocuo —lo ya borrado no está— y correrlo de menos no
+ * "retrasa la limpieza": la rompe.
  *
  * EL CURSOR, que es la parte con trampa. Se pagina por `_lastUpdated`
  * ascendente y se avanza un cursor con lo último visto. Sin eso, los eventos
