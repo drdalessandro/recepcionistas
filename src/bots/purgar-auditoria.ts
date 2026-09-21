@@ -44,6 +44,23 @@ export interface EntradaPurgarAuditoria {
   porPagina?: number;
   /** No borra nada: solo cuenta. Para la primera corrida. */
   dryRun?: boolean;
+  /**
+   * Plazo corto distinto al de producción. **Solo con `dryRun`**, y la
+   * restricción es la razón de ser del parámetro.
+   *
+   * El problema que resuelve: con la retención en 90 días y la auditoría
+   * recién encendida, la purga no toca nada durante meses. O sea que un
+   * permiso mal puesto, o una búsqueda que no devuelve, se descubrirían en
+   * diciembre — cuando la cola ya es enorme y nadie se acuerda de esto.
+   * Con `{ dryRun: true, retencionDias: 5 }` se ejercita HOY la cadena entera
+   * (permisos, búsqueda, decisión, paginado) y el número que devuelve prueba
+   * que funciona.
+   *
+   * Sin `dryRun` se rechaza a propósito: un `retencionDias: 1` de dedo gordo
+   * borraría meses de evidencia y no hay vuelta atrás. El plazo real vive en
+   * `src/lib/auditoria.ts` y se cambia ahí, con un commit que alguien revisa.
+   */
+  retencionDias?: number;
 }
 
 export interface ResultadoPurgarAuditoria {
@@ -79,11 +96,23 @@ export async function handler(
   const maxPaginas = e.maxPaginas ?? 20;
   const porPagina = e.porPagina ?? 200;
   const dryRun = e.dryRun === true;
+  if (e.retencionDias !== undefined && !dryRun) {
+    return {
+      ok: false,
+      borrados: 0,
+      conservados: 0,
+      fallidos: 0,
+      quedaTrabajo: false,
+      dryRun,
+      mensaje: 'retencionDias solo se acepta con dryRun: el plazo real se cambia en src/lib/auditoria.ts.',
+    };
+  }
+  const retencionDias = e.retencionDias ?? RETENCION_DIAS;
 
   // Solo se MIRA lo que ya pasó el plazo corto: lo más nuevo que eso no es
   // purgable por ninguna de las dos reglas, y traerlo sería leer la tabla
   // entera para descartarla.
-  const hasta = corteDeRetencion(ahora, RETENCION_DIAS);
+  const hasta = corteDeRetencion(ahora, retencionDias);
 
   let borrados = 0;
   let conservados = 0;
@@ -141,7 +170,7 @@ export async function handler(
       }
       vistos.add(ae.id);
       nuevosEnLaPagina++;
-      if (decidirPurga(aEvento(ae), ahora) === 'conservar') {
+      if (decidirPurga(aEvento(ae), ahora, { retencionDias }) === 'conservar') {
         conservados++;
         continue;
       }

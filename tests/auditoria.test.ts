@@ -309,3 +309,41 @@ describe('redacción: la pregunta la contesta el evento MÁS NUEVO', () => {
     expect(pagina.findIndex(traeNombres)).toBe(1);
   });
 });
+
+describe('bw-purgar-auditoria · probarlo HOY sin esperar a diciembre', () => {
+  it('con dryRun, `retencionDias` deja ejercitar la cadena entera', async () => {
+    // Con la retención real (90 días) y la auditoría recién encendida, la
+    // purga no toca nada por meses: un permiso mal puesto se descubriría en
+    // diciembre. Con un plazo corto y en seco, el número prueba que funciona.
+    const { medplum, borrados } = servidorCon([ae('v1', 10), ae('v2', 8), ae('nuevo', 1)]);
+
+    const r = await correr(medplum, { dryRun: true, retencionDias: 5 });
+
+    expect(r.ok).toBe(true);
+    expect(r.borrados).toBe(2); // los de 10 y 8 días
+    expect(borrados).toHaveLength(0); // pero no se borró nada
+  });
+
+  it('sin dryRun, `retencionDias` se RECHAZA y no borra nada', async () => {
+    // Un `retencionDias: 1` de dedo gordo borraría meses de evidencia sin
+    // vuelta atrás. El plazo real se cambia con un commit que alguien revisa.
+    const { medplum, borrados } = servidorCon([ae('v1', 10), ae('v2', 100)]);
+
+    const r = await correr(medplum, { retencionDias: 1 });
+
+    expect(r.ok).toBe(false);
+    expect(r.mensaje).toContain('solo se acepta con dryRun');
+    expect(borrados).toHaveLength(0);
+  });
+
+  it('la evidencia de una firma sigue protegida aunque se acorte el plazo', async () => {
+    // El override toca el plazo CORTO. Los diez años de la firma no se mueven.
+    const firma = ae('firma', 30, { subtype: [{ code: 'create' }], entity: [{ what: { reference: 'Consent/c1' } }] });
+    const { medplum } = servidorCon([firma, ae('comun', 30)]);
+
+    const r = await correr(medplum, { dryRun: true, retencionDias: 5 });
+
+    expect(r.borrados).toBe(1); // el común
+    expect(r.conservados).toBe(1); // la firma
+  });
+});
