@@ -68,6 +68,7 @@ npm run bots:bundle        # bundlea los bots sin conectarse (dry-run)
 npm run deploy:bots        # crea + bundlea (esbuild) + deploya los bots — NO usa el CLI de Medplum
 npm run bots:check         # ¿están todos creados y con código deployado?
 npm run policy:check       # ¿las AccessPolicies del servidor coinciden con el código?
+npm run auditoria:check    # ¿la auditoría está activa y guarda la IP del cliente?
 npm run bots:cron          # horario de los bots de cron (--apply para escribirlo)
 npm run migrar:dni-renaper # suma el DNI con el system canónico (RENAPER) a fichas viejas
 npm run limpiar:solicitudes # borra solicitudes de turno ya cerradas (dry-run; --apply borra)

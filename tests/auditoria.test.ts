@@ -15,6 +15,7 @@ import {
   corteDeRetencion,
   decidirPurga,
   esEvidenciaDeFirma,
+  veredictoIp,
   type EventoAuditoria,
 } from '../src/lib/auditoria.js';
 import { handler as purgar } from '../src/bots/purgar-auditoria.js';
@@ -208,5 +209,29 @@ describe('bw-purgar-auditoria', () => {
     expect(r.borrados).toBe(1);
     expect(r.fallidos).toBe(1);
     expect(r.mensaje).toContain('no se pudieron borrar');
+  });
+});
+
+describe('veredictoIp — la prueba de humo, en una función', () => {
+  it('sin eventos: el flag no está activo', () => {
+    expect(veredictoIp([])).toBe('sin-eventos');
+  });
+
+  it('todas locales: la cadena del proxy está cortada', () => {
+    // El caso que justifica el comando. Detrás de nginx, sin confianza en el
+    // proxy, TODOS los eventos guardan 127.0.0.1 y la auditoría no sirve.
+    expect(veredictoIp(['127.0.0.1', '::1', ' 127.0.0.1 '])).toBe('solo-local');
+    expect(veredictoIp(['::ffff:127.0.0.1'])).toBe('solo-local');
+  });
+
+  it('basta UNA real: los bots entran por loopback y eso es normal', () => {
+    expect(veredictoIp(['127.0.0.1', '181.45.20.7', '127.0.0.1'])).toBe('ok');
+  });
+
+  it('eventos sin dirección se distinguen de no tener eventos', () => {
+    // Son dos problemas distintos y se arreglan distinto: uno es el flag, el
+    // otro es que solo hubo movimiento interno.
+    expect(veredictoIp([undefined, undefined])).toBe('sin-direccion');
+    expect(veredictoIp(['   '])).toBe('sin-direccion');
   });
 });

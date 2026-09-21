@@ -138,9 +138,16 @@ si se activa antes de verificar la IP, se acumulan meses de eventos con
    > comprueba con el paso 3**: si aparecen `AuditEvent` nuevos, está activo.
 3. **Prueba de humo de la IP** — esto es lo que no se puede saltear:
    - Entrar a la app de Recepción y abrir una ficha, desde una conexión cuya IP
-     pública se conozca (por ejemplo desde el celular con datos móviles).
-   - En el admin de Medplum, buscar el evento recién creado:
-     `AuditEvent?_sort=-_lastUpdated&_count=5`.
+     pública se conozca (el celular con datos móviles, **con el WiFi apagado**:
+     desde la red del centro se vería la IP del centro y no se probaría nada).
+   - Correr el diagnóstico, que contesta las dos preguntas de una — si el flag
+     tomó (hay eventos) y si la IP es la del cliente:
+     ```bash
+     npm run auditoria:check
+     ```
+     Imprime los últimos eventos con fecha, tipo, IP, quién y sobre qué recurso,
+     el total guardado, y un veredicto. Sale con código 1 si algo está mal.
+   - A mano, si se prefiere el admin: `AuditEvent?_sort=-_lastUpdated&_count=5`.
    - Mirar `agent[0].network.address`. **Tiene que ser la IP de esa conexión.**
      Si dice `127.0.0.1`, la cadena del proxy está cortada: no seguir, revisar
      §2 antes de dejar que se acumule.

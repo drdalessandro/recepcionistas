@@ -44,6 +44,7 @@
     "agenda:check": "tsx src/seed/diagnostico-agenda.ts",
     "federador:check": "tsx src/seed/diagnostico-federador.ts",
     "catalogo:check": "tsx src/seed/diagnostico-catalogo.ts",
+    "auditoria:check": "tsx src/seed/diagnostico-auditoria.ts",
     "policy:check": "tsx src/seed/diagnostico-policies.ts",
     "disponibilidad:check": "tsx src/seed/diagnostico-disponibilidad.ts",
     "slots:reparar": "tsx src/seed/reparar-slots.ts",
