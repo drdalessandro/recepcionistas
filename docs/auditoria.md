@@ -97,10 +97,19 @@ Los dos son constantes: cambiarlos es una línea y un `deploy:bots`.
 **Falla cerrado**: un evento sin fecha, o con una fecha ilegible, **se
 conserva**. Entre guardar de más y borrar evidencia, se guarda de más.
 
-**Acotado por corrida.** Un bot corre en Lambda con tope de tiempo, así que la
-purga borra hasta `maxBorrados` (500 por defecto) y vuelve mañana. `quedaTrabajo`
-en el resultado dice si quedó cola. Cron: `40 4 * * *`, de madrugada, porque es
-borrado masivo y no tiene por qué competir con el horario de atención.
+**Acotado por corrida, y por eso CADA HORA.** Un bot corre en Lambda con tope
+de tiempo, así que la purga borra hasta `maxBorrados` (500) y vuelve en la
+corrida siguiente. Cron: `25 * * * *`.
+
+El tope y la frecuencia se eligen **juntos**. Medido el 2026-09-21: entran
+**~1.300 eventos por día**, o sea que otros tantos cumplen plazo por día en
+régimen. El cron diario que tenía al principio (`40 4 * * *`) borraba 500 y
+dejaba 800 sin tocar: la purga quedaba atrás para siempre y la tabla crecía
+igual, informando `quedaTrabajo: true` todos los días sin que nadie lo leyera.
+Por hora son **12.000 de capacidad contra 1.300 de entrada**, con margen para
+cuando el centro abra. Si algún día el volumen sube mucho, el síntoma es
+`quedaTrabajo: true` sostenido — y la respuesta es subir `maxBorrados`, no
+espaciar el cron.
 
 **El cursor no es decorativo.** Se pagina por `_lastUpdated` ascendente
 avanzando un cursor. Sin eso, los eventos que se *conservan* (la evidencia)
