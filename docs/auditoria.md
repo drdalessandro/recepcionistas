@@ -48,12 +48,20 @@ El evento guarda `agent.network.address` con la IP
 (`util/auditevent.ts:231-233`), `who`, `entity.what`, el subtipo, el resultado y
 la duración.
 
-**Sobre `redactAuditEvents`**: lo recomendamos en `true`. El evento sigue
-identificando el recurso por referencia (`Patient/abc`), que es lo que sirve
-como prueba, pero deja de arrastrar el **nombre** de la paciente al `display`.
-Es el principio 3 del `CLAUDE.md` aplicado a un registro que va a ser largo y
-que mira más gente que la historia clínica. Se puede poner global o por
-proyecto (`Project.setting` con `name: 'redactAuditEvents'`).
+**Sobre `redactAuditEvents`** (activado en producción el 2026-09-21): el evento
+sigue identificando el recurso por referencia (`Practitioner/074875f0…`), que es
+lo que sirve como prueba, pero deja de arrastrar el **nombre** al `display`. Es
+el principio 3 del `CLAUDE.md` aplicado a un registro que va a ser largo y que
+mira más gente que la historia clínica. Se puede poner global o por proyecto
+(`Project.setting` con `name: 'redactAuditEvents'`).
+
+Vacía el `display` en los **tres** lugares donde el evento lleva una referencia
+—`agent[].who`, `entity[].what` y `source.observer`— vía
+`applyOptionalRedaction` (`util/auditevent.ts:298`).
+
+⚠️ **No es retroactiva.** Se aplica al escribir: los eventos guardados antes del
+cambio conservan los nombres hasta que la purga los levante. `auditoria:check`
+lo mira sobre los más nuevos por eso, y lo dice en el veredicto.
 
 ## 2. La IP del cliente — ya funciona, y por qué
 

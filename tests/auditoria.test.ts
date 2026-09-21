@@ -17,6 +17,7 @@ import {
   direccionDe,
   esEvidenciaDeFirma,
   requestorDe,
+  traeNombres,
   veredictoIp,
   type EventoAuditoria,
 } from '../src/lib/auditoria.js';
@@ -267,5 +268,20 @@ describe('direccionDe / requestorDe — FHIR permite varios agentes', () => {
     // Sin requestor marcado, el primero.
     expect(requestorDe([{ nombre: 'bw-recordatorios' }])).toBe('bw-recordatorios');
     expect(requestorDe([])).toBeUndefined();
+  });
+});
+
+describe('traeNombres — verificar redactAuditEvents', () => {
+  it('detecta cualquier nombre propio que haya quedado', () => {
+    expect(traeNombres(['Valentina Pereyra'])).toBe(true);
+    expect(traeNombres([undefined, 'bw-estado-seguridad', undefined])).toBe(true);
+  });
+
+  it('un evento redactado no trae ninguno', () => {
+    // Queda la referencia (Practitioner/074875f0…), que es lo que prueba, sin
+    // el nombre. El servidor vacía el `display` en los tres lugares.
+    expect(traeNombres([undefined, undefined, undefined])).toBe(false);
+    expect(traeNombres([])).toBe(false);
+    expect(traeNombres(['   '])).toBe(false);
   });
 });

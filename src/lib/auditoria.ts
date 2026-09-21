@@ -186,3 +186,20 @@ export function direccionDe(agentes: readonly AgenteAuditoria[]): string | undef
 export function requestorDe(agentes: readonly AgenteAuditoria[]): string | undefined {
   return (agentes.find((a) => a.esRequestor) ?? agentes[0])?.nombre;
 }
+
+/**
+ * ¿Este evento todavía trae nombres propios?
+ *
+ * Con `redactAuditEvents` el servidor vacía el `display` de las tres
+ * referencias del evento — `agent[].who`, `entity[].what` y `source.observer`
+ * (`util/auditevent.ts`, `applyOptionalRedaction`) —, así que queda la
+ * referencia (`Practitioner/074875f0…`), que es lo que prueba, sin el nombre.
+ *
+ * **La redacción NO es retroactiva**: se aplica al escribir. Los eventos
+ * guardados antes del cambio conservan los nombres hasta que la purga los
+ * levante. Por eso esto se mira sobre los eventos MÁS NUEVOS, no sobre el
+ * total.
+ */
+export function traeNombres(displays: readonly (string | undefined)[]): boolean {
+  return displays.some((d) => Boolean(d?.trim()));
+}

@@ -25,6 +25,7 @@ import {
   direccionDe,
   esDireccionLocal,
   requestorDe,
+  traeNombres,
   veredictoIp,
 } from '../lib/auditoria.js';
 
@@ -79,6 +80,18 @@ function agentes(ae: AuditEvent): { direccion?: string; nombre?: string; esReque
     nombre: a.who?.display ?? a.who?.reference,
     esRequestor: a.requestor,
   }));
+}
+
+/**
+ * Los `display` del evento: los tres lugares donde `redactAuditEvents` los
+ * vacía (`agent[].who`, `entity[].what`, `source.observer`).
+ */
+function nombres(ae: AuditEvent): (string | undefined)[] {
+  return [
+    ...(ae.agent ?? []).map((a) => a.who?.display),
+    ...(ae.entity ?? []).map((e) => e.what?.display),
+    ae.source?.observer?.display,
+  ];
 }
 
 /** La IP del evento, mirando TODOS los agentes (ver `direccionDe`). */
@@ -151,6 +164,10 @@ async function main(): Promise<void> {
     console.log(`  ${String(n).padStart(3)} × ${d}${nota}`);
   }
 
+  // Redacción: se mira sobre los más NUEVOS porque no es retroactiva — los
+  // guardados antes del cambio conservan los nombres hasta que la purga llegue.
+  const conNombres = eventos.filter((ae) => traeNombres(nombres(ae))).length;
+
   const veredicto = veredictoIp(eventos.map((ae) => direccion(ae)));
   const soloBots = eventos.every((ae) => esBot(ae));
   console.log(`\n=== Veredicto ===`);
@@ -160,7 +177,18 @@ async function main(): Promise<void> {
   if (masViejo) {
     console.log(`  El más viejo es del ${fmt.format(new Date(masViejo))} → se está guardando desde entonces.`);
   }
-  console.log(`  Retención: ${RETENCION_DIAS} días · ${RETENCION_FIRMA_DIAS} días la evidencia de una firma\n`);
+  console.log(`  Retención: ${RETENCION_DIAS} días · ${RETENCION_FIRMA_DIAS} días la evidencia de una firma`);
+  if (eventos.length > 0) {
+    console.log(
+      conNombres === 0
+        ? `  Redacción: ✓ ninguno de los últimos ${eventos.length} trae nombres (redactAuditEvents activo).`
+        : `  Redacción: ${conNombres} de los últimos ${eventos.length} todavía traen nombres propios.` +
+            (conNombres < eventos.length
+              ? ' Los viejos los conservan: la redacción no es retroactiva.'
+              : ' Si ya activaste redactAuditEvents, generá tráfico nuevo y repetí.'),
+    );
+  }
+  console.log('');
 
   switch (veredicto) {
     case 'sin-eventos':
