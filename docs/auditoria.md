@@ -203,7 +203,23 @@ si se activa antes de verificar la IP, se acumulan meses de eventos con
    razón de ser del parámetro: un `retencionDias: 1` de dedo gordo borraría
    meses de evidencia sin vuelta atrás. El plazo real vive en
    `src/lib/auditoria.ts` y se cambia con un commit que alguien revisa.
-5. **A los pocos días, mirar el crecimiento.** Es el número que decide si 90
+5. **Comprobar que el cron realmente TICKEA.** Que el `cronString` esté escrito
+   no prueba que el bot corra — es la advertencia que imprime `bots:cron`, y el
+   antecedente de `cronTimer`. Acá se comprueba gratis, porque la auditoría que
+   se acaba de encender registra las ejecuciones de bot:
+
+   ```bash
+   # pasado el primer minuto :25
+   npm run auditoria:check -- --count 30
+   ```
+
+   Tiene que aparecer una línea `execute` sobre el `Bot/…` de la purga. Si no
+   aparece después de dos horas, el cron está escrito pero no corre.
+
+   (La purga no va a borrar nada hasta que el evento más viejo cumpla
+   `RETENCION_DIAS`, así que hasta entonces devuelve "Nada que purgar" y su
+   única huella es esa ejecución.)
+6. **A los pocos días, mirar el crecimiento.** Es el número que decide si 90
    días es el plazo correcto o hay que bajarlo.
 
    ⚠️ **Los comandos operativos producen picos y arruinan el promedio.** Medido
