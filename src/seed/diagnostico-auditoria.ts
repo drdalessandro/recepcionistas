@@ -51,6 +51,20 @@ function sobreQue(ae: AuditEvent): string {
   return refs.length > 0 ? (refs.join(', ') as string) : '—';
 }
 
+/**
+ * Qué clase de evento es. Los de INTERACCIÓN traen `subtype` (read, update,
+ * search…); los de EJECUCIÓN DE BOT no traen ninguno y se reconocen por
+ * `type.code = 'execute'` — sin esto salían todos como "?".
+ */
+function etiqueta(ae: AuditEvent): string {
+  return ae.subtype?.[0]?.code ?? ae.type?.code ?? '?';
+}
+
+/** ¿El agente es uno de nuestros bots? Todos se llaman `bw-*`. */
+function esBot(ae: AuditEvent): boolean {
+  return (ae.agent?.[0]?.who?.display ?? '').startsWith('bw-') || etiqueta(ae) === 'execute';
+}
+
 function quien(ae: AuditEvent): string {
   const a = ae.agent?.[0];
   return a?.who?.display ?? a?.who?.reference ?? '(sin agente)';
@@ -89,14 +103,42 @@ async function main(): Promise<void> {
     const cuando = ae.recorded ?? ae.meta?.lastUpdated;
     console.log(
       `  ${cuando ? fmt.format(new Date(cuando)) : '(sin fecha)'} · ` +
-        `${(ae.subtype?.[0]?.code ?? '?').padEnd(7)} · ${marca.padEnd(22)} · ${quien(ae)} · ${sobreQue(ae)}`,
+        `${etiqueta(ae).padEnd(8)} · ${marca.padEnd(22)} · ${quien(ae)} · ${sobreQue(ae)}`,
     );
   }
 
+  // Desde cuándo se está guardando. Es el dato que dice si la auditoría se
+  // activó HOY o si ya venía acumulando sin que nadie lo supiera — y con eso,
+  // si la purga es preventiva o si llega tarde.
+  let masViejo: string | undefined;
+  try {
+    const [primero] = await medplum.searchResources('AuditEvent', '_sort=_lastUpdated&_count=1');
+    masViejo = primero?.recorded ?? primero?.meta?.lastUpdated;
+  } catch {
+    masViejo = undefined;
+  }
+
+  // Direcciones distintas: contesta de un vistazo "¿está la mía?" mucho mejor
+  // que diez filas sueltas.
+  const porDireccion = new Map<string, number>();
+  for (const ae of eventos) {
+    const d = ae.agent?.[0]?.network?.address ?? '(sin dirección)';
+    porDireccion.set(d, (porDireccion.get(d) ?? 0) + 1);
+  }
+  console.log('\n=== Direcciones vistas ===');
+  for (const [d, n] of [...porDireccion.entries()].sort((a, b) => b[1] - a[1])) {
+    const nota = d === '(sin dirección)' ? ' (ejecución de bot: no lleva IP)' : esDireccionLocal(d) ? '  ⚠ local' : '';
+    console.log(`  ${String(n).padStart(3)} × ${d}${nota}`);
+  }
+
   const veredicto = veredictoIp(eventos.map((ae) => ae.agent?.[0]?.network?.address));
+  const soloBots = eventos.every((ae) => esBot(ae));
   console.log(`\n=== Veredicto ===`);
   if (total !== undefined) {
     console.log(`  Eventos guardados en total: ${total.toLocaleString('es-AR')}`);
+  }
+  if (masViejo) {
+    console.log(`  El más viejo es del ${fmt.format(new Date(masViejo))} → se está guardando desde entonces.`);
   }
   console.log(`  Retención: ${RETENCION_DIAS} días · ${RETENCION_FIRMA_DIAS} días la evidencia de una firma\n`);
 
@@ -121,8 +163,18 @@ async function main(): Promise<void> {
       console.log('    Suele ser movimiento interno (crons, bots). Generá tráfico real y repetí.');
       break;
     case 'ok':
-      console.log('  ✓ Hay direcciones reales: la IP del cliente está llegando.');
+      console.log('  ✓ Hay direcciones reales: la cadena del proxy funciona.');
       console.log('    La auditoría está activa y sirve como evidencia.');
+      if (soloBots) {
+        // Un bot llega desde la IP de su Lambda, que TAMBIÉN es externa: prueba
+        // que el proxy reenvía, pero no prueba el camino del navegador, que es
+        // el que importa para "quién abrió la ficha de esta paciente".
+        console.log('');
+        console.log('  ⚠ Pero todo lo que se ve es movimiento de BOTS.');
+        console.log('    Para cerrar la prueba: abrí una ficha en recepcion.biowellness.ar');
+        console.log('    desde el celular con datos móviles (WiFi apagado) y volvé a correr esto.');
+        console.log('    Tiene que aparecer esa IP, con tu nombre como agente.');
+      }
       break;
   }
 }
