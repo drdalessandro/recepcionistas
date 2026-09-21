@@ -22,12 +22,11 @@
  * reporta éxito sin borrar nada. Si una página entera comparte el mismo
  * milisegundo, el cursor se empuja 1 ms para que igual haya progreso.
  *
- * ⚠️ La purga se audita a sí misma. La exclusión de Medplum (`repo.ts`) tapa
- * los `AuditEvent` sobre `AuditEvent` **solo cuando el autor es `system`**, y
- * un bot no lo es: cada borrado deja su propio evento de `delete`. No es un
- * bucle infinito —esos eventos son del día de hoy y recién dentro de
- * `RETENCION_DIAS` serán purgables, y para entonces los borra una corrida
- * futura— pero conviene saberlo antes de mirar los números.
+ * La purga NO se audita a sí misma, y eso es del servidor y no nuestro: la
+ * guarda de `fhir/repo.ts:2373` es
+ * `saveAuditEvents && isResource(resource) && resource.resourceType !== 'AuditEvent'`,
+ * así que un `AuditEvent` sobre un `AuditEvent` no se persiste **nunca**, sea
+ * quien sea el autor. O sea que borrar no genera cola nueva.
  */
 import type { BotEvent, MedplumClient } from '@medplum/core';
 import type { AuditEvent } from '@medplum/fhirtypes';
