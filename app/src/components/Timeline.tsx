@@ -2,6 +2,7 @@ import { Box, Group, Text, Tooltip } from '@mantine/core';
 import type { TimelineData, TurnoTimeline } from '../lib/timeline';
 import { colorEstado, labelEstado } from '../lib/estados';
 import { grillaTurnoMin } from '@bw/config/reglas';
+import { bandasDeFila, ocupacionEn, pesoDeFila, posicionarTurnos } from '@bw/lib/agenda-visual';
 
 /**
  * Grilla del día ajustada a la pantalla: TODAS las salas y TODO el horario entran
@@ -19,54 +20,14 @@ function fmt(min: number): string {
   return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
 }
 
-interface TurnoPosicionado extends TurnoTimeline {
-  /** Offset de asiento dentro de la sala (0 = arriba). */
-  asiento: number;
-  /** Asientos que ocupa esta reserva (multiplaza: ocupantes; exclusiva: todos). */
-  peso: number;
-}
-
-/** Asientos que pesa un turno contra la capacidad de la sala. */
-function pesoTurno(t: TurnoTimeline, capacidad: number, exclusiva: boolean): number {
-  if (exclusiva || capacidad <= 1) {
-    return Math.max(1, capacidad);
-  }
-  return Math.max(1, Math.min(t.ocupantes, capacidad));
-}
-
 /**
- * Asigna a cada turno una banda vertical proporcional a las personas que trae
- * (multiplaza: 2 personas = 2/6 del alto de la fila). Los turnos que solapan en
- * el tiempo se apilan en asientos distintos, así ninguno tapa a otro.
+ * El reparto vertical (bandas por fila, alto de cada fila, apilado de los que
+ * se solapan) vive en `@bw/lib/agenda-visual`, puro y con tests: es un cálculo
+ * con tres casos distintos y un modo de fallar silencioso — una banda de 1 px
+ * no se puede clickear, y eso no se reporta como bug de la banda sino como
+ * "el turno no está".
  */
-function posicionarTurnos(turnos: TurnoTimeline[], capacidad: number, exclusiva: boolean): TurnoPosicionado[] {
-  const cap = Math.max(1, capacidad);
-  const orden = [...turnos].sort((a, b) => a.inicioMin - b.inicioMin || a.finMin - b.finMin);
-  const out: TurnoPosicionado[] = [];
-  for (const t of orden) {
-    const peso = pesoTurno(t, cap, exclusiva);
-    const solapados = out
-      .filter((o) => o.inicioMin < t.finMin && t.inicioMin < o.finMin)
-      .sort((a, b) => a.asiento - b.asiento);
-    let asiento = 0;
-    for (const o of solapados) {
-      if (asiento + peso <= o.asiento) {
-        break;
-      }
-      asiento = Math.max(asiento, o.asiento + o.peso);
-    }
-    if (asiento + peso > cap) {
-      asiento = Math.max(0, cap - peso); // sobrecupo legado: se superpone al final en vez de desaparecer
-    }
-    out.push({ ...t, asiento, peso });
-  }
-  return out;
-}
-
-/** Personas ocupando la sala en el minuto `m` (para saber si la franja admite más). */
-function ocupacionEn(turnos: TurnoPosicionado[], m: number): number {
-  return turnos.filter((t) => m >= t.inicioMin && m < t.finMin).reduce((acc, t) => acc + t.peso, 0);
-}
+type TurnoPosicionado = TurnoTimeline & { asiento: number; peso: number };
 
 export function Timeline({
   data,
@@ -96,15 +57,16 @@ export function Timeline({
     `${(((hastaMin - desdeMin) / totalMin) * 100).toFixed(4)}%`;
 
   const turnosPorSala = new Map<string, TurnoPosicionado[]>();
+  // Bandas: el DENOMINADOR de las alturas de esta fila. No siempre es la
+  // capacidad — ver `bandasDeFila`.
+  const bandasPorSala = new Map<string, number>();
   for (const sala of data.salas) {
-    turnosPorSala.set(
-      sala.codigo,
-      posicionarTurnos(
-        data.turnos.filter((t) => t.recursoCodigo === sala.codigo),
-        sala.capacidad,
-        sala.reservaExclusiva,
-      ),
+    const ubicados = posicionarTurnos(
+      data.turnos.filter((t) => t.recursoCodigo === sala.codigo),
+      sala,
     );
+    turnosPorSala.set(sala.codigo, ubicados);
+    bandasPorSala.set(sala.codigo, bandasDeFila(sala, ubicados));
   }
 
   // Grilla vertical en dos pesos. Las horas en punto son el eje que se lee y sobre
@@ -154,7 +116,17 @@ export function Timeline({
 
       {/* Filas de salas: se reparten el alto disponible */}
       {data.salas.map((sala) => (
-        <Group key={sala.codigo} className="bw-fila" gap={0} wrap="nowrap" align="stretch" style={{ flex: 1, minHeight: 0 }}>
+        <Group
+          key={sala.codigo}
+          className="bw-fila"
+          gap={0}
+          wrap="nowrap"
+          align="stretch"
+          // Alto proporcional a las bandas: una fila que se parte en 6 pide
+          // hasta el triple que una simple, para que cada banda se pueda
+          // clickear. Ver `pesoDeFila`.
+          style={{ flex: `${pesoDeFila(bandasPorSala.get(sala.codigo) ?? 1)} 1 0`, minHeight: 0 }}
+        >
           {/* El separador de filas vive SOLO en la columna de nombres: sobre la
               grilla taparía las verticales, que son las que hay que seguir. */}
           <Box
@@ -186,7 +158,7 @@ export function Timeline({
                 if (m % grillaTurnoMin(sala.tipo) !== 0) {
                   return null; // R-22: acá no arranca ningún turno (solo Recovery Pro usa las medias)
                 }
-                const cap = Math.max(1, sala.capacidad);
+                const cap = bandasPorSala.get(sala.codigo) ?? 1;
                 const usadas = ocupacionEn(turnosPorSala.get(sala.codigo) ?? [], m);
                 if (usadas >= cap) {
                   return null; // franja completa
@@ -211,7 +183,7 @@ export function Timeline({
               })}
 
             {(turnosPorSala.get(sala.codigo) ?? []).map((t, i) => {
-              const cap = Math.max(1, sala.capacidad);
+              const cap = bandasPorSala.get(sala.codigo) ?? 1;
               const compacto = t.peso / cap < 0.5; // banda angosta (multiplaza): una sola línea de texto
               const pers = t.ocupantes > 1 ? ` · ${t.ocupantes} pers.` : '';
               // Los asientos de una sala compartida (Multiplaza) se apilan PEGADOS:

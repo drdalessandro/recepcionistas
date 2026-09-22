@@ -22,11 +22,18 @@ const TUMBONAS_RECOVERY = 'TUMBONAS_RECOVERY';
  */
 export const RECURSO_TELECONSULTA = 'R_TELECONSULTA';
 
+/**
+ * Los nombres son los de la COLUMNA de la Agenda, que mide 170 px: lo que no
+ * entra en dos renglones se corta. Por eso las tres cámaras dicen "HBOT" y no
+ * "Cámara Hiperbárica" (Andrés, 2026-09-22) — el nombre largo ocupaba los dos
+ * renglones con la parte que se repite y dejaba lo que distingue una sala de
+ * otra (Mono / Bi / Multi) para el final.
+ */
 export const RECURSOS: RecursoFisico[] = [
-  { codigo: 'R_HBOT_MONO', nombre: 'Cámara Hiperbárica Monoplaza', tipo: 'HBOT', capacidad: 1 },
+  { codigo: 'R_HBOT_MONO', nombre: 'HBOT Monoplaza', tipo: 'HBOT', capacidad: 1 },
   {
     codigo: 'R_HBOT_BIPLAZA',
-    nombre: 'Cámara Hiperbárica Biplaza',
+    nombre: 'HBOT Biplaza',
     tipo: 'HBOT',
     capacidad: 2,
     reservaExclusiva: true,
@@ -34,7 +41,7 @@ export const RECURSOS: RecursoFisico[] = [
   },
   {
     codigo: 'R_HBOT_MULTIPLAZA',
-    nombre: 'Cámara Hiperbárica Multiplaza',
+    nombre: 'HBOT Multiplaza',
     tipo: 'HBOT',
     capacidad: 6,
     minimoPersonas: 3,
